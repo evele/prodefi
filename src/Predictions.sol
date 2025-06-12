@@ -76,12 +76,39 @@ contract Predictions is Ownable {
     
     mapping(uint256 => bool) public used;
     mapping(uint256 => uint8[]) public picks;
+    uint256[] public positions; // array de token IDs ordenados de mayor a menor
 
+    // Evento para cuando se actualizan las posiciones
+    event PositionsUpdated(uint256[] positions);
 
+    // Función getter para obtener las posiciones
+    function getPositions() public view returns (uint256[] memory) {
+        return positions;
+    }
 
     // Llamamos a Ownable(msg.sender) para asignar el owner correctamente
     constructor(address _cartones) Ownable(msg.sender) {
         cartones = IERC1155(_cartones);
+    }
+
+    // Función para que el owner establezca las posiciones
+    function setPositions(uint256[] memory _predictionIds, uint256[] memory _predictionPoints) 
+        public onlyOwner returns(bool success)
+    {
+        require(_predictionIds.length > 0, "No predictions provided");
+        require(_predictionIds.length == _predictionPoints.length, "Arrays must have same length");
+
+        uint256 maxPoints = MAX_INT;
+        delete positions;
+
+        for (uint256 i = 0; i < _predictionPoints.length; i++) {
+            require(maxPoints >= _predictionPoints[i], "Points must be ordered");
+            positions.push(_predictionIds[i]);
+            maxPoints = _predictionPoints[i];
+        }
+
+        emit PositionsUpdated(positions);
+        return true;
     }
 
     modifier onlyCartonOwner(uint256 tokenId) {
@@ -274,5 +301,4 @@ contract Predictions is Ownable {
         totalPoints[tokenId] = newPoints;
         emit PointsUpdated(tokenId, newPoints);
     }
-
 }

@@ -200,7 +200,7 @@ contract PredictionsTest is Test {
         // Intentar predecir equipos duplicados
         vm.prank(user);
         vm.expectRevert("Duplicate team ID");
-        preds.predictWinners(TOKEN_ID, [1, 1, 3, 4]);
+        preds.predictWinners(TOKEN_ID, [1, 2, 2, 4]);
     }
 
     function testWinnerPrediction_AlreadyPredicted() public setup {
@@ -216,6 +216,8 @@ contract PredictionsTest is Test {
 
     function testPointsCalculation() public {
         // 19) Hacer predicción de partidos
+        uint256[] memory pos;
+
         Predictions.Game[] memory games = new Predictions.Game[](4);
         games[0] = Predictions.Game({
             id:      0,
@@ -277,10 +279,54 @@ contract PredictionsTest is Test {
         // 26) Verificar puntos totales (partidos + ganadores)
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 90); // 35 + 55
 
+        // 27) Establecer posiciones
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = TOKEN_ID;
+        points[0] = 90;
+        preds.setPositions(ids, points);
+
+        // 28) Verificar que las posiciones se establecieron correctamente
+        pos = preds.getPositions();
+        assertEq(pos.length, 1);
+        assertEq(pos[0], TOKEN_ID);
+
         // 27) Actualizar puntos totales
         vm.prank(user);
         preds.updateTotalPoints(TOKEN_ID);
         assertEq(preds.totalPoints(TOKEN_ID), 90);
+    }
+
+    function testSetPositions() public {
+        uint256[] memory pos;
+        
+        // 1) Intentar establecer posiciones con arrays de diferente longitud
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](2);
+        ids[0] = TOKEN_ID;
+        points[0] = 90;
+        points[1] = 80;
+        vm.expectRevert("Arrays must have same length");
+        preds.setPositions(ids, points);
+
+        // 2) Intentar establecer posiciones con puntos desordenados
+        ids = new uint256[](2);
+        points = new uint256[](2);
+        ids[0] = TOKEN_ID;
+        ids[1] = TOKEN_ID + 1;
+        points[0] = 80;
+        points[1] = 90;
+        vm.expectRevert("Points must be ordered");
+        preds.setPositions(ids, points);
+
+        // 3) Establecer posiciones correctamente
+        points[0] = 90;
+        points[1] = 80;
+        preds.setPositions(ids, points);
+        pos = preds.getPositions();
+        assertEq(pos.length, 2);
+        assertEq(pos[0], TOKEN_ID);
+        assertEq(pos[1], TOKEN_ID + 1);
     }
 
     function testSetResults() public {
