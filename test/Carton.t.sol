@@ -31,7 +31,7 @@ contract CartonTest is Test {
         assertEq(nft.balanceOf(user, 2), 5, "balance de user en ID=2 debe ser 5");
     }
 
-     function testPausePreventsTransfers() public {
+    function testPausePreventsTransfers() public {
         // Mint primero para tener tokens disponibles
         nft.mint(user, 10, 1, "");
         // Pausamos el contrato

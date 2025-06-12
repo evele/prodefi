@@ -6,10 +6,10 @@ import "../src/Carton.sol";
 import "../src/Predictions.sol";
 
 contract PredictionsTest is Test {
-    Carton      cart;
+    Carton cart;
     Predictions preds;
-    address     user = address(0xABCD);
-    uint256     constant TOKEN_ID = 7;
+    address user = address(0xABCD);
+    uint256 constant TOKEN_ID = 7;
 
     function setUp() public {
         // 1) Deploy Carton y otorgamos todos los roles a este contrato de test
@@ -26,34 +26,10 @@ contract PredictionsTest is Test {
         Predictions.Game[] memory arr = new Predictions.Game[](4);
 
         // Inicializamos cada struct usando la sintaxis Predictions.Game({ ... })
-        arr[0] = Predictions.Game({
-            id:      0,
-            team1:   1,
-            team2:   2,
-            result:  [uint8(0), uint8(1)],
-            set:     false
-        });
-        arr[1] = Predictions.Game({
-            id:      1,
-            team1:   3,
-            team2:   4,
-            result:  [uint8(1), uint8(0)],
-            set:     false
-        });
-        arr[2] = Predictions.Game({
-            id:      2,
-            team1:   5,
-            team2:   6,
-            result:  [uint8(2), uint8(1)],
-            set:     false
-        });
-        arr[3] = Predictions.Game({
-            id:      3,
-            team1:   7,
-            team2:   8,
-            result:  [uint8(0), uint8(0)],
-            set:     false
-        });
+        arr[0] = Predictions.Game({id: 0, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+        arr[1] = Predictions.Game({id: 1, team1: 3, team2: 4, result: [uint8(1), uint8(0)], set: false});
+        arr[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
+        arr[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
 
         // 5) Simulamos que ‘user’ llama a submitPredictions
         vm.prank(user);
@@ -64,20 +40,20 @@ contract PredictionsTest is Test {
         assertEq(stored.length, 4, "length should be 4");
 
         // Comprobamos un par de campos de stored[0]
-        assertEq(stored[0].id,        0,  "stored[0].id debe ser 0");
-        assertEq(stored[0].team1,     1,  "stored[0].team1 debe ser 1");
-        assertEq(stored[0].team2,     2,  "stored[0].team2 debe ser 2");
-        assertEq(stored[0].result[0], 0,  "stored[0].result[0] debe ser 0");
-        assertEq(stored[0].result[1], 1,  "stored[0].result[1] debe ser 1");
-        assertEq(stored[0].set,      false, "stored[0].set debe ser false");
+        assertEq(stored[0].id, 0, "stored[0].id debe ser 0");
+        assertEq(stored[0].team1, 1, "stored[0].team1 debe ser 1");
+        assertEq(stored[0].team2, 2, "stored[0].team2 debe ser 2");
+        assertEq(stored[0].result[0], 0, "stored[0].result[0] debe ser 0");
+        assertEq(stored[0].result[1], 1, "stored[0].result[1] debe ser 1");
+        assertEq(stored[0].set, false, "stored[0].set debe ser false");
 
         // Comprobamos también stored[3]
-        assertEq(stored[3].id,        3,   "stored[3].id debe ser 3");
-        assertEq(stored[3].team1,     7,   "stored[3].team1 debe ser 7");
-        assertEq(stored[3].team2,     8,   "stored[3].team2 debe ser 8");
-        assertEq(stored[3].result[0], 0,   "stored[3].result[0] debe ser 0");
-        assertEq(stored[3].result[1], 0,   "stored[3].result[1] debe ser 0");
-        assertEq(stored[3].set,      false, "stored[3].set debe ser false");
+        assertEq(stored[3].id, 3, "stored[3].id debe ser 3");
+        assertEq(stored[3].team1, 7, "stored[3].team1 debe ser 7");
+        assertEq(stored[3].team2, 8, "stored[3].team2 debe ser 8");
+        assertEq(stored[3].result[0], 0, "stored[3].result[0] debe ser 0");
+        assertEq(stored[3].result[1], 0, "stored[3].result[1] debe ser 0");
+        assertEq(stored[3].set, false, "stored[3].set debe ser false");
 
         // 7) Un segundo envío con el mismo tokenId debe revertir
         vm.prank(user);
@@ -89,34 +65,10 @@ contract PredictionsTest is Test {
         // 8) Creamos otro array de Predictions.Game de longitud 4
         Predictions.Game[] memory arr2 = new Predictions.Game[](4);
 
-        arr2[0] = Predictions.Game({
-            id:      1,
-            team1:   1,
-            team2:   2,
-            result:  [uint8(0), uint8(1)],
-            set:     false
-        });
-        arr2[1] = Predictions.Game({
-            id:      2,
-            team1:   3,
-            team2:   4,
-            result:  [uint8(1), uint8(0)],
-            set:     false
-        });
-        arr2[2] = Predictions.Game({
-            id:      3,
-            team1:   5,
-            team2:   6,
-            result:  [uint8(2), uint8(1)],
-            set:     false
-        });
-        arr2[3] = Predictions.Game({
-            id:      4,
-            team1:   7,
-            team2:   8,
-            result:  [uint8(0), uint8(0)],
-            set:     false
-        });
+        arr2[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+        arr2[1] = Predictions.Game({id: 2, team1: 3, team2: 4, result: [uint8(1), uint8(0)], set: false});
+        arr2[2] = Predictions.Game({id: 3, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
+        arr2[3] = Predictions.Game({id: 4, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
 
         // 9) Simulamos que quien NO es dueño del NFT llama y debe revertir
         vm.prank(address(0xDEAD));
@@ -134,11 +86,11 @@ contract PredictionsTest is Test {
         // 11) Intentar enviar un ID de equipo inválido
         Predictions.Game[] memory arr4 = new Predictions.Game[](4);
         arr4[0] = Predictions.Game({
-            id:      1,
-            team1:   33, // ID de equipo inválido
-            team2:   2,
-            result:  [uint8(0), uint8(1)],
-            set:     false
+            id: 1,
+            team1: 33, // ID de equipo inválido
+            team2: 2,
+            result: [uint8(0), uint8(1)],
+            set: false
         });
         vm.prank(user);
         vm.expectRevert("Invalid team1 ID");
@@ -146,17 +98,11 @@ contract PredictionsTest is Test {
 
         // 12) Intentar hacer predicción después de que se establezcan resultados
         Predictions.Game[] memory arr5 = new Predictions.Game[](4);
-        arr5[0] = Predictions.Game({
-            id:      1,
-            team1:   1,
-            team2:   2,
-            result:  [uint8(0), uint8(1)],
-            set:     false
-        });
-        
+        arr5[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+
         // Establecemos resultados para el partido 1
         preds.setResults(1, 2, 1);
-        
+
         vm.prank(user);
         vm.expectRevert("Cannot predict after results are set");
         preds.submitPrediction(TOKEN_ID, arr5);
@@ -165,7 +111,7 @@ contract PredictionsTest is Test {
     modifier setup() {
         // Mintear el cartón para el usuario
         cart.mint(user, TOKEN_ID, 1, "");
-        
+
         _;
     }
 
@@ -219,43 +165,19 @@ contract PredictionsTest is Test {
         uint256[] memory pos;
 
         Predictions.Game[] memory games = new Predictions.Game[](4);
-        games[0] = Predictions.Game({
-            id:      0,
-            team1:   1,
-            team2:   2,
-            result:  [uint8(2), uint8(1)],
-            set:     false
-        });
-        games[1] = Predictions.Game({
-            id:      1,
-            team1:   3,
-            team2:   4,
-            result:  [uint8(1), uint8(1)],
-            set:     false
-        });
-        games[2] = Predictions.Game({
-            id:      2,
-            team1:   5,
-            team2:   6,
-            result:  [uint8(0), uint8(2)],
-            set:     false
-        });
-        games[3] = Predictions.Game({
-            id:      3,
-            team1:   7,
-            team2:   8,
-            result:  [uint8(2), uint8(2)],
-            set:     false
-        });
+        games[0] = Predictions.Game({id: 0, team1: 1, team2: 2, result: [uint8(2), uint8(1)], set: false});
+        games[1] = Predictions.Game({id: 1, team1: 3, team2: 4, result: [uint8(1), uint8(1)], set: false});
+        games[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(0), uint8(2)], set: false});
+        games[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(2), uint8(2)], set: false});
 
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, games);
 
         // 20) Establecer resultados de los partidos
-        preds.setResults(0, 2, 1);  // Exacto: 7 + 2 = 9 puntos
-        preds.setResults(1, 1, 1);  // Empate: 7 + 2 = 9 puntos
-        preds.setResults(2, 0, 3);  // Acertar visitante: 6 + 2 = 8 puntos
-        preds.setResults(3, 2, 2);  // Empate: 7 + 2 = 9 puntos
+        preds.setResults(0, 2, 1); // Exacto: 7 + 2 = 9 puntos
+        preds.setResults(1, 1, 1); // Empate: 7 + 2 = 9 puntos
+        preds.setResults(2, 0, 3); // Acertar visitante: 6 + 2 = 8 puntos
+        preds.setResults(3, 2, 2); // Empate: 7 + 2 = 9 puntos
 
         // 21) Verificar puntos de cada partido
         assertEq(preds.calculatePoints(TOKEN_ID, 0), 9);
@@ -299,7 +221,7 @@ contract PredictionsTest is Test {
 
     function testSetPositions() public {
         uint256[] memory pos;
-        
+
         // 1) Intentar establecer posiciones con arrays de diferente longitud
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](2);
