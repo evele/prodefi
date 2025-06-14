@@ -19,10 +19,18 @@ contract PredictionsTest is Test {
 
         // 3) Deploy Predictions apuntando a Carton
         preds = new Predictions(address(cart));
+
+        // 4) Establecer deadline para dentro de 1 día
+        uint256 deadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(deadline);
     }
 
     function testSubmitAndReadPicks() public {
-        // 4) Creamos un array de Predictions.Game de longitud 4
+        // 4) Establecer deadline para dentro de 1 día
+        uint256 deadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(deadline);
+
+        // 5) Creamos un array de Predictions.Game de longitud 4
         Predictions.Game[] memory arr = new Predictions.Game[](4);
 
         // Inicializamos cada struct usando la sintaxis Predictions.Game({ ... })
@@ -31,11 +39,11 @@ contract PredictionsTest is Test {
         arr[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
         arr[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
 
-        // 5) Simulamos que ‘user’ llama a submitPredictions
+        // 6) Simulamos que ‘user’ llama a submitPredictions
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, arr);
 
-        // 6) Verificamos que getPrediction devuelve lo almacenado
+        // 7) Verificamos que getPrediction devuelve lo almacenado
         Predictions.Game[] memory stored = preds.getPrediction(TOKEN_ID);
         assertEq(stored.length, 4, "length should be 4");
 
@@ -55,7 +63,7 @@ contract PredictionsTest is Test {
         assertEq(stored[3].result[1], 0, "stored[3].result[1] debe ser 0");
         assertEq(stored[3].set, false, "stored[3].set debe ser false");
 
-        // 7) Un segundo envío con el mismo tokenId debe revertir
+        // 8) Un segundo envío con el mismo tokenId debe revertir
         vm.prank(user);
         vm.expectRevert();
         preds.submitPrediction(TOKEN_ID, arr);
@@ -76,6 +84,71 @@ contract PredictionsTest is Test {
         preds.submitPrediction(TOKEN_ID, arr2);
     }
 
+    function testSetSubmissionDeadline() public {
+        // 1) Intentar establecer deadline en el pasado debe revertir
+         // 0) Avanzamos el bloque 2 días para poder restar sin underflow
+        vm.warp(2 days);
+        uint256 currentTime = block.timestamp; // == 2 days
+        // 1) Intentar establecer deadline en el pasado debe revertir
+        vm.expectRevert("Deadline must be in the future");
+        preds.setSubmissionDeadline(currentTime - 1 days); // ahora vale 1 day
+
+        // 2) Establecer deadline para dentro de 1 día
+        vm.warp(currentTime);
+        uint256 deadline = currentTime + 1 days;
+        preds.setSubmissionDeadline(deadline);
+
+        // 3) Verificar que el deadline se estableció correctamente
+        assertEq(preds.submissionDeadline(), deadline);
+
+        // 4) Intentar establecer un nuevo deadline antes del actual debe revertir
+        vm.warp(currentTime + 1 hours);
+        vm.expectRevert("Deadline must be in the future");
+        preds.setSubmissionDeadline(currentTime);
+    }
+
+    function testSubmitPredictionBeforeDeadline() public {
+        // 1) Establecer deadline para dentro de 1 día
+        uint256 deadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(deadline);
+
+        // 2) Crear array de predicciones
+        Predictions.Game[] memory arr = new Predictions.Game[](4);
+        arr[0] = Predictions.Game({id: 0, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+        arr[1] = Predictions.Game({id: 1, team1: 3, team2: 4, result: [uint8(1), uint8(0)], set: false});
+        arr[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
+        arr[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
+
+        // 3) Simular que el usuario envía las predicciones antes del deadline
+        vm.prank(user);
+        preds.submitPrediction(TOKEN_ID, arr);
+
+        // 4) Verificar que las predicciones se guardaron correctamente
+        Predictions.Game[] memory stored = preds.getPrediction(TOKEN_ID);
+        assertEq(stored.length, 4);
+    }
+
+    function testSubmitPredictionAfterDeadline() public {
+        // 1) Establecer deadline para dentro de 1 día
+        uint256 deadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(deadline);
+
+        // 2) Crear array de predicciones
+        Predictions.Game[] memory arr = new Predictions.Game[](4);
+        arr[0] = Predictions.Game({id: 0, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+        arr[1] = Predictions.Game({id: 1, team1: 3, team2: 4, result: [uint8(1), uint8(0)], set: false});
+        arr[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
+        arr[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
+
+        // 3) Saltar al día después del deadline
+        vm.warp(deadline + 1);
+
+        // 4) Intentar enviar predicciones después del deadline debe revertir
+        vm.prank(user);
+        vm.expectRevert("Prediction deadline passed");
+        preds.submitPrediction(TOKEN_ID, arr);
+    }
+
     function testInvalidPrediction() public {
         // 10) Intentar enviar menos partidos que TOTAL_GAMES
         Predictions.Game[] memory arr3 = new Predictions.Game[](3);
@@ -84,6 +157,7 @@ contract PredictionsTest is Test {
         preds.submitPrediction(TOKEN_ID, arr3);
 
         // 11) Intentar enviar un ID de equipo inválido
+
         Predictions.Game[] memory arr4 = new Predictions.Game[](4);
         arr4[0] = Predictions.Game({
             id: 1,
@@ -94,23 +168,34 @@ contract PredictionsTest is Test {
         });
         vm.prank(user);
         vm.expectRevert("Invalid team1 ID");
-        preds.submitPrediction(TOKEN_ID, arr4);
+        preds.submitPrediction(TOKEN_ID, arr4); 
 
         // 12) Intentar hacer predicción después de que se establezcan resultados
+        // Primero establecemos los resultados
+        
+        preds.setResults(0, 2, 2);
+        // preds.setResults(1, 1, 2); NOTE: result aready set for this game (check later where)
+        preds.setResults(2, 2, 1);
+        preds.setResults(3, 0, 3);
+        
+        // Intentar hacer predicción después de que se establezcan resultados
         Predictions.Game[] memory arr5 = new Predictions.Game[](4);
         arr5[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
-
-        // Establecemos resultados para el partido 1
-        preds.setResults(1, 2, 1);
-
         vm.prank(user);
         vm.expectRevert("Cannot predict after results are set");
         preds.submitPrediction(TOKEN_ID, arr5);
+
+        // Limpiar resultados para otros tests
+        preds.setResults(1, 0, 0); 
     }
 
     modifier setup() {
         // Mintear el cartón para el usuario
         cart.mint(user, TOKEN_ID, 1, "");
+
+        // Establecer deadline para dentro de 1 día
+        uint256 deadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(deadline);
 
         _;
     }
@@ -170,6 +255,7 @@ contract PredictionsTest is Test {
         games[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(0), uint8(2)], set: false});
         games[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(2), uint8(2)], set: false});
 
+        // Primero enviar las predicciones antes de establecer los resultados
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, games);
 

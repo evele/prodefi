@@ -38,6 +38,8 @@ contract Predictions is Ownable {
     mapping(uint256 => WinnersPrediction) public winnersPredictions;
     mapping(uint256 => uint256) public totalPoints; // tokenID -> puntos totales
 
+    uint256 public submissionDeadline; // Fecha límite para enviar predicciones
+
     // Eventos para las predicciones de ganadores
     event WinnersPredicted(address indexed user, uint256 indexed tokenId, uint8[4] teams);
     event PointsUpdated(uint256 indexed tokenId, uint256 points);
@@ -45,10 +47,11 @@ contract Predictions is Ownable {
     event PredictionsSubmitted(address indexed user, uint256 indexed tokenId);
     event ResultsSet(uint8 indexed gameId, uint8 team1Goals, uint8 team2Goals);
 
+    /* NOTE: check if should use this or not
     modifier onlyBeforeResults(uint8 gameId) {
         require(!games[gameId].set, "Results already set for this game");
         _;
-    }
+    }*/
 
     struct Game {
         uint8 id; //will be here too, just to be easy to return (I think)
@@ -93,6 +96,12 @@ contract Predictions is Ownable {
         cartones = IERC1155(_cartones);
     }
 
+    // Función para establecer el límite de tiempo para las predicciones
+    function setSubmissionDeadline(uint256 _deadline) external onlyOwner {
+        require(_deadline > block.timestamp, "Deadline must be in the future");
+        submissionDeadline = _deadline;
+    }
+
     // Función para que el owner establezca las posiciones
     function setPositions(uint256[] memory _predictionIds, uint256[] memory _predictionPoints)
         public
@@ -121,6 +130,7 @@ contract Predictions is Ownable {
     }
 
     function submitPrediction(uint256 tokenId, Game[] calldata _prediction) external onlyCartonOwner(tokenId) {
+        require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!used[tokenId], "Prediction already submitted");
         require(_prediction.length == TOTAL_GAMES, "Must submit predictions for all games");
 
@@ -213,6 +223,7 @@ contract Predictions is Ownable {
 
     // Funciones para las predicciones de ganadores
     function predictWinners(uint256 tokenId, uint8[4] calldata teams) external onlyCartonOwner(tokenId) {
+        require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!winnersPredictions[tokenId].set, "Winners already predicted");
 
         require(all_different(teams), "Duplicate team ID");
@@ -244,6 +255,7 @@ contract Predictions is Ownable {
 
     // Función para establecer los ganadores oficiales (solo para el dueño)
     function setOfficialWinners(uint8[4] calldata teams) external onlyOwner {
+        // NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.
         require(!officialWinners.set, "Official winners already set");
 
         // Validar que los IDs de equipos sean válidos y no haya duplicados
