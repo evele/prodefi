@@ -86,7 +86,7 @@ contract PredictionsTest is Test {
 
     function testSetSubmissionDeadline() public {
         // 1) Intentar establecer deadline en el pasado debe revertir
-         // 0) Avanzamos el bloque 2 días para poder restar sin underflow
+        // 0) Avanzamos el bloque 2 días para poder restar sin underflow
         vm.warp(2 days);
         uint256 currentTime = block.timestamp; // == 2 days
         // 1) Intentar establecer deadline en el pasado debe revertir
@@ -168,16 +168,16 @@ contract PredictionsTest is Test {
         });
         vm.prank(user);
         vm.expectRevert("Invalid team1 ID");
-        preds.submitPrediction(TOKEN_ID, arr4); 
+        preds.submitPrediction(TOKEN_ID, arr4);
 
         // 12) Intentar hacer predicción después de que se establezcan resultados
         // Primero establecemos los resultados
-        
+
         preds.setResults(0, 2, 2);
         // preds.setResults(1, 1, 2); NOTE: result aready set for this game (check later where)
         preds.setResults(2, 2, 1);
         preds.setResults(3, 0, 3);
-        
+
         // Intentar hacer predicción después de que se establezcan resultados
         Predictions.Game[] memory arr5 = new Predictions.Game[](4);
         arr5[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
@@ -186,7 +186,7 @@ contract PredictionsTest is Test {
         preds.submitPrediction(TOKEN_ID, arr5);
 
         // Limpiar resultados para otros tests
-        preds.setResults(1, 0, 0); 
+        preds.setResults(1, 0, 0);
     }
 
     modifier setup() {
