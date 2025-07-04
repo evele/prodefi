@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title Contrato de Predicciones para Cartones de Prode
+/// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
     IERC1155 public cartones;
 
@@ -12,35 +12,35 @@ contract Predictions is Ownable {
     uint8 immutable LOCAL = 0;
     uint8 immutable EMPATE = 1;
     uint8 immutable VISITANTE = 2;
-    uint8 immutable MAX_TEAM_ID = 32; // Máximo ID de equipo permitido
-    uint8 immutable MAX_WINNERS = 4; // Máximo número de equipos ganadores a predecir
-    uint8 constant POINTS_FIRST = 19; // Puntos por acertar el primer puesto
-    uint8 constant POINTS_SECOND = 16; // Puntos por acertar el segundo puesto
-    uint8 constant POINTS_THIRD_FOURTH = 10; // Puntos por acertar el tercer o cuarto puesto
+    uint8 immutable MAX_TEAM_ID = 32; // Maximum allowed team ID
+    uint8 immutable MAX_WINNERS = 4; // Maximum number of winner teams to predict
+    uint8 constant POINTS_FIRST = 19; // Points for guessing first place
+    uint8 constant POINTS_SECOND = 16; // Points for guessing second place
+    uint8 constant POINTS_THIRD_FOURTH = 10; // Points for guessing third or fourth place
 
-    // Estructura para almacenar los ganadores oficiales
+    // Structure to store official winners
     struct OfficialWinners {
-        uint8[4] teams; // IDs de los equipos
-        bool set; // Si los ganadores están establecidos
+        uint8[4] teams; // Team IDs
+        bool set; // Whether winners are set
     }
 
     OfficialWinners public officialWinners;
 
-    // Evento para cuando se establecen los ganadores oficiales
+    // Event for when official winners are set
     event OfficialWinnersSet(uint8[4] teams);
 
-    // Estructura para almacenar las predicciones de ganadores
+    // Structure to store winner predictions
     struct WinnersPrediction {
-        uint8[4] teams; // IDs de los equipos
-        bool set; // Si la predicción está establecida
+        uint8[4] teams; // Team IDs
+        bool set; // Whether prediction is set
     }
 
     mapping(uint256 => WinnersPrediction) public winnersPredictions;
-    mapping(uint256 => uint256) public totalPoints; // tokenID -> puntos totales
+    mapping(uint256 => uint256) public totalPoints; // tokenID -> total points
 
-    uint256 public submissionDeadline; // Fecha límite para enviar predicciones
+    uint256 public submissionDeadline; // Deadline for submitting predictions
 
-    // Eventos para las predicciones de ganadores
+    // Events for winner predictions
     event WinnersPredicted(address indexed user, uint256 indexed tokenId, uint8[4] teams);
     event PointsUpdated(uint256 indexed tokenId, uint256 points);
 
@@ -81,28 +81,28 @@ contract Predictions is Ownable {
 
     mapping(uint256 => bool) public used;
     mapping(uint256 => uint8[]) public picks;
-    uint256[] public positions; // array de token IDs ordenados de mayor a menor
+    uint256[] public positions; // array of token IDs ordered from highest to lowest
 
-    // Evento para cuando se actualizan las posiciones
+    // Event for when positions are updated
     event PositionsUpdated(uint256[] positions);
 
-    // Función getter para obtener las posiciones
+    // Getter function to obtain positions
     function getPositions() public view returns (uint256[] memory) {
         return positions;
     }
 
-    // Llamamos a Ownable(msg.sender) para asignar el owner correctamente
+    // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
         cartones = IERC1155(_cartones);
     }
 
-    // Función para establecer el límite de tiempo para las predicciones
+    // Function to set the time limit for predictions
     function setSubmissionDeadline(uint256 _deadline) external onlyOwner {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         submissionDeadline = _deadline;
     }
 
-    // Función para que el owner establezca las posiciones
+    // Function for owner to set positions
     function setPositions(uint256[] memory _predictionIds, uint256[] memory _predictionPoints)
         public
         onlyOwner
@@ -134,7 +134,7 @@ contract Predictions is Ownable {
         require(!used[tokenId], "Prediction already submitted");
         require(_prediction.length == TOTAL_GAMES, "Must submit predictions for all games");
 
-        // Verificar que los IDs de equipos sean válidos
+        // Verify that team IDs are valid
         for (uint256 i = 0; i < _prediction.length; i++) {
             require(_prediction[i].team1 < MAX_TEAM_ID, "Invalid team1 ID");
             require(_prediction[i].team2 < MAX_TEAM_ID, "Invalid team2 ID");
@@ -221,14 +221,14 @@ contract Predictions is Ownable {
         return uint8(x >= 0 ? x : -x);
     }
 
-    // Funciones para las predicciones de ganadores
+    // Functions for winner predictions
     function predictWinners(uint256 tokenId, uint8[4] calldata teams) external onlyCartonOwner(tokenId) {
         require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!winnersPredictions[tokenId].set, "Winners already predicted");
 
         require(all_different(teams), "Duplicate team ID");
 
-        // Validar que los IDs de equipos sean válidos
+        // Validate that team IDs are valid
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
             require(teams[i] < MAX_TEAM_ID, "Invalid team ID");
         }
@@ -253,12 +253,12 @@ contract Predictions is Ownable {
         return winnersPredictions[tokenId].teams;
     }
 
-    // Función para establecer los ganadores oficiales (solo para el dueño)
+    // Function to set official winners (only for owner)
     function setOfficialWinners(uint8[4] calldata teams) external onlyOwner {
         // NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.
         require(!officialWinners.set, "Official winners already set");
 
-        // Validar que los IDs de equipos sean válidos y no haya duplicados
+        // Validate that team IDs are valid and there are no duplicates
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
             require(teams[i] < MAX_TEAM_ID, "Invalid team ID");
             for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
@@ -271,7 +271,7 @@ contract Predictions is Ownable {
         emit OfficialWinnersSet(teams);
     }
 
-    // Función para calcular los puntos de los ganadores
+    // Function to calculate winner points
     function calculateWinnerPoints(uint256 tokenId) public view returns (uint256) {
         require(officialWinners.set, "Official winners not set yet");
         require(winnersPredictions[tokenId].set, "No winners prediction for this token");
@@ -293,7 +293,7 @@ contract Predictions is Ownable {
         return points;
     }
 
-    // Función para calcular el total de puntos (partidos + ganadores)
+    // Function to calculate total points (games + winners)
     function calculateTotalPoints(uint256 tokenId) public view returns (uint256) {
         uint256 gamePoints = 0;
         uint256 winnerPoints = 0;
@@ -311,7 +311,7 @@ contract Predictions is Ownable {
         return gamePoints + winnerPoints;
     }
 
-    // Función para actualizar los puntos totales de un cartón
+    // Function to update total points of a carton
     function updateTotalPoints(uint256 tokenId) external {
         require(used[tokenId], "No predictions submitted for this token");
         uint256 newPoints = calculateTotalPoints(tokenId);

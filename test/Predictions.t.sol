@@ -12,65 +12,65 @@ contract PredictionsTest is Test {
     uint256 constant TOKEN_ID = 7;
 
     function setUp() public {
-        // 1) Deploy Carton y otorgamos todos los roles a este contrato de test
+        // 1) Deploy Carton and grant all roles to this test contract
         cart = new Carton(address(this), address(this), address(this));
-        // 2) Mint un cartón (ERC-1155) al usuario ‘user’
+        // 2) Mint a carton (ERC-1155) to user
         cart.mint(user, TOKEN_ID, 1, "");
 
-        // 3) Deploy Predictions apuntando a Carton
+        // 3) Deploy Predictions pointing to Carton
         preds = new Predictions(address(cart));
 
-        // 4) Establecer deadline para dentro de 1 día
+        // 4) Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
         preds.setSubmissionDeadline(deadline);
     }
 
     function testSubmitAndReadPicks() public {
-        // 4) Establecer deadline para dentro de 1 día
+        // 4) Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
         preds.setSubmissionDeadline(deadline);
 
-        // 5) Creamos un array de Predictions.Game de longitud 4
+        // 5) Create a Predictions.Game array of length 4
         Predictions.Game[] memory arr = new Predictions.Game[](4);
 
-        // Inicializamos cada struct usando la sintaxis Predictions.Game({ ... })
+        // Initialize each struct using Predictions.Game({ ... }) syntax
         arr[0] = Predictions.Game({id: 0, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
         arr[1] = Predictions.Game({id: 1, team1: 3, team2: 4, result: [uint8(1), uint8(0)], set: false});
         arr[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
         arr[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
 
-        // 6) Simulamos que ‘user’ llama a submitPredictions
+        // 6) Simulate user calling submitPredictions
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, arr);
 
-        // 7) Verificamos que getPrediction devuelve lo almacenado
+        // 7) Verify that getPrediction returns stored data
         Predictions.Game[] memory stored = preds.getPrediction(TOKEN_ID);
         assertEq(stored.length, 4, "length should be 4");
 
-        // Comprobamos un par de campos de stored[0]
-        assertEq(stored[0].id, 0, "stored[0].id debe ser 0");
-        assertEq(stored[0].team1, 1, "stored[0].team1 debe ser 1");
-        assertEq(stored[0].team2, 2, "stored[0].team2 debe ser 2");
-        assertEq(stored[0].result[0], 0, "stored[0].result[0] debe ser 0");
-        assertEq(stored[0].result[1], 1, "stored[0].result[1] debe ser 1");
-        assertEq(stored[0].set, false, "stored[0].set debe ser false");
+        // Check some fields of stored[0]
+        assertEq(stored[0].id, 0, "stored[0].id should be 0");
+        assertEq(stored[0].team1, 1, "stored[0].team1 should be 1");
+        assertEq(stored[0].team2, 2, "stored[0].team2 should be 2");
+        assertEq(stored[0].result[0], 0, "stored[0].result[0] should be 0");
+        assertEq(stored[0].result[1], 1, "stored[0].result[1] should be 1");
+        assertEq(stored[0].set, false, "stored[0].set should be false");
 
-        // Comprobamos también stored[3]
-        assertEq(stored[3].id, 3, "stored[3].id debe ser 3");
-        assertEq(stored[3].team1, 7, "stored[3].team1 debe ser 7");
-        assertEq(stored[3].team2, 8, "stored[3].team2 debe ser 8");
-        assertEq(stored[3].result[0], 0, "stored[3].result[0] debe ser 0");
-        assertEq(stored[3].result[1], 0, "stored[3].result[1] debe ser 0");
-        assertEq(stored[3].set, false, "stored[3].set debe ser false");
+        // Also check stored[3]
+        assertEq(stored[3].id, 3, "stored[3].id should be 3");
+        assertEq(stored[3].team1, 7, "stored[3].team1 should be 7");
+        assertEq(stored[3].team2, 8, "stored[3].team2 should be 8");
+        assertEq(stored[3].result[0], 0, "stored[3].result[0] should be 0");
+        assertEq(stored[3].result[1], 0, "stored[3].result[1] should be 0");
+        assertEq(stored[3].set, false, "stored[3].set should be false");
 
-        // 8) Un segundo envío con el mismo tokenId debe revertir
+        // 8) A second submission with same tokenId should revert
         vm.prank(user);
         vm.expectRevert();
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
     function testOnlyOwnerCannotSubmit() public {
-        // 8) Creamos otro array de Predictions.Game de longitud 4
+        // 8) Create another Predictions.Game array of length 4
         Predictions.Game[] memory arr2 = new Predictions.Game[](4);
 
         arr2[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
@@ -78,30 +78,30 @@ contract PredictionsTest is Test {
         arr2[2] = Predictions.Game({id: 3, team1: 5, team2: 6, result: [uint8(2), uint8(1)], set: false});
         arr2[3] = Predictions.Game({id: 4, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
 
-        // 9) Simulamos que quien NO es dueño del NFT llama y debe revertir
+        // 9) Simulate that a non-owner calls and should revert
         vm.prank(address(0xDEAD));
         vm.expectRevert();
         preds.submitPrediction(TOKEN_ID, arr2);
     }
 
     function testSetSubmissionDeadline() public {
-        // 1) Intentar establecer deadline en el pasado debe revertir
-        // 0) Avanzamos el bloque 2 días para poder restar sin underflow
+        // 1) Try setting deadline in the past should revert
+        // 0) Advance block 2 days to be able to subtract without underflow
         vm.warp(2 days);
         uint256 currentTime = block.timestamp; // == 2 days
-        // 1) Intentar establecer deadline en el pasado debe revertir
+        // 1) Try setting deadline in the past should revert
         vm.expectRevert("Deadline must be in the future");
-        preds.setSubmissionDeadline(currentTime - 1 days); // ahora vale 1 day
+        preds.setSubmissionDeadline(currentTime - 1 days); // now equals 1 day
 
-        // 2) Establecer deadline para dentro de 1 día
+        // 2) Set deadline for 1 day from now
         vm.warp(currentTime);
         uint256 deadline = currentTime + 1 days;
         preds.setSubmissionDeadline(deadline);
 
-        // 3) Verificar que el deadline se estableció correctamente
+        // 3) Verify that deadline was set correctly
         assertEq(preds.submissionDeadline(), deadline);
 
-        // 4) Intentar establecer un nuevo deadline antes del actual debe revertir
+        // 4) Try setting new deadline before current should revert
         vm.warp(currentTime + 1 hours);
         vm.expectRevert("Deadline must be in the future");
         preds.setSubmissionDeadline(currentTime);
@@ -193,7 +193,7 @@ contract PredictionsTest is Test {
         // Mintear el cartón para el usuario
         cart.mint(user, TOKEN_ID, 1, "");
 
-        // Establecer deadline para dentro de 1 día
+        // Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
         preds.setSubmissionDeadline(deadline);
 
@@ -201,7 +201,7 @@ contract PredictionsTest is Test {
     }
 
     function testWinnerPrediction_NoCarton() public {
-        // Intentar hacer predicción de ganadores sin tener cartón
+        // Try making winner prediction without having carton
         vm.prank(address(0xDEAD));
         vm.expectRevert();
         preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
@@ -212,7 +212,7 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
 
-        // Verificar que se guardó correctamente
+        // Verify it was stored correctly
         uint8[4] memory prediction = preds.getWinnersPrediction(TOKEN_ID);
         assertEq(prediction[0], 1);
         assertEq(prediction[1], 2);
@@ -255,7 +255,7 @@ contract PredictionsTest is Test {
         games[2] = Predictions.Game({id: 2, team1: 5, team2: 6, result: [uint8(0), uint8(2)], set: false});
         games[3] = Predictions.Game({id: 3, team1: 7, team2: 8, result: [uint8(2), uint8(2)], set: false});
 
-        // Primero enviar las predicciones antes de establecer los resultados
+        // First submit predictions before setting results
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, games);
 
@@ -338,7 +338,7 @@ contract PredictionsTest is Test {
     }
 
     function testSetResults() public {
-        // 13) Solo el dueño puede establecer resultados
+        // 13) Only owner can set results
         vm.prank(address(0xDEAD));
         vm.expectRevert();
         preds.setResults(1, 2, 1);
