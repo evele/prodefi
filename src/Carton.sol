@@ -14,6 +14,12 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
+    uint256 public cartonPrice;
+    uint256 private _nextTokenId = 1;
+
+    event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+
     constructor(address defaultAdmin, address pauser, address minter) ERC1155("") {
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(PAUSER_ROLE, pauser);
@@ -32,15 +38,49 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         _unpause();
     }
 
-    function mint(address account, uint256 id, uint256 amount, bytes memory data) public onlyRole(MINTER_ROLE) {
-        _mint(account, id, amount, data);
+    function mint(address account, uint256 amount, bytes memory data) public onlyRole(MINTER_ROLE) returns (uint256) {
+        uint256 tokenId = _nextTokenId++;
+        _mint(account, tokenId, amount, data);
+        return tokenId;
     }
 
-    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
+    function mintBatch(address to, uint256[] memory amounts, bytes memory data)
         public
         onlyRole(MINTER_ROLE)
+        returns (uint256[] memory)
     {
+        uint256[] memory ids = new uint256[](amounts.length);
+        for (uint256 i = 0; i < amounts.length; i++) {
+            ids[i] = _nextTokenId++;
+        }
         _mintBatch(to, ids, amounts, data);
+        return ids;
+    }
+
+    function buyCarton() external payable whenNotPaused {
+        require(cartonPrice > 0, "Price not set");
+        require(msg.value >= cartonPrice, "Insufficient payment");
+        
+        uint256 tokenId = _nextTokenId++;
+        _mint(msg.sender, tokenId, 1, "");
+        
+        emit CartonPurchased(msg.sender, tokenId, msg.value);
+        
+        if (msg.value > cartonPrice) {
+            payable(msg.sender).transfer(msg.value - cartonPrice);
+        }
+    }
+
+    function setCartonPrice(uint256 newPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldPrice = cartonPrice;
+        cartonPrice = newPrice;
+        emit PriceUpdated(oldPrice, newPrice);
+    }
+
+    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No funds to withdraw");
+        payable(msg.sender).transfer(balance);
     }
 
     // The following functions are overrides required by Solidity.

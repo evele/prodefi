@@ -39,21 +39,20 @@ contract CartonTest is BaseTest {
     }
 
     function testBurn() public {
-        _mintCarton(user, 42);
-        // Mint additional token to have 2 total
-        _mintCarton(user, 42);
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 2, "");
 
         vm.prank(user);
-        carton.burn(user, 42, 2);
+        carton.burn(user, tokenId, 2);
 
-        assertEq(carton.totalSupply(42), 0, "supply after burn should be 0");
+        assertEq(carton.totalSupply(tokenId), 0, "supply after burn should be 0");
     }
 
     // Access Control Tests
     function testOnlyMinterCanMint() public {
         vm.prank(unauthorized);
         vm.expectRevert();
-        carton.mint(user, 1, 1, "");
+        carton.mint(user, 1, "");
 
         _mintCarton(user, 1);
         _assertOwnsCarton(user, 1);
@@ -71,7 +70,7 @@ contract CartonTest is BaseTest {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        carton.mintBatch(user, ids, amounts, "");
+        carton.mintBatch(user, amounts, "");
 
         _mintBatchCartons(user, ids, amounts);
         _assertOwnsCarton(user, 1);
@@ -125,7 +124,7 @@ contract CartonTest is BaseTest {
         carton.grantRole(minterRole, newMinter);
         
         vm.prank(newMinter);
-        carton.mint(user, 1, 1, "");
+        carton.mint(user, 1, "");
         _assertOwnsCarton(user, 1);
     }
 
@@ -141,7 +140,7 @@ contract CartonTest is BaseTest {
 
         vm.prank(minter);
         vm.expectRevert();
-        carton.mint(user, 1, 1, "");
+        carton.mint(user, 1, "");
     }
 
     function testSupportsInterface() public view {
@@ -149,4 +148,95 @@ contract CartonTest is BaseTest {
         assertTrue(carton.supportsInterface(0x7965db0b)); // AccessControl
         assertTrue(carton.supportsInterface(0x01ffc9a7)); // ERC165
     }
+
+    function testBuyCarton() public {
+        vm.prank(admin);
+        carton.setCartonPrice(0.1 ether);
+        
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        carton.buyCarton{value: 0.1 ether}();
+        
+        assertEq(carton.balanceOf(user, 1), 1, "User should own carton ID 1");
+        assertEq(address(carton).balance, 0.1 ether, "Contract should have received payment");
+    }
+
+    function testBuyCartonWithExcess() public {
+        vm.prank(admin);
+        carton.setCartonPrice(0.1 ether);
+        
+        vm.deal(user, 1 ether);
+        uint256 userBalanceBefore = user.balance;
+        
+        vm.prank(user);
+        carton.buyCarton{value: 0.15 ether}();
+        
+        assertEq(carton.balanceOf(user, 1), 1, "User should own carton ID 1");
+        assertEq(address(carton).balance, 0.1 ether, "Contract should have exact price");
+        assertEq(user.balance, userBalanceBefore - 0.1 ether, "User should get refund");
+    }
+
+    function testBuyCartonInsufficientPayment() public {
+        vm.prank(admin);
+        carton.setCartonPrice(0.1 ether);
+        
+        vm.deal(user, 0.05 ether);
+        vm.prank(user);
+        vm.expectRevert("Insufficient payment");
+        carton.buyCarton{value: 0.05 ether}();
+    }
+
+    function testBuyCartonPriceNotSet() public {
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        vm.expectRevert("Price not set");
+        carton.buyCarton{value: 0.1 ether}();
+    }
+
+    function testSetCartonPrice() public {
+        vm.prank(admin);
+        carton.setCartonPrice(0.1 ether);
+        assertEq(carton.cartonPrice(), 0.1 ether, "Price should be set");
+    }
+
+    function testOnlyAdminCanSetPrice() public {
+        vm.prank(user);
+        vm.expectRevert();
+        carton.setCartonPrice(0.1 ether);
+    }
+
+    function testWithdraw() public {
+        address recipient = makeAddr("recipient");
+        
+        vm.startPrank(admin);
+        carton.setCartonPrice(0.1 ether);
+        carton.grantRole(carton.DEFAULT_ADMIN_ROLE(), recipient);
+        vm.stopPrank();
+        
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        carton.buyCarton{value: 0.1 ether}();
+        
+        uint256 balanceBefore = recipient.balance;
+        vm.prank(recipient);
+        carton.withdraw();
+        
+        assertEq(address(carton).balance, 0, "Contract balance should be 0");
+        assertEq(recipient.balance, balanceBefore + 0.1 ether, "Recipient should receive funds");
+    }
+
+    function testWithdrawNoFunds() public {
+        vm.prank(admin);
+        vm.expectRevert("No funds to withdraw");
+        carton.withdraw();
+    }
+
+    function testOnlyAdminCanWithdraw() public {
+        vm.prank(user);
+        vm.expectRevert();
+        carton.withdraw();
+    }
+
+    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+    event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
 }

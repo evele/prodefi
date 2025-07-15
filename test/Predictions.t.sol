@@ -9,13 +9,13 @@ contract PredictionsTest is Test {
     Carton cart;
     Predictions preds;
     address user = address(0xABCD);
-    uint256 constant TOKEN_ID = 7;
+    uint256 TOKEN_ID;
 
     function setUp() public {
         // 1) Deploy Carton and grant all roles to this test contract
         cart = new Carton(address(this), address(this), address(this));
         // 2) Mint a carton (ERC-1155) to user
-        cart.mint(user, TOKEN_ID, 1, "");
+        TOKEN_ID = cart.mint(user, 1, "");
 
         // 3) Deploy Predictions pointing to Carton
         preds = new Predictions(address(cart));
@@ -191,7 +191,7 @@ contract PredictionsTest is Test {
 
     modifier setup() {
         // Mintear el cartón para el usuario
-        cart.mint(user, TOKEN_ID, 1, "");
+        cart.mint(user, 1, "");
 
         // Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;

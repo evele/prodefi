@@ -73,23 +73,23 @@ abstract contract BaseTest is Test {
     /// @notice Mint a single carton to user
     function _mintCarton(address user, uint256 tokenId) internal {
         vm.prank(minter);
-        carton.mint(user, tokenId, 1, "");
+        carton.mint(user, 1, "");
     }
     
     /// @notice Mint cartons to multiple users
     function _mintCartonsToUsers() internal {
         vm.startPrank(minter);
-        carton.mint(user1, TOKEN_ID_1, 1, "");
-        carton.mint(user2, TOKEN_ID_2, 1, "");
-        carton.mint(user3, TOKEN_ID_3, 1, "");
-        carton.mint(user4, TOKEN_ID_4, 1, "");
+        carton.mint(user1, 1, "");
+        carton.mint(user2, 1, "");
+        carton.mint(user3, 1, "");
+        carton.mint(user4, 1, "");
         vm.stopPrank();
     }
     
     /// @notice Mint batch cartons
     function _mintBatchCartons(address user, uint256[] memory ids, uint256[] memory amounts) internal {
         vm.prank(minter);
-        carton.mintBatch(user, ids, amounts, "");
+        carton.mintBatch(user, amounts, "");
     }
     
     // ========== PREDICTION HELPERS ==========
