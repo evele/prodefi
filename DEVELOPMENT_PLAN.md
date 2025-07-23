@@ -1,6 +1,9 @@
 # ProDefi Development Plan
 
-## 📋 Current Status (July 15, 2025)
+**PURPOSE**: Project planning, task organization, and development roadmap for the team.
+This file contains current status, next tasks, priorities, and session planning. For permanent technical information about the project, see CLAUDE.md.
+
+## 📋 Current Status (July 23, 2025)
 
 ### ✅ Completed Features
 - **Carton.sol (ERC1155)**: Complete with purchase system
@@ -15,7 +18,8 @@
   - Winner predictions (top 4 teams)
   - Point calculation system
   - Deadline enforcement
-  - Position/ranking management
+  - Position/ranking management with O(1) lookup
+  - Added `tokenPositions` mapping and `getCartonPosition()` function
   - Comprehensive test coverage (14 tests passing)
 
 - **Test Infrastructure**: 39 tests passing
@@ -23,52 +27,45 @@
   - Integration tests
   - All core functionality covered
 
-## 🚧 In Progress: Treasury System
+- **Treasury.sol**: ✅ CORE FUNCTIONS COMPLETE
+  - Prize pool management with ETH (future USDC support planned)
+  - Role-based access control (FUND_DEPOSITOR_ROLE, TOURNAMENT_MANAGER_ROLE)
+  - Integration with Carton and Predictions contracts
+  - **Implemented Functions**:
+    - `depositFromSales()`: Receives ETH from sales, updates prize pools
+    - `setPrizeDistribution()`: Admin sets percentage distribution (90-100% total)
+    - `claimPrize()`: Users claim prizes based on tokenId positions
+  - Contract references to Carton and Predictions for validation
+  - Efficient prize calculation with integer division (rounds down)
 
-### Current Architecture Decision
-**Multi-contract approach** (better than monolithic):
-- `Treasury.sol`: Centralized fund management
-- `Carton.sol`: Sends % of sales to Treasury
-- `Predictions.sol`: Notifies Treasury of final positions
-- Future: `PrizeDistribution.sol`: Different prize distribution strategies
-
-### Treasury.sol Progress
-**Structure defined** ✅:
-```solidity
-// Prize pools by tournament
-mapping(uint256 => uint256) public prizePools;
-
-// Track claims by tournament and tokenId
-mapping(uint256 => mapping(uint256 => bool)) public claimed;
-
-// Prize distribution percentages by tournament
-mapping(uint256 => uint8[]) public prizePoolDistributions;
-```
-
-**Events defined** ✅:
-- `DepositFromSale(uint256 tournamentId, uint256 amount)`
-- `ClaimPrize(uint256 tournamentId, uint256 tokenId, address userAddress, uint256 position)`
-- `SetPrizeDistribution(uint256 tournamentId, uint8[] percentages)`
+## 🚧 Next Phase: Treasury Integration & View Functions
 
 ## 🎯 Next Tasks (Priority Order)
 
-### Phase 1: Complete Treasury Basic Functions
-1. **Implement `depositFromSales()`** 
-   - Role verification (`FUND_DEPOSITOR_ROLE`)
-   - Add `msg.value` to prize pool
-   - Emit event
-   - **Status**: Ready for implementation
+### Phase 1: Complete Treasury View Functions ⏳
+1. **✅ `depositFromSales()`** - COMPLETED
+   - Role verification with `onlyRole(FUND_DEPOSITOR_ROLE)`
+   - Adds `msg.value` to prize pool mapping
+   - Emits `DepositFromSale` event
 
-2. **Implement `setPrizeDistribution()`**
-   - Admin only (`DEFAULT_ADMIN_ROLE`)
-   - Validate percentages sum ≤ 100
-   - Store distribution
-   - Handle "leftover" accumulation strategy
+2. **✅ `setPrizeDistribution()`** - COMPLETED
+   - Admin only with `onlyRole(DEFAULT_ADMIN_ROLE)`
+   - Validates percentages sum between 90-100% (reserves for charity/dev)
+   - Copies calldata array to storage with proper loop
+   - Emits `SetPrizeDistribution` event
 
-3. **Create view functions**
+3. **✅ `claimPrize()`** - COMPLETED
+   - Verifies token ownership via Carton contract
+   - Prevents double claiming with mapping
+   - Gets position from Predictions contract (O(1) lookup)
+   - Calculates prize with integer division
+   - Transfers ETH with secure `call{value}` pattern
+   - Marks as claimed and emits event
+
+4. **Create view functions** - NEXT PRIORITY
    - `getPrizePool(tournamentId)`
-   - `getUserPrizeAmount(tournamentId, tokenId)`
-   - `hasTokenClaimed(tournamentId, tokenId)`
+   - `getUserPrizeAmount(tournamentId, position)`
+   - `hasUserClaimed(tournamentId, tokenId)`
 
 ### Phase 2: Integrate Treasury with Carton Sales
 4. **Modify Carton.sol**
@@ -156,5 +153,27 @@ mapping(uint256 => uint8[]) public prizePoolDistributions;
 
 ---
 
-*Last updated: July 15, 2025 - 21:35*
-*Next session: Continue with Treasury.sol implementation*
+---
+
+## 🎯 Next Session (July 24, 2025)
+
+**PRIORITY**: Implement Treasury.sol comprehensive tests
+- Treasury core functions are complete (`depositFromSales`, `setPrizeDistribution`, `claimPrize`)
+- Need comprehensive test coverage following existing patterns in BaseTest.sol
+- Test scenarios: role access, prize calculations, integration with Carton/Predictions
+- User is committed to daily coding practice - continue with testing phase
+
+---
+
+## 🎉 Recent Session Achievements
+
+### July 23, 2025 - Treasury Core Functions Complete
+- ✅ Implemented `depositFromSales()` with role-based access
+- ✅ Implemented `setPrizeDistribution()` with validation and array copying
+- ✅ Implemented `claimPrize()` with full prize claiming logic
+- ✅ Added contract references to Carton and Predictions
+- ✅ Enhanced Predictions.sol with O(1) position lookup
+- ✅ Fixed test warnings and maintained clean compilation
+- 🧠 **Learning achieved**: calldata vs memory, array copying, integer division, secure ETH transfers
+
+*Last updated: July 23, 2025*

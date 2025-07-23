@@ -82,6 +82,7 @@ contract Predictions is Ownable {
     mapping(uint256 => bool) public used;
     mapping(uint256 => uint8[]) public picks;
     uint256[] public positions; // array of token IDs ordered from highest to lowest
+    mapping(uint256 => uint256) public tokenPositions; // tokenId => position (1-indexed)
 
     // Event for when positions are updated
     event PositionsUpdated(uint256[] positions);
@@ -117,11 +118,17 @@ contract Predictions is Ownable {
         for (uint256 i = 0; i < _predictionPoints.length; i++) {
             require(maxPoints >= _predictionPoints[i], "Points must be ordered");
             positions.push(_predictionIds[i]);
+            tokenPositions[_predictionIds[i]] = i + 1;
             maxPoints = _predictionPoints[i];
         }
 
         emit PositionsUpdated(positions);
         return true;
+    }
+
+    function getCartonPosition(uint256 tokenId) public view returns (uint256) {
+        require(tokenPositions[tokenId] > 0, "Token not in leaderboard");
+        return tokenPositions[tokenId];
     }
 
     modifier onlyCartonOwner(uint256 tokenId) {
