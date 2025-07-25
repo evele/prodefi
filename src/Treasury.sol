@@ -85,9 +85,20 @@ contract Treasury is AccessControl {
 
     // TODO: Agregar view functions:
     // - getPrizePool(tournamentId)
+    function getPrizePool(uint256 tournamentId) external view returns (uint256){
+        return prizePools[tournamentId];
+    }
     // - getUserPrizeAmount(tournamentId, position)
-    // - hasUserClaimed(tournamentId, user)
+    function getUserPrizeAmount(uint256 tournamentId, uint256 position) external view returns (uint256){
+        require(position > 0 && position <= prizePoolDistributions[tournamentId].length, "Invalid position");
+        uint8 percentage_position = prizePoolDistributions[tournamentId][position-1];
+        return (prizePools[tournamentId] * percentage_position) / 100;
 
+    }
+    // - hasUserClaimed(tournamentId, user)
+    function hasUserClaimed(uint256 tournamentId, uint256 tokenId) external view returns (bool){
+        return claimed[tournamentId][tokenId];
+    }
     // TODO: Agregar emergency functions:
     // - emergencyWithdraw() onlyRole(DEFAULT_ADMIN_ROLE)
     // - pause/unpause functionality

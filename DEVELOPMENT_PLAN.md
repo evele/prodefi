@@ -119,6 +119,13 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ## 💡 Architecture Decisions Made
 
+### Future Modularization (Post-MVP)
+- **Treasury.sol + TournamentManager.sol** → Could become standalone "ProDefi SDK"
+- **Generic prize pool management** → Reusable by third-party prediction platforms
+- **Modular design approach** → Football-specific logic separate from core infrastructure
+- **Decoupling strategy** → Implement after current football project is complete
+- **Monetization potential** → License fees, revenue sharing with third parties
+
 ### Treasury Design Principles
 1. **Prize by tokenId, not by user**: Users can win multiple prizes with different tokens
 2. **Leftover accumulation**: Rounding errors accumulate in prize pool for future tournaments
