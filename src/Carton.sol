@@ -60,12 +60,12 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     function buyCarton() external payable whenNotPaused {
         require(cartonPrice > 0, "Price not set");
         require(msg.value >= cartonPrice, "Insufficient payment");
-        
+
         uint256 tokenId = _nextTokenId++;
         _mint(msg.sender, tokenId, 1, "");
-        
+
         emit CartonPurchased(msg.sender, tokenId, msg.value);
-        
+
         if (msg.value > cartonPrice) {
             payable(msg.sender).transfer(msg.value - cartonPrice);
         }

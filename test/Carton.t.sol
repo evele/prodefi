@@ -14,7 +14,7 @@ contract CartonTest is BaseTest {
     function testMintBatchAndSupply() public {
         uint256[] memory ids = _createUint256Array(1, 2, 0);
         uint256[] memory amounts = _createUint256Array(3, 5, 0);
-        
+
         // Resize arrays to 2 elements
         assembly {
             mstore(ids, 2)
@@ -29,7 +29,7 @@ contract CartonTest is BaseTest {
 
     function testPausePreventsTransfers() public {
         _mintCarton(user, 10);
-        
+
         vm.prank(pauser);
         carton.pause();
 
@@ -61,7 +61,7 @@ contract CartonTest is BaseTest {
     function testOnlyMinterCanMintBatch() public {
         uint256[] memory ids = _createUint256Array(1, 0, 0);
         uint256[] memory amounts = _createUint256Array(1, 0, 0);
-        
+
         // Resize to 1 element
         assembly {
             mstore(ids, 1)
@@ -115,14 +115,14 @@ contract CartonTest is BaseTest {
         bytes32 minterRole = carton.MINTER_ROLE();
 
         _assertNotHasRole(carton.DEFAULT_ADMIN_ROLE(), unauthorized);
-        
+
         vm.prank(unauthorized);
         vm.expectRevert();
         carton.grantRole(minterRole, newMinter);
 
         vm.prank(admin);
         carton.grantRole(minterRole, newMinter);
-        
+
         vm.prank(newMinter);
         carton.mint(user, 1, "");
         _assertOwnsCarton(user, 1);
@@ -130,9 +130,9 @@ contract CartonTest is BaseTest {
 
     function testAdminCanRevokeRoles() public {
         bytes32 minterRole = carton.MINTER_ROLE();
-        
+
         _assertHasRole(carton.DEFAULT_ADMIN_ROLE(), admin);
-        
+
         vm.prank(admin);
         carton.revokeRole(minterRole, minter);
 
@@ -152,11 +152,11 @@ contract CartonTest is BaseTest {
     function testBuyCarton() public {
         vm.prank(admin);
         carton.setCartonPrice(0.1 ether);
-        
+
         vm.deal(user, 1 ether);
         vm.prank(user);
         carton.buyCarton{value: 0.1 ether}();
-        
+
         assertEq(carton.balanceOf(user, 1), 1, "User should own carton ID 1");
         assertEq(address(carton).balance, 0.1 ether, "Contract should have received payment");
     }
@@ -164,13 +164,13 @@ contract CartonTest is BaseTest {
     function testBuyCartonWithExcess() public {
         vm.prank(admin);
         carton.setCartonPrice(0.1 ether);
-        
+
         vm.deal(user, 1 ether);
         uint256 userBalanceBefore = user.balance;
-        
+
         vm.prank(user);
         carton.buyCarton{value: 0.15 ether}();
-        
+
         assertEq(carton.balanceOf(user, 1), 1, "User should own carton ID 1");
         assertEq(address(carton).balance, 0.1 ether, "Contract should have exact price");
         assertEq(user.balance, userBalanceBefore - 0.1 ether, "User should get refund");
@@ -179,7 +179,7 @@ contract CartonTest is BaseTest {
     function testBuyCartonInsufficientPayment() public {
         vm.prank(admin);
         carton.setCartonPrice(0.1 ether);
-        
+
         vm.deal(user, 0.05 ether);
         vm.prank(user);
         vm.expectRevert("Insufficient payment");
@@ -207,20 +207,20 @@ contract CartonTest is BaseTest {
 
     function testWithdraw() public {
         address recipient = makeAddr("recipient");
-        
+
         vm.startPrank(admin);
         carton.setCartonPrice(0.1 ether);
         carton.grantRole(carton.DEFAULT_ADMIN_ROLE(), recipient);
         vm.stopPrank();
-        
+
         vm.deal(user, 1 ether);
         vm.prank(user);
         carton.buyCarton{value: 0.1 ether}();
-        
+
         uint256 balanceBefore = recipient.balance;
         vm.prank(recipient);
         carton.withdraw();
-        
+
         assertEq(address(carton).balance, 0, "Contract balance should be 0");
         assertEq(recipient.balance, balanceBefore + 0.1 ether, "Recipient should receive funds");
     }
