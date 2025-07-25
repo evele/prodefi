@@ -162,17 +162,49 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ---
 
-## 🎯 Next Session (July 24, 2025)
+## 🎯 Next Session (July 26, 2025)
 
-**PRIORITY**: Implement Treasury.sol comprehensive tests
-- Treasury core functions are complete (`depositFromSales`, `setPrizeDistribution`, `claimPrize`)
-- Need comprehensive test coverage following existing patterns in BaseTest.sol
-- Test scenarios: role access, prize calculations, integration with Carton/Predictions
-- User is committed to daily coding practice - continue with testing phase
+**Current Status**: Core smart contracts complete, frontend foundation ready
+
+### Priority Options (choose direction):
+1. **Deploy & Integration Testing**
+   - Deploy contracts to Anvil local testnet
+   - Copy ABIs to frontend (`frontend/src/lib/contracts/abis.ts`)
+   - Test wallet connection + contract reads
+   - Implement buy carton functionality
+
+2. **Frontend Development**
+   - Prediction forms (game predictions + winner predictions)
+   - Leaderboard/results display
+   - Admin panel for setting results
+   - Prize claim interface
+
+3. **Smart Contract Enhancements**
+   - Emergency functions (`emergencyWithdraw`, pause/unpause)
+   - Carton-Treasury integration (auto-deposit on purchase)
+   - Gas optimizations and security review
+
+4. **MVP Completion Focus**
+   - End-to-end flow: Buy → Predict → Results → Claim
+   - Deployment scripts for testnets
+   - Basic documentation for users
+
+### Recommended Next Steps:
+**Start with Option 1 (Deploy & Integration)** - Get the full stack working together first, then expand functionality based on what you discover.
 
 ---
 
 ## 🎉 Recent Session Achievements
+
+### July 25, 2025 - Treasury View Functions + Frontend Foundation
+- ✅ **Treasury.sol view functions** implemented and tested (32 tests passing)
+  - `getPrizePool(tournamentId)` - Returns total ETH pool
+  - `getUserPrizeAmount(tournamentId, position)` - Calculates prize per position
+  - `hasUserClaimed(tournamentId, tokenId)` - Claim status check
+- ✅ **Frontend monorepo setup** (Next.js 15 + TypeScript + Wagmi + shadcn/ui)
+- ✅ **Professional UI foundation** with wallet connection
+- ✅ **Web3 integration ready** - RainbowKit + Wagmi configured for Anvil
+- 🧠 **Learning**: shadcn/ui performance benefits, Web3 stack best practices
 
 ### July 23, 2025 - Treasury Core Functions Complete
 - ✅ Implemented `depositFromSales()` with role-based access
