@@ -164,21 +164,28 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ## 🎯 Next Session (September 6, 2025)
 
-**Current Status**: Full Web3 integration working! Contracts deployed, transactions working, toasts implemented.
+**Current Status**: ✅ **COMPLETED - Show owned cartones feature**
+
+### ✅ Completed Today (September 5, 2025):
+- **Enhanced Carton.sol**: Added `getUserTokens()` function with automatic tracking
+- **Implemented token tracking**: `_update()` override handles mint/burn/transfer events
+- **Frontend integration**: Real-time display of user's owned cartones
+- **Polling system**: 10-second auto-refresh + window focus refresh
+- **Event listeners**: Attempted WebSocket events (works on testnet/mainnet, not Anvil)
+- **UI updates**: Dynamic button showing "X Carton(es) Owned"
 
 ### Priority Options (choose direction):
 
-1. **Complete Web3 Features** 🎯 RECOMMENDED
-   - Show owned cartones (NFTs) in UI using `balanceOf`/`tokenOfOwnerByIndex`
-   - Prize pool display from Treasury contract (real data)
-   - Connection status improvements (contracts deployed vs not deployed)
-   - Error handling and edge cases
-
-2. **Prediction System Implementation**
+1. **Prediction System Implementation** 🎯 RECOMMENDED (next logical step)
    - Game predictions form (4 games, score inputs)
    - Winner predictions (top 4 teams dropdowns/selects)
    - Read/display user's current predictions
    - Submission deadline enforcement in UI
+
+2. **Prize Pool Integration**
+   - Display real prize pool data from Treasury contract (real ETH amounts)
+   - Calculate and show potential winnings per position
+   - Connection status improvements (show deployed contracts status)
 
 3. **Leaderboard & Results**
    - Read real tournament data from Predictions contract
@@ -192,13 +199,13 @@ This file contains current status, next tasks, priorities, and session planning.
    - Prize distribution configuration
 
 ### Recommended Next Steps:
-**Start with Option 1 (Complete Web3 Features)** - Build on the solid foundation you have. Show owned NFTs and real prize pool data to complete the core wallet experience.
+**Start with Option 1 (Prediction System)** - Now that users can buy and see cartones, implement the core prediction functionality.
 
 ### Learning Focus for Next Session:
-- ERC1155 token reading (`balanceOf`, `uri`)
-- Array/mapping reading from contracts
-- Conditional UI based on contract state
-- Error boundaries and loading states
+- **Form handling**: Complex forms with multiple inputs (game scores, team selections)
+- **Contract interactions**: Writing predictions to blockchain with `submitGamePicks()` and `submitWinnerPicks()`
+- **State management**: Managing form state across multiple prediction types
+- **Validation**: Deadline checks, required fields, data formatting
 
 ---
 

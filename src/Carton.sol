@@ -17,6 +17,8 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     uint256 public cartonPrice;
     uint256 private _nextTokenId = 1;
 
+    mapping(address => uint256[]) private userTokens;
+
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
 
@@ -63,6 +65,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
         uint256 tokenId = _nextTokenId++;
         _mint(msg.sender, tokenId, 1, "");
+        // userTokens[msg.sender].push(tokenId);
 
         emit CartonPurchased(msg.sender, tokenId, msg.value);
 
@@ -83,6 +86,25 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         payable(msg.sender).transfer(balance);
     }
 
+    function getUserTokens(address user) external view returns (uint256[] memory) {
+        return userTokens[user];
+    } 
+
+    function _addTokenToUser(address user, uint256 tokenId) internal {
+        userTokens[user].push(tokenId);
+    }
+
+    function _removeTokenFromUser(address user, uint256 tokenId) internal {
+        uint256[] memory tokens = userTokens[user];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == tokenId) {
+                userTokens[user][i] = tokens[tokens.length - 1];
+                userTokens[user].pop();
+                break;
+            }
+        }   
+    }
+
     // The following functions are overrides required by Solidity.
 
     function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
@@ -90,6 +112,25 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         override(ERC1155, ERC1155Pausable, ERC1155Supply)
     {
         super._update(from, to, ids, values);
+        if (from == address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                _addTokenToUser(to, ids[i]);
+            }
+            return;
+        }
+        if (to == address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                _removeTokenFromUser(from, ids[i]);
+            }
+            return;
+        }
+        if (from !=address(0) && to != address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                _removeTokenFromUser(from, ids[i]);
+                _addTokenToUser(to, ids[i]);
+            }
+            return;
+        }
     }
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC1155, AccessControl) returns (bool) {

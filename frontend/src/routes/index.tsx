@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI } from '../lib/contracts'
 import { formatEther } from 'viem'
 import { Button } from '../components/ui/button'
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/')({
 
 function HomePage() {
 
-  const { isConnected } = useAccount()
+  const { isConnected, address: userAddress } = useAccount()
 
   const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -39,6 +39,50 @@ function HomePage() {
       value: cartonPrice,
     })
   }
+
+  const {data: cartonsUser, refetch: refetchCartonsUser} = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'getUserTokens',
+    args: [userAddress],
+    query: {
+      enabled: !!userAddress && isConnected,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    }
+  })
+
+  // Watch for CartonPurchased events to update user's cartones in real-time
+  /* NOTE: this one is not working on anvil but shoudl be able to testing on testnet and then on mainet
+  useWatchContractEvent({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    eventName: 'CartonPurchased',
+    onLogs: (logs) => {
+      // console.log('🎫 CartonPurchased event detected:', logs)
+      const userPurchased = logs.some(log => log.args.buyer === userAddress)
+      // console.log('👤 Is for current user?', userPurchased, 'User:', userAddress)
+      if (userPurchased) {
+        console.log('🔄 Refetching user cartones...')
+        refetchCartonsUser()
+      }
+    },
+    onError: (error) => {
+      // console.error('❌ Event listener error:', error)
+    }
+  }) */
+
+  console.log('🔧 Event listener setup for:', CONTRACT_ADDRESSES.CARTON)
+
+  const getUserCartonsInfo = () => {
+    if (!cartonsUser || cartonsUser.length === 0) {
+      return { count: 0, text: "No Cartons Owned" }
+    }
+    return {
+      count: cartonsUser.length,
+      text: `${cartonsUser.length} Carton${cartonsUser.length > 1 ? 'es' : ''} Owned`
+    }
+  } 
 
   const buyButtonText = () => {
     if (!isConnected) return "Connect Wallet to Buy"
@@ -111,8 +155,8 @@ function HomePage() {
                 • Top 4 Teams Prediction
                 • Earn points for accuracy
               </div>
-              <Button className="w-full" variant="outline" disabled>
-                No Cards Owned
+              <Button className="w-full" variant="outline" disabled={getUserCartonsInfo().count === 0}>
+                {getUserCartonsInfo().text}
               </Button>
             </div>
           </CardContent>
