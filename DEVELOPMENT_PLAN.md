@@ -162,39 +162,65 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ---
 
-## 🎯 Next Session (July 26, 2025)
+## 🎯 Next Session (September 6, 2025)
 
-**Current Status**: Core smart contracts complete, frontend foundation ready
+**Current Status**: Full Web3 integration working! Contracts deployed, transactions working, toasts implemented.
 
 ### Priority Options (choose direction):
-1. **Deploy & Integration Testing**
-   - Deploy contracts to Anvil local testnet
-   - Copy ABIs to frontend (`frontend/src/lib/contracts/abis.ts`)
-   - Test wallet connection + contract reads
-   - Implement buy carton functionality
 
-2. **Frontend Development**
-   - Prediction forms (game predictions + winner predictions)
-   - Leaderboard/results display
-   - Admin panel for setting results
-   - Prize claim interface
+1. **Complete Web3 Features** 🎯 RECOMMENDED
+   - Show owned cartones (NFTs) in UI using `balanceOf`/`tokenOfOwnerByIndex`
+   - Prize pool display from Treasury contract (real data)
+   - Connection status improvements (contracts deployed vs not deployed)
+   - Error handling and edge cases
 
-3. **Smart Contract Enhancements**
-   - Emergency functions (`emergencyWithdraw`, pause/unpause)
-   - Carton-Treasury integration (auto-deposit on purchase)
-   - Gas optimizations and security review
+2. **Prediction System Implementation**
+   - Game predictions form (4 games, score inputs)
+   - Winner predictions (top 4 teams dropdowns/selects)
+   - Read/display user's current predictions
+   - Submission deadline enforcement in UI
 
-4. **MVP Completion Focus**
-   - End-to-end flow: Buy → Predict → Results → Claim
-   - Deployment scripts for testnets
-   - Basic documentation for users
+3. **Leaderboard & Results**
+   - Read real tournament data from Predictions contract
+   - Display player rankings with points
+   - Prize calculation preview
+   - Final results and prize claiming
+
+4. **Admin Features**
+   - Admin panel for setting game results
+   - Tournament management (create/end tournaments)
+   - Prize distribution configuration
 
 ### Recommended Next Steps:
-**Start with Option 1 (Deploy & Integration)** - Get the full stack working together first, then expand functionality based on what you discover.
+**Start with Option 1 (Complete Web3 Features)** - Build on the solid foundation you have. Show owned NFTs and real prize pool data to complete the core wallet experience.
+
+### Learning Focus for Next Session:
+- ERC1155 token reading (`balanceOf`, `uri`)
+- Array/mapping reading from contracts
+- Conditional UI based on contract state
+- Error boundaries and loading states
 
 ---
 
-## 🎉 Recent Session Achievements
+### September 5, 2025 - Frontend Migration + Web3 Integration
+- ✅ **Next.js → Vite Migration** completed successfully 
+  - Migrated from Next.js 15 to Vite + React + TypeScript
+  - Resolved Docker/Chakra UI conflicts with cleaner Vite setup
+  - All Web3 dependencies working: Wagmi + RainbowKit + TanStack Query
+- ✅ **TanStack Router Setup** - Full SPA with type-safe routing
+  - File-based routing: `/`, `/predictions`, `/leaderboard`
+  - Type-safe navigation with active link styling
+  - Shared layout with navigation + wallet connection
+- ✅ **Contracts Deployed to Anvil** - Real Web3 integration working
+  - Deployed Carton, Predictions, Treasury contracts to localhost:8545
+  - Generated and configured ABIs correctly in frontend
+  - Environment variables setup for contract addresses
+- ✅ **Working Web3 Features**
+  - Real ETH balance display in header (updates every 5s)
+  - Price reading from deployed contract (0.1 ETH)
+  - Buy Carton transaction working with loading states
+  - Toast notifications for transaction feedback (Sonner integration)
+- 🧠 **Learning achieved**: Migration strategies, TanStack Router concepts, Web3 hooks (useReadContract, useWriteContract, useWaitForTransactionReceipt)
 
 ### July 25, 2025 - Treasury View Functions + Frontend Foundation
 - ✅ **Treasury.sol view functions** implemented and tested (32 tests passing)
