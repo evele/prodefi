@@ -1,11 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
-import { CONTRACT_ADDRESSES, CARTON_ABI } from '../lib/contracts'
+import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI } from '../lib/contracts'
 import { formatEther } from 'viem'
 import { toast } from "sonner"
 import { Button } from '../components/ui/button'
+import { CartonListItem } from '../components/CartonListItem'
 import { TokenStatusBadge } from '../components/TokenStatusBadge'
 
 
@@ -52,6 +53,30 @@ function HomePage() {
       refetchOnWindowFocus: true,
     }
   })
+
+  // Read submission deadline and show a small countdown banner
+  const { data: deadline } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'submissionDeadline',
+    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
+  })
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const remaining = useMemo(() => (deadline ? Number(deadline) - now : undefined), [deadline, now])
+  const isExpired = remaining !== undefined && remaining <= 0
+  const formatCountdown = (secs?: number) => {
+    if (secs === undefined) return '—'
+    const s = Math.max(0, secs)
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const ss = s % 60
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${pad(h)}:${pad(m)}:${pad(ss)}`
+  }
 
   // Watch for CartonPurchased events to update user's cartones in real-time
   /* NOTE: this one is not working on anvil but shoudl be able to testing on testnet and then on mainet
@@ -151,6 +176,22 @@ function HomePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Deadline summary */}
+              <div className={`p-2 rounded border text-xs ${isExpired ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
+                {deadline ? (
+                  isExpired ? (
+                    <span>
+                      Submissions closed • {new Date(Number(deadline) * 1000).toLocaleString()}
+                    </span>
+                  ) : (
+                    <span>
+                      Deadline: {new Date(Number(deadline) * 1000).toLocaleString()} • {formatCountdown(remaining)}
+                    </span>
+                  )
+                ) : (
+                  <span>Deadline: —</span>
+                )}
+              </div>
               <div className="text-sm text-gray-600">
                 • 4 Game Predictions
                 • Top 4 Teams Prediction
@@ -168,27 +209,11 @@ function HomePage() {
                     Your Cartones ({getUserCartonsInfo().count}):
                   </div>
                   {cartonsUser?.map((tokenId) => (
-                    <div 
-                      key={tokenId}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => {
-                        navigate({
-                          to: '/predictions',
-                          search: { carton: tokenId.toString() }
-                        })
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
-                          #{tokenId.toString()}
-                        </div>
-                        <div>
-                          <div className="font-medium text-sm">Carton #{tokenId.toString()}</div>
-                          <div className="text-xs text-gray-500">Click to predict</div>
-                        </div>
-                      </div>
-                      <TokenStatusBadge/>
-                    </div>
+                    <CartonListItem
+                      key={tokenId.toString()}
+                      tokenId={tokenId}
+                      deadline={deadline ? Number(deadline) : undefined}
+                    />
                   ))}
                 </div>
               )}
