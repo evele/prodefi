@@ -1,13 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 
 export const Route = createFileRoute('/predictions')({
   component: PredictionsPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    carton: search.carton as string | undefined,
+  }),
 })
 
 function PredictionsPage() {
+  const { carton } = useSearch({ from: '/predictions' })
   return (
     <>
       <div className="mb-8">
@@ -17,6 +21,18 @@ function PredictionsPage() {
         <p className="text-gray-600 dark:text-gray-300">
           Predict game results and tournament winners to earn points
         </p>
+        {carton && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-600">
+                #{carton}
+              </div>
+              <span className="text-sm font-medium text-blue-800">
+                Selected Carton #{carton}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-2">

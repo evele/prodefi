@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI } from '../lib/contracts'
 import { formatEther } from 'viem'
-import { Button } from '../components/ui/button'
 import { toast } from "sonner"
+import { Button } from '../components/ui/button'
+import { TokenStatusBadge } from '../components/TokenStatusBadge'
 
 
 export const Route = createFileRoute('/')({
@@ -13,7 +14,7 @@ export const Route = createFileRoute('/')({
 })
 
 function HomePage() {
-
+  const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
 
   const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
@@ -155,9 +156,42 @@ function HomePage() {
                 • Top 4 Teams Prediction
                 • Earn points for accuracy
               </div>
-              <Button className="w-full" variant="outline" disabled={getUserCartonsInfo().count === 0}>
-                {getUserCartonsInfo().text}
-              </Button>
+              
+              {/* Cartones List */}
+              {getUserCartonsInfo().count === 0 ? (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  No cartones owned. Buy a carton first!
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-gray-700">
+                    Your Cartones ({getUserCartonsInfo().count}):
+                  </div>
+                  {cartonsUser?.map((tokenId) => (
+                    <div 
+                      key={tokenId}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        navigate({
+                          to: '/predictions',
+                          search: { carton: tokenId.toString() }
+                        })
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
+                          #{tokenId.toString()}
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">Carton #{tokenId.toString()}</div>
+                          <div className="text-xs text-gray-500">Click to predict</div>
+                        </div>
+                      </div>
+                      <TokenStatusBadge/>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
