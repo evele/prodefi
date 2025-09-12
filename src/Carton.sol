@@ -88,7 +88,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function getUserTokens(address user) external view returns (uint256[] memory) {
         return userTokens[user];
-    } 
+    }
 
     function _addTokenToUser(address user, uint256 tokenId) internal {
         userTokens[user].push(tokenId);
@@ -102,7 +102,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
                 userTokens[user].pop();
                 break;
             }
-        }   
+        }
     }
 
     // The following functions are overrides required by Solidity.
@@ -124,7 +124,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
             }
             return;
         }
-        if (from !=address(0) && to != address(0)) {
+        if (from != address(0) && to != address(0)) {
             for (uint256 i = 0; i < ids.length; i++) {
                 _removeTokenFromUser(from, ids[i]);
                 _addTokenToUser(to, ids[i]);

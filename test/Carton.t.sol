@@ -240,10 +240,10 @@ contract CartonTest is BaseTest {
     function testGetUserTokens() public {
         uint256[] memory emptyTokens = carton.getUserTokens(user);
         assertEq(emptyTokens.length, 0, "User should have no tokens initially");
-    
+
         vm.prank(admin);
         carton.setCartonPrice(0.1 ether);
-        
+
         vm.deal(user, 1 ether);
         vm.prank(user);
         carton.buyCarton{value: 0.1 ether}();
@@ -255,7 +255,6 @@ contract CartonTest is BaseTest {
         carton.buyCarton{value: 0.1 ether}();
         uint256[] memory twoTokens = carton.getUserTokens(user);
         assertEq(twoTokens.length, 2, "User should have two tokens");
-
     }
 
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);

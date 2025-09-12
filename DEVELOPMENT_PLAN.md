@@ -1,11 +1,11 @@
-# ProDefi Development Plan
+# Development Plan
 
 **PURPOSE**: Project planning, task organization, and development roadmap for the team.
 This file contains current status, next tasks, priorities, and session planning. For permanent technical information about the project, see CLAUDE.md.
 
-## 📋 Current Status (July 23, 2025)
+## Current Status (July 23, 2025)
 
-### ✅ Completed Features
+### Completed Features
 - **Carton.sol (ERC1155)**: Complete with purchase system
   - Auto-incrementing tokenIds (`_nextTokenId`)
   - Public `buyCarton()` function with ETH payment
@@ -38,11 +38,11 @@ This file contains current status, next tasks, priorities, and session planning.
   - Contract references to Carton and Predictions for validation
   - Efficient prize calculation with integer division (rounds down)
 
-## 🚧 Next Phase: Treasury Integration & View Functions
+## Next Phase: Treasury Integration & View Functions
 
-## 🎯 Next Tasks (Priority Order)
+## Next Tasks (Priority Order)
 
-### Phase 1: Complete Treasury View Functions ⏳
+### Phase 1: Complete Treasury View Functions
 1. **✅ `depositFromSales()`** - COMPLETED
    - Role verification with `onlyRole(FUND_DEPOSITOR_ROLE)`
    - Adds `msg.value` to prize pool mapping
@@ -98,7 +98,7 @@ This file contains current status, next tasks, priorities, and session planning.
    - Pause/unpause functionality
    - Treasury migration capabilities
 
-## 🧪 Testing Strategy
+## Testing Strategy
 
 ### Phase 1 Tests
 - [ ] `depositFromSales()` basic functionality
@@ -117,7 +117,7 @@ This file contains current status, next tasks, priorities, and session planning.
 - [ ] Prize calculation accuracy
 - [ ] Leftover accumulation
 
-## 💡 Architecture Decisions Made
+## Architecture Decisions Made
 
 ### Future Modularization (Post-MVP)
 - **Treasury.sol + TournamentManager.sol** → Could become standalone "ProDefi SDK"
@@ -140,7 +140,7 @@ This file contains current status, next tasks, priorities, and session planning.
 - `calldata` for external function parameters
 - English comments for universality
 
-## 📝 Notes for Tomorrow
+## Notes for Tomorrow
 
 ### Immediate Focus
 **Start with `depositFromSales()` implementation** - it's the simplest function and builds foundation for everything else.
@@ -162,11 +162,16 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ---
 
-## 🎯 Next Session (September 6, 2025)
+## Next Session (September 6, 2025)
 
 **Current Status**: ✅ **COMPLETED - Show owned cartones feature**
 
-### ✅ Completed Today (September 5, 2025):
+### Completed Today (September 5, 2025):
+
+## Related Documents
+
+- See CLAUDE.md for persistent project knowledge and architecture.
+- See AGENTS.md for contributor workflow, commands, and conventions.
 - **Enhanced Carton.sol**: Added `getUserTokens()` function with automatic tracking
 - **Implemented token tracking**: `_update()` override handles mint/burn/transfer events
 - **Frontend integration**: Real-time display of user's owned cartones
@@ -248,4 +253,46 @@ This file contains current status, next tasks, priorities, and session planning.
 - ✅ Fixed test warnings and maintained clean compilation
 - 🧠 **Learning achieved**: calldata vs memory, array copying, integer division, secure ETH transfers
 
-*Last updated: July 23, 2025*
+## Progress (September 9, 2025)
+
+### Completed
+- Frontend status UX: simplified TokenStatusBadge, added 'expired' state.
+- CartonListItem: on-chain status per token (used/winners) and deadline-aware 'expired'.
+
+## Progress (September 12, 2025)
+
+### Completed
+- Admin page (dev-only) at `/admin/dev` with owner actions: setTeamsHash, freezeTeamsHash, setSubmissionDeadline.
+- Dev-only navbar link to Admin guarded by `import.meta.env.DEV`.
+- Teams lookup optimization: introduced `teamsById` and `indexTeamsById()` for O(1) id→name rendering; kept `getTeamNameById()` for occasional lookups.
+
+### Notes
+- Frontend .env holds contract addresses for Anvil (VITE_CARTON_ADDRESS, VITE_PREDICTIONS_ADDRESS, VITE_TREASURY_ADDRESS).
+- Admin UI is intentionally disabled in production builds and shows a message if accessed.
+
+## Next Session (September 13, 2025)
+
+### Topic: Prediction Forms (UI + writes)
+
+Goals:
+- Wire game form state with onChange handlers (6 games fixture as placeholder).
+- Winners form: 4 team selects (unique selection, uses `teams`/`teamsById`).
+- Contract writes: `submitPrediction(uint256, Game[])` and `predictWinners(uint256, uint8[4])` via Wagmi.
+- Prefill from on-chain reads: `getPrediction(tokenId)` and `getWinnersPrediction(tokenId)`.
+- Disable/guard: respect `submissionDeadline` and `used(tokenId)`; prevent edits when expired/used.
+- UX: toasts for pending/success/error; loading/disabled states on buttons.
+
+Done criteria:
+- Submitting both forms updates on-chain state and reflects in UI after refetch.
+- Prevent duplicate submissions when `used(tokenId)` is true or after deadline.
+- Inputs validated (scores uint8, winners unique, ids uint8) and typed correctly for ABI.
+- Deadline UI: banner + live countdown in /predictions; inputs/buttons disabled when expired; summary on Home.
+- DX: added script/dev-cast.sh and documented usage in README.
+
+### Next Focus
+- Implement on-chain submission from UI:
+  - Wire submitPrediction(tokenId, Game[]) and predictWinners(tokenId, uint8[4]).
+  - Form state + validation (ids, duplicates, deadline).
+  - UX: loading states, toasts, refetch reads on success.
+
+*Last updated: September 9, 2025*

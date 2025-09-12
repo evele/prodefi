@@ -4,6 +4,12 @@
 
 echo "🚀 Deploying contracts to Anvil..."
 
+# Optional TEAMS_HASH (used by Predictions constructor). Example usage:
+#   export TEAMS_HASH=0x... && ./deploy.sh
+if [ -n "$TEAMS_HASH" ]; then
+  echo "🔗 Using TEAMS_HASH: $TEAMS_HASH"
+fi
+
 # Ejecutar el deploy script y capturar la salida
 DEPLOY_OUTPUT=$(forge script script/Deploy.s.sol --fork-url http://localhost:8545 --broadcast 2>&1)
 
@@ -41,3 +47,17 @@ echo "📋 Updated addresses:"
 echo "  Carton:      $CARTON_ADDRESS"
 echo "  Predictions: $PREDICTIONS_ADDRESS"
 echo "  Treasury:    $TREASURY_ADDRESS"
+
+echo ""
+echo "🧩 Exporting fresh ABIs to frontend..."
+# Export ABIs as per CLAUDE.md
+forge inspect Carton abi --format-json > frontend/src/lib/contracts/carton-abi.json
+forge inspect Predictions abi --format-json > frontend/src/lib/contracts/predictions-abi.json
+forge inspect Treasury abi --format-json > frontend/src/lib/contracts/treasury-abi.json
+
+if [ $? -eq 0 ]; then
+  echo "✅ ABIs exported successfully."
+else
+  echo "❌ Error exporting ABIs. Ensure 'forge' is available and contracts build successfully."
+  exit 1
+fi

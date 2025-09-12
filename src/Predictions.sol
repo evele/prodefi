@@ -7,6 +7,12 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
     IERC1155 public cartones;
+    // Anchor for off-chain teams metadata (id -> name mapping)
+    bytes32 public teamsHash;
+    bool public teamsHashFrozen;
+
+    event TeamsHashUpdated(bytes32 oldHash, bytes32 newHash);
+    event TeamsHashFrozen();
 
     uint8 immutable TOTAL_GAMES = 4;
     uint8 immutable LOCAL = 0;
@@ -95,6 +101,19 @@ contract Predictions is Ownable {
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
         cartones = IERC1155(_cartones);
+    }
+
+    // Allow owner to set teams metadata hash; can be frozen
+    function setTeamsHash(bytes32 h) external onlyOwner {
+        require(!teamsHashFrozen, "teamsHash frozen");
+        emit TeamsHashUpdated(teamsHash, h);
+        teamsHash = h;
+    }
+
+    function freezeTeamsHash() external onlyOwner {
+        require(!teamsHashFrozen, "already frozen");
+        teamsHashFrozen = true;
+        emit TeamsHashFrozen();
     }
 
     // Function to set the time limit for predictions

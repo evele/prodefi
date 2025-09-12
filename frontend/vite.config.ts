@@ -3,9 +3,12 @@ import react from '@vitejs/plugin-react'
 import { TanStackRouterVite } from '@tanstack/router-vite-plugin'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    TanStackRouterVite(),
+    TanStackRouterVite({
+      // Exclude dev-only routes from production builds
+      routeFileMask: mode === 'development' ? '**/*.tsx' : '**/!(*.dev).tsx',
+    }),
   ],
-})
+}))
