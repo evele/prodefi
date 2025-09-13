@@ -56,6 +56,26 @@ function AdminPage() {
     query: { refetchInterval: 10_000 },
   })
 
+  // totalGames config
+  const { data: onchainTotalGames } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'totalGames',
+    query: { refetchInterval: 10_000 },
+  })
+  const { data: predictionsStarted } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'predictionsStarted',
+    query: { refetchInterval: 10_000 },
+  })
+  const [totalGamesLocal, setTotalGamesLocal] = useState<string>('')
+  useEffect(() => {
+    if (onchainTotalGames !== undefined) {
+      setTotalGamesLocal(String(onchainTotalGames))
+    }
+  }, [onchainTotalGames])
+
   const [teamsHash, setTeamsHashLocal] = useState<string>('')
   useEffect(() => {
     if (onchainTeamsHash && (onchainTeamsHash as string) !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
@@ -113,6 +133,19 @@ function AdminPage() {
     writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'setSubmissionDeadline', args: [BigInt(ts)] })
   }
 
+  const setTotalGames = () => {
+    const n = Number(totalGamesLocal)
+    if (!Number.isInteger(n) || n <= 0 || n > 255) {
+      toast.error('Enter a valid integer between 1 and 255')
+      return
+    }
+    if (predictionsStarted) {
+      toast.error('Predictions already started; cannot change total games')
+      return
+    }
+    writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'setTotalGames', args: [n] })
+  }
+
   return (
     <div className="grid gap-8 lg:grid-cols-2">
       <Card>
@@ -149,10 +182,21 @@ function AdminPage() {
                 </Button>
               </div>
             </div>
+
+            <div>
+              <div className="mb-2 font-medium">Total Games</div>
+              <div className="text-xs text-gray-600 mb-1">On-chain: {onchainTotalGames !== undefined ? String(onchainTotalGames) : '—'} • Started: {String(Boolean(predictionsStarted))}</div>
+              <div className="flex gap-2 items-center">
+                <Input type="number" min={1} max={255} value={totalGamesLocal} onChange={(e) => setTotalGamesLocal(e.target.value)} />
+                <Button onClick={setTotalGames} disabled={!isOwner || Boolean(predictionsStarted) || isPending || isMining}>
+                  {isPending || isMining ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+              <div className="text-xs text-gray-600 mt-1">Must be set before first submission. Typically derived from teams count.</div>
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

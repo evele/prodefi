@@ -14,7 +14,8 @@ contract Predictions is Ownable {
     event TeamsHashUpdated(bytes32 oldHash, bytes32 newHash);
     event TeamsHashFrozen();
 
-    uint8 immutable TOTAL_GAMES = 4;
+    // Number of games required in a prediction (configurable by owner before submissions start)
+    uint8 public totalGames = 4;
     uint8 immutable LOCAL = 0;
     uint8 immutable EMPATE = 1;
     uint8 immutable VISITANTE = 2;
@@ -52,6 +53,7 @@ contract Predictions is Ownable {
 
     event PredictionsSubmitted(address indexed user, uint256 indexed tokenId);
     event ResultsSet(uint8 indexed gameId, uint8 team1Goals, uint8 team2Goals);
+    event TotalGamesUpdated(uint8 oldValue, uint8 newValue);
 
     /* NOTE: check if should use this or not
     modifier onlyBeforeResults(uint8 gameId) {
@@ -121,6 +123,16 @@ contract Predictions is Ownable {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         submissionDeadline = _deadline;
     }
+    // Guard to prevent changing game count after any prediction was submitted
+    bool public predictionsStarted;
+    /// @notice Configure the number of games required per prediction
+    /// @dev Can only be set before any prediction is submitted to avoid inconsistencies
+    function setTotalGames(uint8 _totalGames) external onlyOwner {
+        require(!predictionsStarted, "Predictions already started");
+        require(_totalGames > 0, "totalGames must be > 0");
+        emit TotalGamesUpdated(totalGames, _totalGames);
+        totalGames = _totalGames;
+    }
 
     // Function for owner to set positions
     function setPositions(uint256[] memory _predictionIds, uint256[] memory _predictionPoints)
@@ -158,17 +170,18 @@ contract Predictions is Ownable {
     function submitPrediction(uint256 tokenId, Game[] calldata _prediction) external onlyCartonOwner(tokenId) {
         require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!used[tokenId], "Prediction already submitted");
-        require(_prediction.length == TOTAL_GAMES, "Must submit predictions for all games");
+        require(_prediction.length == totalGames, "Must submit predictions for all games");
 
         // Verify that team IDs are valid
         for (uint256 i = 0; i < _prediction.length; i++) {
             require(_prediction[i].team1 < MAX_TEAM_ID, "Invalid team1 ID");
             require(_prediction[i].team2 < MAX_TEAM_ID, "Invalid team2 ID");
-            require(_prediction[i].id < TOTAL_GAMES, "Invalid game ID");
+            require(_prediction[i].id < totalGames, "Invalid game ID");
             require(!games[_prediction[i].id].set, "Cannot predict after results are set");
         }
 
         used[tokenId] = true;
+        if (!predictionsStarted) predictionsStarted = true;
 
         // Copiar cada predicción manualmente
         for (uint256 i = 0; i < _prediction.length; i++) {
@@ -187,7 +200,7 @@ contract Predictions is Ownable {
     }
 
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
-        require(gameId < TOTAL_GAMES, "Invalid game ID");
+        require(gameId < totalGames, "Invalid game ID");
         require(!games[gameId].set, "Results already set for this game");
 
         games[gameId].result = [team1Goals, team2Goals];
@@ -201,7 +214,7 @@ contract Predictions is Ownable {
     }
 
     function getGameResults(uint8 gameId) external view returns (uint8[2] memory) {
-        require(gameId < TOTAL_GAMES, "Invalid game ID");
+        require(gameId < totalGames, "Invalid game ID");
         return games[gameId].result;
     }
 
@@ -325,7 +338,7 @@ contract Predictions is Ownable {
         uint256 winnerPoints = 0;
 
         // Calcular puntos de los partidos
-        for (uint8 i = 0; i < TOTAL_GAMES; i++) {
+        for (uint8 i = 0; i < totalGames; i++) {
             gamePoints += calculatePoints(tokenId, i);
         }
 

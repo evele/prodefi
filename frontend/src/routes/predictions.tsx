@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { useReadContract } from 'wagmi'
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { teams, computeTeamsHash } from '../lib/teams'
 import type { Game } from '../lib/types'
@@ -17,6 +18,7 @@ export const Route = createFileRoute('/predictions')({
 })
 
 function PredictionsPage() {
+
   const { carton } = useSearch({ from: '/predictions' })
   // Normalize tokenId once as bigint for on-chain reads
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
@@ -32,16 +34,17 @@ function PredictionsPage() {
     { id: 6, team1: TEAMS[1], team2: TEAMS[2],result: [0,0], set: false }, 
   ])
 
-  const buildFixture = () => {
+  // TODO: fix rerenders
+  const buildFixture = useMemo(() => {
     const gamesAmount = games.length
     const matchdays = Math.floor(gamesAmount / 2)
-    console.log(matchdays)
+    console.log("BF", matchdays)
     const fixture = new Map<number, Game[]>()
     games.map((game) => {
       fixture.set(Math.floor(game.id / matchdays)+1, [...fixture.get(Math.floor(game.id / matchdays)+1) || [], game])
     })
     return fixture
-  }
+  }, [games])
     
  
 
@@ -81,6 +84,58 @@ function PredictionsPage() {
         }
         return 'none'
     }
+  
+  const updateGameScore = (gameId: number, team: 0 | 1, score: number) => {
+    setGames((prevGames) => {
+      const updatedGames = [...prevGames]
+      const gameIndex = updatedGames.findIndex((game) => game.id === gameId)
+      if (gameIndex !== -1) {
+        updatedGames[gameIndex].result[team] = score
+      }
+      return updatedGames
+    })
+  }
+
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  })
+
+  const submitPrediction = async() => {
+    if (!tokenId) return
+    console.log("g",games)
+    try {
+      writeContract({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'submitPrediction',
+        args: [tokenId, games],
+      })
+      toast.loading('Transaction pending...', { id: 'submit-prediction' })
+    } catch (error) {
+      console.error('Error submiting prediction', error)
+      // Agregá esto para ver el error específico:
+      if (error && typeof error === 'object' && 'message' in error) {
+        toast.error(`Failed: ${error.message}`)
+      } else {
+        toast.error('Failed to submit prediction')
+      }
+    } 
+  }
+
+  // Toast notifications based on transaction status
+  useEffect(() => {
+    if (isSuccess) {
+      toast.success('Predictions submitted successfully!', { id: 'submit-prediction' })
+    }
+  }, [isSuccess])
+
+  useEffect(() => {
+    if (error) {
+      toast.error('Transaction failed', { id: 'submit-prediction' })
+    }
+  }, [error])
 
 
   // Read submission deadline and keep a live countdown
@@ -132,6 +187,16 @@ function PredictionsPage() {
     const pad = (n: number) => n.toString().padStart(2, '0')
     return `${pad(h)}:${pad(m)}:${pad(ss)}`
   }
+
+  /*
+  console.log('RENDER TRIGGERED', {
+    cartonGroupsState,
+    cartonWinnersState,
+    deadline,
+    now,
+    games: games.length
+  }) */
+
 
   return (
     <>
@@ -207,15 +272,19 @@ function PredictionsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[...buildFixture().values()].map((matchday) => (
+              {[...buildFixture.values()].map((matchday) => (
                 matchday.map((game, index) => (
-                  <GameCard key={index} game={game} isUsed={cartonGroupsState} isExpired={isExpired} />
+                  <GameCard key={index} game={game} isUsed={!!cartonGroupsState} isExpired={isExpired} onScoreChange={updateGameScore} />
                 )))
               )}
 
               {/* Más juegos... */}
-              <Button className="w-full" disabled={isExpired}>
-                Submit Game Predictions
+              <Button 
+                className="w-full" 
+                disabled={isExpired || isPending || isConfirming}
+                onClick={submitPrediction}
+              >
+                {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : 'Submit Game Predictions'}
               </Button>
             </div>
           </CardContent>
