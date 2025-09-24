@@ -3,10 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
+import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
-import { teams, computeTeamsHash } from '../lib/teams'
+import { teams, computeTeamsHash, teamsById } from '../lib/teams'
 import type { Game } from '../lib/types'
 import { GameCard } from '../components/GameCard'
 
@@ -33,6 +35,21 @@ function PredictionsPage() {
     { id: 5, team1: TEAMS[0], team2: TEAMS[3],result: [0,0], set: false },
     { id: 6, team1: TEAMS[1], team2: TEAMS[2],result: [0,0], set: false }, 
   ])
+
+  const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0,0,0,0])
+
+  const updateWinnerPrediction = (position: 1|2|3|4, teamId: number) => {
+    setWinnerPrediction((prev) => {
+      const updated = [...prev]
+      updated[position-1] = teamId
+      return updated
+    })
+  }
+
+  const hasValidWinners = useMemo(()=>{
+    const nonZero = winnerPrediction.filter((teamId) => teamId !== 0)
+    return new Set(nonZero).size === winnerPrediction.length && nonZero.length === 4
+  }, [winnerPrediction])
 
   // TODO: fix rerenders
   const buildFixture = useMemo(() => {
@@ -104,7 +121,10 @@ function PredictionsPage() {
 
   const submitPrediction = async() => {
     if (!tokenId) return
-    console.log("g",games)
+    console.log("Games to submit:", games)
+    console.log("Token ID:", tokenId)
+    console.log("Games length:", games.length)
+
     try {
       writeContract({
         address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -114,14 +134,17 @@ function PredictionsPage() {
       })
       toast.loading('Transaction pending...', { id: 'submit-prediction' })
     } catch (error) {
-      console.error('Error submiting prediction', error)
-      // Agregá esto para ver el error específico:
+      console.error('Error submiting prediction:', error)
+
+      // Log completo del error
+      console.log('Full error object:', JSON.stringify(error, null, 2))
+
       if (error && typeof error === 'object' && 'message' in error) {
         toast.error(`Failed: ${error.message}`)
       } else {
         toast.error('Failed to submit prediction')
       }
-    } 
+    }
   }
 
   // Toast notifications based on transaction status
@@ -133,7 +156,9 @@ function PredictionsPage() {
 
   useEffect(() => {
     if (error) {
-      toast.error('Transaction failed', { id: 'submit-prediction' })
+      console.error('Wagmi error:', error)
+      console.log('Wagmi error details:', JSON.stringify(error, null, 2))
+      toast.error(`Transaction failed: ${error.message || 'Unknown error'}`, { id: 'submit-prediction' })
     }
   }, [error])
 
@@ -302,23 +327,10 @@ function PredictionsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">1st Place</label>
-                <Input placeholder="Select team..." disabled={isExpired} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">2nd Place</label>
-                <Input placeholder="Select team..." disabled={isExpired} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">3rd Place</label>
-                <Input placeholder="Select team..." disabled={isExpired} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">4th Place</label>
-                <Input placeholder="Select team..." disabled={isExpired} />
-              </div>
-              
+              <TeamWinnerSelector label="1st Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={1} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
+              <TeamWinnerSelector label="2nd Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={2} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
+              <TeamWinnerSelector label="3rd Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={3} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
+              <TeamWinnerSelector label="4th Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={4} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
               <Button className="w-full" disabled={isExpired}>
                 Submit Winner Predictions
               </Button>

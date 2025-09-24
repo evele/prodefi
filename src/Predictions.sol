@@ -176,7 +176,7 @@ contract Predictions is Ownable {
         for (uint256 i = 0; i < _prediction.length; i++) {
             require(_prediction[i].team1 < MAX_TEAM_ID, "Invalid team1 ID");
             require(_prediction[i].team2 < MAX_TEAM_ID, "Invalid team2 ID");
-            require(_prediction[i].id < totalGames, "Invalid game ID");
+            require(_prediction[i].id <= totalGames, "Invalid game ID");
             require(!games[_prediction[i].id].set, "Cannot predict after results are set");
         }
 
@@ -200,7 +200,7 @@ contract Predictions is Ownable {
     }
 
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
-        require(gameId < totalGames, "Invalid game ID");
+        require(gameId <= totalGames, "Invalid game ID");
         require(!games[gameId].set, "Results already set for this game");
 
         games[gameId].result = [team1Goals, team2Goals];
@@ -214,7 +214,7 @@ contract Predictions is Ownable {
     }
 
     function getGameResults(uint8 gameId) external view returns (uint8[2] memory) {
-        require(gameId < totalGames, "Invalid game ID");
+        require(gameId <= totalGames, "Invalid game ID");
         return games[gameId].result;
     }
 
