@@ -2,13 +2,16 @@
 pragma solidity ^0.8.27;
 
 import "./BaseTest.sol";
+import "./mocks/MockERC20.sol";
 
 contract CartonTest is BaseTest {
     address user = address(0xBEEF);
 
+    MockERC20 USDC;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup specific to Carton tests if needed
+        USDC = new MockERC20("USDC", "USDC", 6);
     }
 
     function testMintBatchAndSupply() public {
@@ -161,6 +164,35 @@ contract CartonTest is BaseTest {
         assertEq(address(carton).balance, 0.1 ether, "Contract should have received payment");
     }
 
+    function testBuyCartonWithToken() public {
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(address(USDC), 1000000);
+        vm.stopPrank();
+
+        USDC.mint(user, 1000000);
+        uint256 treasuryBalanceBefore = USDC.balanceOf(address(carton)); // NOTE: carton for now
+        vm.startPrank(user);
+        USDC.approve(address(carton), 1000000);
+        carton.buyCartonWithToken(address(USDC));
+        vm.stopPrank();
+
+        assertEq(carton.balanceOf(user, 1), 1);
+        assertEq(USDC.balanceOf(address(carton)), treasuryBalanceBefore + 1000000);
+        // TODO: add assert about amount deposited on treasury
+    }
+
+    function test_BuyCartonWithUSDT_RevertNotAccepted() public {
+        MockERC20 USDT = new MockERC20("Tether", "USDT", 6);
+        USDT.mint(user1, 1_000_000);
+        vm.prank(user1);
+        USDT.approve(address(carton), 1_000_000);
+
+        vm.prank(user1);
+        vm.expectRevert("Token not accepted");
+        carton.buyCartonWithToken(address(USDT));
+    }
+
     function testBuyCartonWithExcess() public {
         vm.prank(admin);
         carton.setCartonPrice(0.1 ether);
@@ -199,10 +231,24 @@ contract CartonTest is BaseTest {
         assertEq(carton.cartonPrice(), 0.1 ether, "Price should be set");
     }
 
+    function testSetCartonTokenPrice() public {
+        vm.prank(admin);
+        uint256 price = 1000000;
+        carton.setTokenPrice(address(USDC), price);
+        assertEq(carton.tokenPrices(address(USDC)), price);
+    }
+
     function testOnlyAdminCanSetPrice() public {
         vm.prank(user);
         vm.expectRevert();
         carton.setCartonPrice(0.1 ether);
+    }
+
+    function testOnlyAdmingCanSetCartonTokenPrice() public {
+        vm.prank(user);
+        vm.expectRevert();
+        uint256 price = 1000000;
+        carton.setTokenPrice(address(USDC), price);
     }
 
     function testWithdraw() public {

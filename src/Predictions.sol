@@ -124,9 +124,11 @@ contract Predictions is Ownable {
         submissionDeadline = _deadline;
     }
     // Guard to prevent changing game count after any prediction was submitted
+
     bool public predictionsStarted;
     /// @notice Configure the number of games required per prediction
     /// @dev Can only be set before any prediction is submitted to avoid inconsistencies
+
     function setTotalGames(uint8 _totalGames) external onlyOwner {
         require(!predictionsStarted, "Predictions already started");
         require(_totalGames > 0, "totalGames must be > 0");

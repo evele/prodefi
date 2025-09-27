@@ -7,6 +7,7 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ERC1155Burnable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
 import {ERC1155Pausable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
 import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @custom:security-contact inux2012@gmail.com
 contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC1155Supply {
@@ -17,9 +18,15 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     uint256 public cartonPrice;
     uint256 private _nextTokenId = 1;
 
+    mapping(address => bool) public acceptedTokens;
+    mapping(address => uint256) public tokenPrices;
+
     mapping(address => uint256[]) private userTokens;
 
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+    event CartonPurchasedWithToken(
+        address indexed buyer, uint256 indexed tokenId, address indexed token, uint256 price
+    );
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
 
     constructor(address defaultAdmin, address pauser, address minter) ERC1155("") {
@@ -74,6 +81,26 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         }
     }
 
+    function buyCartonWithToken(address token) external whenNotPaused {
+        require(acceptedTokens[token], "Token not accepted");
+        require(tokenPrices[token] > 0, "Token price not set");
+        uint256 amount = tokenPrices[token];
+        require(IERC20(token).transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        uint256 tokenId = _nextTokenId++;
+        _mint(msg.sender, tokenId, 1, "");
+
+        emit CartonPurchasedWithToken(msg.sender, tokenId, token, amount);
+    }
+
+    function setAcceptedToken(address token, bool accepted) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        acceptedTokens[token] = accepted;
+    }
+
+    function setTokenPrice(address token, uint256 price) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(price > 0, "Price must be greater than 0");
+        tokenPrices[token] = price;
+    }
+
     function setCartonPrice(uint256 newPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 oldPrice = cartonPrice;
         cartonPrice = newPrice;
@@ -84,6 +111,12 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         uint256 balance = address(this).balance;
         require(balance > 0, "No funds to withdraw");
         payable(msg.sender).transfer(balance);
+    }
+
+    function withdrawToken(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        require(balance > 0, "No tokens to withdraw");
+        require(IERC20(token).transfer(msg.sender, balance), "Withdraw failed");
     }
 
     function getUserTokens(address user) external view returns (uint256[] memory) {

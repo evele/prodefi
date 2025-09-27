@@ -28,44 +28,28 @@ This file contains current status, next tasks, priorities, and session planning.
   - All core functionality covered
 
 - **Treasury.sol**: ✅ CORE FUNCTIONS COMPLETE
-  - Prize pool management with ETH (future USDC support planned)
+  - Multi-asset prize pool management (ETH + ERC20)
   - Role-based access control (FUND_DEPOSITOR_ROLE, TOURNAMENT_MANAGER_ROLE)
   - Integration with Carton and Predictions contracts
   - **Implemented Functions**:
     - `depositFromSales()`: Receives ETH from sales, updates prize pools
+    - `depositFromSalesERC20()`: Receives ERC20 from sales, updates prize pools
     - `setPrizeDistribution()`: Admin sets percentage distribution (90-100% total)
     - `claimPrize()`: Users claim prizes based on tokenId positions
   - Contract references to Carton and Predictions for validation
   - Efficient prize calculation with integer division (rounds down)
 
-## Next Phase: Treasury Integration & View Functions
+## Next Phase: Treasury Follow-ups
 
 ## Next Tasks (Priority Order)
 
-### Phase 1: Complete Treasury View Functions
-1. **✅ `depositFromSales()`** - COMPLETED
-   - Role verification with `onlyRole(FUND_DEPOSITOR_ROLE)`
-   - Adds `msg.value` to prize pool mapping
-   - Emits `DepositFromSale` event
-
-2. **✅ `setPrizeDistribution()`** - COMPLETED
-   - Admin only with `onlyRole(DEFAULT_ADMIN_ROLE)`
-   - Validates percentages sum between 90-100% (reserves for charity/dev)
-   - Copies calldata array to storage with proper loop
-   - Emits `SetPrizeDistribution` event
-
-3. **✅ `claimPrize()`** - COMPLETED
-   - Verifies token ownership via Carton contract
-   - Prevents double claiming with mapping
-   - Gets position from Predictions contract (O(1) lookup)
-   - Calculates prize with integer division
-   - Transfers ETH with secure `call{value}` pattern
-   - Marks as claimed and emits event
-
-4. **Create view functions** - NEXT PRIORITY
-   - `getPrizePool(tournamentId)`
-   - `getUserPrizeAmount(tournamentId, position)`
-   - `hasUserClaimed(tournamentId, tokenId)`
+### Treasury Follow-ups (Priority)
+1. Add `ReentrancyGuard` to `claimPrize` (defense-in-depth).
+2. Add `finalizeTournament(tournamentId, token)` with pool snapshot; freeze deposits and distribution post-finalize.
+3. ERC20 allowlist per tournament and a real supported-assets registry; implement `getSupportedAssets` using it.
+4. Telemetry: `totalClaimed[tournamentId][token]` and optionally a `remainingPool` view.
+5. Clarify or remove `TOURNAMENT_MANAGER_ROLE`; define who can set distribution/finalize.
+6. Optional admin flow: withdraw remainder (0–10%) to a designated address after finalize.
 
 ### Phase 2: Integrate Treasury with Carton Sales
 4. **Modify Carton.sol**
@@ -74,18 +58,7 @@ This file contains current status, next tasks, priorities, and session planning.
    - Add `setTreasuryAddress()` admin function
    - Grant `FUND_DEPOSITOR_ROLE` to Carton contract
 
-### Phase 3: Prize Claiming System
-5. **Implement `claimPrize()`**
-   - Verify token ownership
-   - Get position from Predictions contract
-   - Calculate prize amount
-   - Transfer ETH
-   - Mark as claimed
-
-6. **Integrate with Predictions.sol**
-   - Add Treasury address reference
-   - Grant `TOURNAMENT_MANAGER_ROLE` to Predictions
-   - Link tournament completion with Treasury
+### Phase 3: (removed — already implemented)
 
 ### Phase 4: Advanced Prize Distribution
 7. **Create PrizeDistribution.sol**
@@ -100,22 +73,13 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ## Testing Strategy
 
-### Phase 1 Tests
-- [ ] `depositFromSales()` basic functionality
-- [ ] Role-based access control
-- [ ] Prize pool accumulation
-- [ ] Event emission
-
-### Phase 2 Tests
-- [ ] Integration test: Carton purchase → Treasury deposit
-- [ ] Percentage calculation accuracy
-- [ ] Multiple tournament isolation
-
-### Phase 3 Tests
-- [ ] End-to-end flow: Purchase → Predict → Claim
-- [ ] Double-claim prevention
-- [ ] Prize calculation accuracy
-- [ ] Leftover accumulation
+### Treasury Follow-ups Tests
+- [ ] Reentrancy guard: `claimPrize` cannot be reentered.
+- [ ] Finalize snapshot: claims use snapped pool; deposits/distribution changes blocked after finalize.
+- [ ] ERC20 allowlist: allowed tokens accepted, non-allowed rejected; claims work per-asset.
+- [ ] Supported assets view reflects registry accurately per tournament.
+- [ ] Telemetry: `totalClaimed` and `remainingPool` (if added) report expected values across multiple claims.
+- [ ] Remainder withdrawal only possible after finalize and respects cap (0–10%).
 
 ## Architecture Decisions Made
 
@@ -139,6 +103,40 @@ This file contains current status, next tasks, priorities, and session planning.
 - Auto-incrementing tokenIds for consistency
 - `calldata` for external function parameters
 - English comments for universality
+
+## Treasury Diagnostic (Current)
+
+- Scope and intent
+  - Treasury holds ETH/ERC20 prize pools per `tournamentId`, pays claims by token position from `Predictions`, and tracks `claimed` per `(tournamentId, tokenId, asset)`.
+
+- Security and correctness
+  - Reentrancy: `claimPrize` does checks-effects-interactions correctly (sets `claimed` before transfer). Still recommended to add `ReentrancyGuard` for defense-in-depth.
+  - Position bounds: guarded; uses distribution length to validate `position`.
+  - Access control: `FUND_DEPOSITOR_ROLE` on deposits; `DEFAULT_ADMIN_ROLE` on distribution. `TOURNAMENT_MANAGER_ROLE` is defined but currently unused.
+
+- Accounting and lifecycle
+  - `prizePools` is not decremented on claims; it is a cumulative base for calculating claim amounts at claim time. Consequence: if deposits continue after some users claimed, later claimants receive more. Mitigations: snapshot pool at finalize-time or freeze deposits before claims.
+  - Add `totalClaimed[tournamentId][token]` for telemetry and to expose distributed vs. remaining (if we adopt decrementing semantics for a separate `remainingPool`).
+  - No explicit tournament state. Consider a `finalizeTournament(tournamentId, token)` that snapshots pool, freezes distribution and deposits, and gates claims against the snapshot.
+
+- Features and extensibility
+  - Assets: ETH + ERC20 supported. Missing: allowlist/registry per tournament for accepted ERC20s and a real `getSupportedAssets` registry.
+  - Emergency controls: no `pause/unpause` or `emergencyWithdraw`; optional to add for ops safety.
+  - Events: existing `DepositFromSale`, `ClaimPrize`, `SetPrizeDistribution`. Consider emitting `prize_amount` (already included in event) and tracking totals via `totalClaimed`.
+  - Roles: define intended semantics for `TOURNAMENT_MANAGER_ROLE` or remove if unnecessary.
+  - Cross-contract semantics: `Predictions` is global (not per tournament). If we plan parallel tournaments with distinct rankings, we need per-tournament positions or multiple `Predictions` instances.
+
+- Tests and coverage (current state OK)
+  - Tests cover ETH deposits/claims, distributions, invalid positions, roles, multi-tournament isolation, rounding, and view functions. ERC20 path present in contract; add tests when we wire an accepted token and allowlist.
+  - Missing if adopting follow-ups: tests for pause/emergency, ERC20 allowlist + supported assets registry, distribution freeze, tournament finalization snapshot, and remainder withdrawal.
+
+- Recommended next steps (non-breaking, prioritized)
+  1) Add `ReentrancyGuard` to `claimPrize` (defense-in-depth).
+  2) Define and implement tournament finalization + pool snapshot; freeze distribution/ deposits post-finalize.
+  3) Introduce ERC20 allowlist per tournament and a real `getSupportedAssets` registry; add tests for ERC20 deposit/claim.
+  4) Expose telemetry: `totalClaimed` and optionally `remainingPool` if we separate accounting views.
+  5) Clarify or remove `TOURNAMENT_MANAGER_ROLE`; decide who can set distributions/finalize.
+  6) Optional admin flow: withdraw remainder (0–10%) to a designated address after finalize.
 
 ## Notes for Tomorrow
 

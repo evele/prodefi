@@ -56,7 +56,7 @@ contract DeployScript is Script {
         distribution[3] = 5; // 4th place
 
         uint256 tournamentId = 1; // Primer torneo
-        treasury.setPrizeDistribution(tournamentId, distribution);
+        treasury.setPrizeDistribution(tournamentId, address(0), distribution); // address(0) = ETH
         console.log("Prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
 
         vm.stopBroadcast();
