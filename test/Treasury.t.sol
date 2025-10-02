@@ -3,12 +3,14 @@ pragma solidity ^0.8.27;
 
 import "./BaseTest.sol";
 import "../src/Treasury.sol";
+import "./mocks/MockERC20.sol";
 
 /// @title Treasury Contract Test Suite
 /// @notice Comprehensive tests for Treasury prize pool management
 contract TreasuryTest is BaseTest {
     // ========== ADDITIONAL CONTRACTS ==========
     Treasury public treasury;
+    MockERC20 public USDC;
 
     // ========== ADDITIONAL ADDRESSES ==========
     address public fundDepositor = address(0x5);
@@ -42,6 +44,7 @@ contract TreasuryTest is BaseTest {
 
     function _deployTreasury() internal {
         treasury = new Treasury(admin, address(carton), address(predictions));
+        USDC = new MockERC20("USDC", "USDC", 6);
     }
 
     function _setupTreasuryRoles() internal {
@@ -58,6 +61,13 @@ contract TreasuryTest is BaseTest {
         vm.deal(user2, 1 ether);
         vm.deal(user3, 1 ether);
         vm.deal(user4, 1 ether);
+
+        // Give USDC to test addresses (1M USDC each, 6 decimals)
+        USDC.mint(fundDepositor, 10_000_000 * 10 ** 6);
+        USDC.mint(user1, 1_000_000 * 10 ** 6);
+        USDC.mint(user2, 1_000_000 * 10 ** 6);
+        USDC.mint(user3, 1_000_000 * 10 ** 6);
+        USDC.mint(user4, 1_000_000 * 10 ** 6);
     }
 
     // ========== TREASURY HELPERS ==========
@@ -649,5 +659,194 @@ contract TreasuryTest is BaseTest {
 
         // Verify balances
         assertEq(user1.balance, 1 ether + firstPlacePrize);
+    }
+
+    // ========== ERC20 TESTS ==========
+
+    function test_DepositFromSalesERC20_Success() public {
+        _logTestInfo("DepositFromSalesERC20 Success");
+
+        uint256 depositAmount = 1000 * 10 ** 6; // 1000 USDC
+        uint256 initialBalance = treasury.prizePools(TOURNAMENT_ID_1, address(USDC));
+
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+
+        vm.expectEmit(true, true, false, true);
+        emit Treasury.DepositFromSale(TOURNAMENT_ID_1, address(USDC), depositAmount);
+
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        assertEq(treasury.prizePools(TOURNAMENT_ID_1, address(USDC)), initialBalance + depositAmount);
+        assertEq(USDC.balanceOf(address(treasury)), depositAmount);
+    }
+
+    function test_DepositFromSalesERC20_RevertZeroAddress() public {
+        _logTestInfo("DepositFromSalesERC20 Revert Zero Address");
+
+        vm.expectRevert("Use depositFromSales for ETH");
+
+        vm.prank(fundDepositor);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(0), 1000);
+    }
+
+    function test_DepositFromSalesERC20_RevertZeroAmount() public {
+        _logTestInfo("DepositFromSalesERC20 Revert Zero Amount");
+
+        vm.expectRevert("Amount must be greater than 0");
+
+        vm.prank(fundDepositor);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), 0);
+    }
+
+    function test_DepositFromSalesERC20_OnlyFundDepositorRole() public {
+        _logTestInfo("DepositFromSalesERC20 Role Access Control");
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        USDC.mint(unauthorized, depositAmount);
+
+        vm.startPrank(unauthorized);
+        USDC.approve(address(treasury), depositAmount);
+
+        bytes32 role = treasury.FUND_DEPOSITOR_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), unauthorized, role
+            )
+        );
+
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+    }
+
+    function test_ClaimPrize_ERC20_Success() public {
+        _logTestInfo("ClaimPrize ERC20 Success");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        // Deposit USDC and set distribution
+        uint256 depositAmount = 1000 * 10 ** 6; // 1000 USDC
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
+
+        uint256 expectedPrize = (depositAmount * 50) / 100; // 1st place gets 50%
+        uint256 initialBalance = USDC.balanceOf(user1);
+
+        vm.expectEmit(true, true, true, true);
+        emit Treasury.ClaimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, user1, address(USDC), 1, expectedPrize);
+
+        vm.prank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
+
+        assertEq(USDC.balanceOf(user1), initialBalance + expectedPrize);
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC)));
+    }
+
+    function test_ClaimPrize_ERC20_AlreadyClaimed() public {
+        _logTestInfo("ClaimPrize ERC20 Already Claimed");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
+
+        // First claim
+        vm.prank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
+
+        // Second claim should fail
+        _expectRevertWithMessage("Already claimed");
+
+        vm.prank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
+    }
+
+    function test_MultiAsset_SameTournament() public {
+        _logTestInfo("Multi Asset Same Tournament");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        // Deposit USDC
+        uint256 usdcAmount = 1000 * 10 ** 6;
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), usdcAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), usdcAmount);
+        vm.stopPrank();
+
+        // Set USDC distribution
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
+
+        // User claims both ETH and USDC prizes
+        uint256 ethBalanceBefore = user1.balance;
+        uint256 usdcBalanceBefore = USDC.balanceOf(user1);
+
+        vm.startPrank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(0)); // ETH
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC)); // USDC
+        vm.stopPrank();
+
+        // Verify both claims
+        uint256 expectedEth = (INITIAL_DEPOSIT * 50) / 100;
+        uint256 expectedUsdc = (usdcAmount * 50) / 100;
+
+        assertEq(user1.balance, ethBalanceBefore + expectedEth);
+        assertEq(USDC.balanceOf(user1), usdcBalanceBefore + expectedUsdc);
+
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, address(0)));
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC)));
+    }
+
+    function test_GetPrizePool_ERC20() public {
+        _logTestInfo("GetPrizePool ERC20");
+
+        uint256 depositAmount = 5000 * 10 ** 6; // 5000 USDC
+
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        uint256 prizePool = treasury.getPrizePool(TOURNAMENT_ID_1, address(USDC));
+        assertEq(prizePool, depositAmount);
+    }
+
+    function test_GetUserPrizeAmount_ERC20() public {
+        _logTestInfo("GetUserPrizeAmount ERC20");
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
+
+        assertEq(treasury.getUserPrizeAmount(TOURNAMENT_ID_1, address(USDC), 1), (depositAmount * 50) / 100);
+        assertEq(treasury.getUserPrizeAmount(TOURNAMENT_ID_1, address(USDC), 2), (depositAmount * 30) / 100);
+        assertEq(treasury.getUserPrizeAmount(TOURNAMENT_ID_1, address(USDC), 3), (depositAmount * 15) / 100);
+        assertEq(treasury.getUserPrizeAmount(TOURNAMENT_ID_1, address(USDC), 4), (depositAmount * 5) / 100);
+    }
+
+    /// @notice Set default prize distribution (50%, 30%, 15%, 5%) for specific token
+    function _setDefaultPrizeDistribution(uint256 tournamentId, address token) internal {
+        uint8[] memory percentages = new uint8[](4);
+        percentages[0] = 50; // 1st place
+        percentages[1] = 30; // 2nd place
+        percentages[2] = 15; // 3rd place
+        percentages[3] = 5; // 4th place
+
+        vm.prank(admin);
+        treasury.setPrizeDistribution(tournamentId, token, percentages);
     }
 }

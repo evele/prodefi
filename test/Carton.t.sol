@@ -3,11 +3,13 @@ pragma solidity ^0.8.27;
 
 import "./BaseTest.sol";
 import "./mocks/MockERC20.sol";
+import "../src/Treasury.sol";
 
 contract CartonTest is BaseTest {
     address user = address(0xBEEF);
 
     MockERC20 USDC;
+    Treasury treasury;
 
     function setUp() public override {
         super.setUp();
@@ -179,7 +181,6 @@ contract CartonTest is BaseTest {
 
         assertEq(carton.balanceOf(user, 1), 1);
         assertEq(USDC.balanceOf(address(carton)), treasuryBalanceBefore + 1000000);
-        // TODO: add assert about amount deposited on treasury
     }
 
     function test_BuyCartonWithUSDT_RevertNotAccepted() public {
@@ -305,4 +306,136 @@ contract CartonTest is BaseTest {
 
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+
+    // ========== TREASURY INTEGRATION TESTS ==========
+
+    function testSetTreasuryAddress() public {
+        treasury = new Treasury(admin, address(carton), address(predictions));
+
+        vm.prank(admin);
+        carton.setTreasuryAddress(address(treasury));
+
+        assertEq(address(carton.treasury()), address(treasury));
+    }
+
+    function testSetTreasuryAddress_OnlyAdmin() public {
+        treasury = new Treasury(admin, address(carton), address(predictions));
+
+        vm.prank(user);
+        vm.expectRevert();
+        carton.setTreasuryAddress(address(treasury));
+    }
+
+    function testSetTreasuryAddress_RevertZeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("Treasury address cannot be zero");
+        carton.setTreasuryAddress(address(0));
+    }
+
+    function testSetActiveTournament() public {
+        vm.prank(admin);
+        carton.setActiveTournament(1);
+
+        assertEq(carton.activeTournamentId(), 1);
+    }
+
+    function testSetActiveTournament_OnlyAdmin() public {
+        vm.prank(user);
+        vm.expectRevert();
+        carton.setActiveTournament(1);
+    }
+
+    function testSetActiveTournament_RevertZero() public {
+        vm.prank(admin);
+        vm.expectRevert("Tournament ID must be greater than 0");
+        carton.setActiveTournament(0);
+    }
+
+    function testBuyCarton_WithTreasuryIntegration() public {
+        // Setup Treasury
+        treasury = new Treasury(admin, address(carton), address(predictions));
+
+        vm.startPrank(admin);
+        carton.setCartonPrice(0.1 ether);
+        carton.setTreasuryAddress(address(treasury));
+        carton.setActiveTournament(1);
+
+        // Grant FUND_DEPOSITOR_ROLE to Carton
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        vm.stopPrank();
+
+        // Buy carton
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        carton.buyCarton{value: 0.1 ether}();
+
+        // Verify carton was minted
+        assertEq(carton.balanceOf(user, 1), 1);
+
+        // Verify funds went to Treasury
+        assertEq(treasury.prizePools(1, address(0)), 0.1 ether);
+        assertEq(address(carton).balance, 0); // Carton should have 0 balance
+    }
+
+    function testBuyCartonWithToken_WithTreasuryIntegration() public {
+        // Setup Treasury
+        treasury = new Treasury(admin, address(carton), address(predictions));
+
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(address(USDC), 1000000);
+        carton.setTreasuryAddress(address(treasury));
+        carton.setActiveTournament(1);
+
+        // Grant FUND_DEPOSITOR_ROLE to Carton
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        vm.stopPrank();
+
+        // Setup user with USDC
+        USDC.mint(user, 1000000);
+
+        vm.startPrank(user);
+        USDC.approve(address(carton), 1000000);
+        carton.buyCartonWithToken(address(USDC));
+        vm.stopPrank();
+
+        // Verify carton was minted
+        assertEq(carton.balanceOf(user, 1), 1);
+
+        // Verify USDC went to Treasury
+        assertEq(treasury.prizePools(1, address(USDC)), 1000000);
+        assertEq(USDC.balanceOf(address(carton)), 0); // Carton should have 0 balance
+        assertEq(USDC.balanceOf(address(treasury)), 1000000); // Treasury should have the tokens
+    }
+
+    function testBuyCarton_WithoutTreasuryConfigured() public {
+        // Should work without Treasury (backward compatibility)
+        vm.prank(admin);
+        carton.setCartonPrice(0.1 ether);
+
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        carton.buyCarton{value: 0.1 ether}();
+
+        assertEq(carton.balanceOf(user, 1), 1);
+        assertEq(address(carton).balance, 0.1 ether); // Stays in Carton contract
+    }
+
+    function testBuyCartonWithToken_WithoutTreasuryConfigured() public {
+        // Should work without Treasury (backward compatibility)
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(address(USDC), 1000000);
+        vm.stopPrank();
+
+        USDC.mint(user, 1000000);
+
+        vm.startPrank(user);
+        USDC.approve(address(carton), 1000000);
+        carton.buyCartonWithToken(address(USDC));
+        vm.stopPrank();
+
+        assertEq(carton.balanceOf(user, 1), 1);
+        assertEq(USDC.balanceOf(address(carton)), 1000000); // Stays in Carton contract
+    }
 }

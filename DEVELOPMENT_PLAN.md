@@ -3,62 +3,76 @@
 **PURPOSE**: Project planning, task organization, and development roadmap for the team.
 This file contains current status, next tasks, priorities, and session planning. For permanent technical information about the project, see CLAUDE.md.
 
-## Current Status (July 23, 2025)
+## Current Status (October 2, 2025)
 
-### Completed Features
-- **Carton.sol (ERC1155)**: Complete with purchase system
+### Completed Features (95 tests passing)
+
+- **Carton.sol (ERC1155)**: ✅ COMPLETE with multi-asset purchase and Treasury integration
   - Auto-incrementing tokenIds (`_nextTokenId`)
-  - Public `buyCarton()` function with ETH payment
-  - Price management (`setCartonPrice()`, `withdraw()`)
+  - **Multi-asset purchase**: `buyCarton()` (ETH) and `buyCartonWithToken()` (ERC20/USDC)
+  - **Automatic Treasury integration**: Auto-deposits to Treasury on each purchase
+  - Security: ReentrancyGuard, SafeERC20, low-level ETH calls
+  - Treasury configuration: `setTreasuryAddress()`, `setActiveTournament()`
+  - Token management: `setAcceptedToken()`, `setTokenPrice()`
+  - Price management (`setCartonPrice()`, `withdraw()`, `withdrawToken()`)
   - Role-based access control (Admin, Minter, Pauser, URI Setter)
-  - Comprehensive test coverage (20 tests passing)
+  - Comprehensive test coverage (35 tests passing, including Treasury integration tests)
 
-- **Predictions.sol**: Full prediction logic
+- **Predictions.sol**: ✅ COMPLETE
   - Game predictions (4 games, score predictions)
   - Winner predictions (top 4 teams)
   - Point calculation system
   - Deadline enforcement
   - Position/ranking management with O(1) lookup
   - Added `tokenPositions` mapping and `getCartonPosition()` function
-  - Comprehensive test coverage (14 tests passing)
+  - Comprehensive test coverage (19 tests passing)
 
-- **Test Infrastructure**: 39 tests passing
-  - BaseTest.sol with utilities
-  - Integration tests
-  - All core functionality covered
-
-- **Treasury.sol**: ✅ CORE FUNCTIONS COMPLETE
-  - Multi-asset prize pool management (ETH + ERC20)
-  - Role-based access control (FUND_DEPOSITOR_ROLE, TOURNAMENT_MANAGER_ROLE)
-  - Integration with Carton and Predictions contracts
+- **Treasury.sol**: ✅ COMPLETE with multi-asset support
+  - **Multi-asset prize pool management** (ETH + ERC20/USDC)
+  - Role-based access control (FUND_DEPOSITOR_ROLE granted to Carton, TOURNAMENT_MANAGER_ROLE)
+  - Full integration with Carton (automatic deposits) and Predictions contracts
   - **Implemented Functions**:
     - `depositFromSales()`: Receives ETH from sales, updates prize pools
     - `depositFromSalesERC20()`: Receives ERC20 from sales, updates prize pools
-    - `setPrizeDistribution()`: Admin sets percentage distribution (90-100% total)
-    - `claimPrize()`: Users claim prizes based on tokenId positions
+    - `setPrizeDistribution()`: Admin sets percentage distribution per asset (90-100% total)
+    - `claimPrize()`: Users claim prizes based on tokenId positions (multi-asset support)
+  - Security: SafeERC20, checks-effects-interactions pattern
   - Contract references to Carton and Predictions for validation
   - Efficient prize calculation with integer division (rounds down)
+  - Comprehensive test coverage (41 tests passing, including full ERC20 flow)
 
-## Next Phase: Treasury Follow-ups
+- **Deployment**: ✅ COMPLETE
+  - Full setup script with Treasury integration
+  - Automatic FUND_DEPOSITOR_ROLE grant to Carton
+  - Tournament and price configuration
+  - Prize distribution setup
+
+## Next Phase: Treasury Advanced Features
 
 ## Next Tasks (Priority Order)
 
-### Treasury Follow-ups (Priority)
-1. Add `ReentrancyGuard` to `claimPrize` (defense-in-depth).
-2. Add `finalizeTournament(tournamentId, token)` with pool snapshot; freeze deposits and distribution post-finalize.
-3. ERC20 allowlist per tournament and a real supported-assets registry; implement `getSupportedAssets` using it.
-4. Telemetry: `totalClaimed[tournamentId][token]` and optionally a `remainingPool` view.
-5. Clarify or remove `TOURNAMENT_MANAGER_ROLE`; define who can set distribution/finalize.
-6. Optional admin flow: withdraw remainder (0–10%) to a designated address after finalize.
+### ✅ Completed (October 2, 2025)
+1. ✅ **Carton→Treasury Integration** (Phase 2)
+   - Added Treasury address storage and `activeTournamentId` to Carton
+   - Modified `buyCarton()` to auto-deposit ETH to Treasury
+   - Modified `buyCartonWithToken()` to auto-deposit ERC20 to Treasury
+   - Added `setTreasuryAddress()` and `setActiveTournament()` admin functions
+   - Granted `FUND_DEPOSITOR_ROLE` to Carton contract in deploy script
+   - Security improvements: ReentrancyGuard, SafeERC20, low-level calls
+   - 10 new integration tests added (35 total in Carton.t.sol)
 
-### Phase 2: Integrate Treasury with Carton Sales
-4. **Modify Carton.sol**
-   - Add Treasury address storage
-   - Modify `buyCarton()` to send % to Treasury
-   - Add `setTreasuryAddress()` admin function
-   - Grant `FUND_DEPOSITOR_ROLE` to Carton contract
+2. ✅ **Treasury ERC20 Testing**
+   - Added 9 comprehensive ERC20 tests to Treasury.t.sol
+   - Tests cover: deposits, claims, multi-asset scenarios, access control
+   - Multi-asset integration working (users can claim ETH + USDC)
+   - 41 total tests in Treasury.t.sol
 
-### Phase 3: (removed — already implemented)
+### Treasury Advanced Features (Priority)
+1. Add `finalizeTournament(tournamentId, token)` with pool snapshot; freeze deposits and distribution post-finalize.
+2. ERC20 allowlist per tournament and a real supported-assets registry; implement `getSupportedAssets` using it.
+3. Telemetry: `totalClaimed[tournamentId][token]` and optionally a `remainingPool` view.
+4. Clarify or remove `TOURNAMENT_MANAGER_ROLE`; define who can set distribution/finalize.
+5. Optional admin flow: withdraw remainder (0–10%) to a designated address after finalize.
 
 ### Phase 4: Advanced Prize Distribution
 7. **Create PrizeDistribution.sol**
@@ -73,8 +87,12 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ## Testing Strategy
 
-### Treasury Follow-ups Tests
-- [ ] Reentrancy guard: `claimPrize` cannot be reentered.
+### ✅ Completed Tests (95 total passing)
+- ✅ **Carton tests** (35 tests): Purchase flows, Treasury integration, access control, backward compatibility
+- ✅ **Treasury tests** (41 tests): ETH deposits, ERC20 deposits, claims, multi-asset, distributions, view functions
+- ✅ **Predictions tests** (19 tests): Game/winner predictions, point calculation, positions, deadlines
+
+### Pending Tests (Future Features)
 - [ ] Finalize snapshot: claims use snapped pool; deposits/distribution changes blocked after finalize.
 - [ ] ERC20 allowlist: allowed tokens accepted, non-allowed rejected; claims work per-asset.
 - [ ] Supported assets view reflects registry accurately per tournament.
@@ -104,39 +122,49 @@ This file contains current status, next tasks, priorities, and session planning.
 - `calldata` for external function parameters
 - English comments for universality
 
-## Treasury Diagnostic (Current)
+## Treasury Status (October 2, 2025)
 
-- Scope and intent
-  - Treasury holds ETH/ERC20 prize pools per `tournamentId`, pays claims by token position from `Predictions`, and tracks `claimed` per `(tournamentId, tokenId, asset)`.
+### ✅ Implemented Features
 
-- Security and correctness
-  - Reentrancy: `claimPrize` does checks-effects-interactions correctly (sets `claimed` before transfer). Still recommended to add `ReentrancyGuard` for defense-in-depth.
-  - Position bounds: guarded; uses distribution length to validate `position`.
-  - Access control: `FUND_DEPOSITOR_ROLE` on deposits; `DEFAULT_ADMIN_ROLE` on distribution. `TOURNAMENT_MANAGER_ROLE` is defined but currently unused.
+- **Scope and integration**
+  - ✅ Treasury holds ETH/ERC20 prize pools per `(tournamentId, token)`, pays claims by token position from `Predictions`
+  - ✅ Tracks `claimed` per `(tournamentId, tokenId, asset)` - users can claim multiple assets
+  - ✅ **Full Carton integration**: Automatic deposits from `buyCarton()` and `buyCartonWithToken()`
+  - ✅ `FUND_DEPOSITOR_ROLE` granted to Carton contract for seamless flow
 
-- Accounting and lifecycle
-  - `prizePools` is not decremented on claims; it is a cumulative base for calculating claim amounts at claim time. Consequence: if deposits continue after some users claimed, later claimants receive more. Mitigations: snapshot pool at finalize-time or freeze deposits before claims.
-  - Add `totalClaimed[tournamentId][token]` for telemetry and to expose distributed vs. remaining (if we adopt decrementing semantics for a separate `remainingPool`).
-  - No explicit tournament state. Consider a `finalizeTournament(tournamentId, token)` that snapshots pool, freezes distribution and deposits, and gates claims against the snapshot.
+- **Security and correctness**
+  - ✅ Reentrancy: `claimPrize` uses checks-effects-interactions correctly (sets `claimed` before transfer)
+  - ✅ SafeERC20: Secure token transfers for non-standard ERC20 tokens
+  - ✅ Carton protected with ReentrancyGuard at entry points (buyCarton, buyCartonWithToken)
+  - ✅ Position bounds: guarded; uses distribution length to validate `position`
+  - ✅ Access control: `FUND_DEPOSITOR_ROLE` on deposits; `DEFAULT_ADMIN_ROLE` on distribution
+  - ⚠️ `TOURNAMENT_MANAGER_ROLE` defined but currently unused (future use or removal needed)
 
-- Features and extensibility
-  - Assets: ETH + ERC20 supported. Missing: allowlist/registry per tournament for accepted ERC20s and a real `getSupportedAssets` registry.
-  - Emergency controls: no `pause/unpause` or `emergencyWithdraw`; optional to add for ops safety.
-  - Events: existing `DepositFromSale`, `ClaimPrize`, `SetPrizeDistribution`. Consider emitting `prize_amount` (already included in event) and tracking totals via `totalClaimed`.
-  - Roles: define intended semantics for `TOURNAMENT_MANAGER_ROLE` or remove if unnecessary.
-  - Cross-contract semantics: `Predictions` is global (not per tournament). If we plan parallel tournaments with distinct rankings, we need per-tournament positions or multiple `Predictions` instances.
+- **Multi-asset support**
+  - ✅ ETH + ERC20 (USDC, etc) fully supported and tested
+  - ✅ Separate prize distributions per `(tournamentId, token)`
+  - ✅ Users can claim prizes for multiple assets in same tournament
+  - ⚠️ Missing: allowlist/registry per tournament for accepted ERC20s and proper `getSupportedAssets` implementation
 
-- Tests and coverage (current state OK)
-  - Tests cover ETH deposits/claims, distributions, invalid positions, roles, multi-tournament isolation, rounding, and view functions. ERC20 path present in contract; add tests when we wire an accepted token and allowlist.
-  - Missing if adopting follow-ups: tests for pause/emergency, ERC20 allowlist + supported assets registry, distribution freeze, tournament finalization snapshot, and remainder withdrawal.
+- **Tests and coverage** (41 tests in Treasury.t.sol)
+  - ✅ ETH deposits, ERC20 deposits, claims (both assets)
+  - ✅ Multi-asset scenarios (user claims ETH + USDC for same tournament)
+  - ✅ Distributions, invalid positions, roles, multi-tournament isolation
+  - ✅ Access control, view functions, edge cases
 
-- Recommended next steps (non-breaking, prioritized)
-  1) Add `ReentrancyGuard` to `claimPrize` (defense-in-depth).
-  2) Define and implement tournament finalization + pool snapshot; freeze distribution/ deposits post-finalize.
-  3) Introduce ERC20 allowlist per tournament and a real `getSupportedAssets` registry; add tests for ERC20 deposit/claim.
-  4) Expose telemetry: `totalClaimed` and optionally `remainingPool` if we separate accounting views.
-  5) Clarify or remove `TOURNAMENT_MANAGER_ROLE`; decide who can set distributions/finalize.
-  6) Optional admin flow: withdraw remainder (0–10%) to a designated address after finalize.
+### Pending Features (Non-breaking enhancements)
+
+- **Accounting and lifecycle**
+  - `prizePools` is not decremented on claims; it is cumulative base for calculating claim amounts. Consequence: if deposits continue after some users claimed, later claimants receive more.
+  - **Recommended**: Add `finalizeTournament(tournamentId, token)` that snapshots pool, freezes distribution and deposits, and gates claims against snapshot
+  - **Optional**: Add `totalClaimed[tournamentId][token]` for telemetry and expose `remainingPool` view
+
+- **Features and extensibility**
+  - Implement proper `getSupportedAssets(tournamentId)` with real registry (currently hardcoded)
+  - ERC20 allowlist per tournament for accepted tokens
+  - Emergency controls: `pause/unpause` or `emergencyWithdraw` for ops safety
+  - Define semantics for `TOURNAMENT_MANAGER_ROLE` or remove if unnecessary
+  - Cross-contract semantics: `Predictions` is global (not per tournament). For parallel tournaments with distinct rankings, need per-tournament positions or multiple `Predictions` instances
 
 ## Notes for Tomorrow
 
@@ -293,4 +321,45 @@ Done criteria:
   - Form state + validation (ids, duplicates, deadline).
   - UX: loading states, toasts, refetch reads on success.
 
-*Last updated: September 9, 2025*
+## Session (October 2, 2025)
+
+### Completed: Multi-asset Treasury Integration
+
+**What was implemented:**
+1. **Treasury ERC20 Testing** (9 new tests in Treasury.t.sol)
+   - Full ERC20 deposit/claim flow with USDC MockERC20
+   - Multi-asset scenarios (user claims both ETH and USDC)
+   - Access control for `depositFromSalesERC20()`
+   - View functions for ERC20 prize pools
+
+2. **Carton→Treasury Integration** (10 new tests in Carton.t.sol)
+   - Added `treasury` and `activeTournamentId` storage to Carton
+   - Created ITreasury interface for contract calls
+   - Modified `buyCarton()`: auto-deposits ETH to Treasury when configured
+   - Modified `buyCartonWithToken()`: auto-deposits ERC20 to Treasury when configured
+   - Added admin setters: `setTreasuryAddress()`, `setActiveTournament()`
+   - Backward compatibility: works without Treasury configured (legacy mode)
+
+3. **Security Improvements** (contributed by Codex review)
+   - Added ReentrancyGuard to Carton: `buyCarton()`, `buyCartonWithToken()`, `withdraw()`, `withdrawToken()`
+   - Replaced `transfer()` with low-level `.call()` for ETH transfers (wallet compatibility)
+   - Added SafeERC20 usage in `withdrawToken()` (non-standard token support)
+   - Fixed event emission to use actual price, not msg.value
+
+4. **Deploy Script Updates**
+   - Configured Treasury address and active tournament in Carton
+   - Granted `FUND_DEPOSITOR_ROLE` to Carton contract
+   - Full end-to-end integration working
+
+**Test Results:** 95 tests passing (was 76)
+- Carton: 35 tests (was 25)
+- Treasury: 41 tests (was 32)
+- Predictions: 19 tests
+
+**Key Achievement:** Complete multi-asset purchase-to-prize-pool flow working seamlessly. Users can buy cartones with ETH or USDC, funds automatically go to Treasury, and users can claim prizes in multiple assets.
+
+**Documentation:**
+- Updated CLAUDE.md with current status (October 2, 2025)
+- Updated DEVELOPMENT_PLAN.md with completed features and pending tasks
+
+*Last updated: October 2, 2025*

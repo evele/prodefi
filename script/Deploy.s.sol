@@ -40,13 +40,20 @@ contract DeployScript is Script {
         // Setup inicial
         console.log("\nSetting up contracts...");
 
-        // Dar roles al Treasury para manejar fondos
-        carton.grantRole(carton.MINTER_ROLE(), address(treasury));
-        console.log("Treasury granted MINTER_ROLE on Carton");
+        uint256 tournamentId = 1; // Primer torneo
 
-        // Set precio del carton (0.1 ETH) - función correcta es setCartonPrice
+        // Set precio del carton (0.1 ETH)
         carton.setCartonPrice(0.1 ether);
         console.log("Carton price set to 0.1 ETH");
+
+        // Configure Treasury integration
+        carton.setTreasuryAddress(address(treasury));
+        carton.setActiveTournament(tournamentId);
+        console.log("Carton configured with Treasury and active tournament:", tournamentId);
+
+        // Grant FUND_DEPOSITOR_ROLE to Carton contract
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        console.log("Carton granted FUND_DEPOSITOR_ROLE on Treasury");
 
         // Configurar distribución de premios en Treasury para torneo 1 (50%, 30%, 15%, 5%)
         uint8[] memory distribution = new uint8[](4);
@@ -54,8 +61,6 @@ contract DeployScript is Script {
         distribution[1] = 30; // 2nd place
         distribution[2] = 15; // 3rd place
         distribution[3] = 5; // 4th place
-
-        uint256 tournamentId = 1; // Primer torneo
         treasury.setPrizeDistribution(tournamentId, address(0), distribution); // address(0) = ETH
         console.log("Prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
 
