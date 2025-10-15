@@ -20,9 +20,10 @@ echo "$DEPLOY_OUTPUT"
 CARTON_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Carton deployed at:" | awk '{print $4}')
 PREDICTIONS_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Predictions deployed at:" | awk '{print $4}')
 TREASURY_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Treasury deployed at:" | awk '{print $4}')
+USDC_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "MockUSDC deployed at:" | awk '{print $4}')
 
 # Verificar que se extrajeron las direcciones
-if [ -z "$CARTON_ADDRESS" ] || [ -z "$PREDICTIONS_ADDRESS" ] || [ -z "$TREASURY_ADDRESS" ]; then
+if [ -z "$CARTON_ADDRESS" ] || [ -z "$PREDICTIONS_ADDRESS" ] || [ -z "$TREASURY_ADDRESS" ] || [ -z "$USDC_ADDRESS" ]; then
     echo "❌ Error: No se pudieron extraer las direcciones de los contratos"
     exit 1
 fi
@@ -36,6 +37,7 @@ cat > frontend/.env << EOF
 VITE_CARTON_ADDRESS=$CARTON_ADDRESS
 VITE_PREDICTIONS_ADDRESS=$PREDICTIONS_ADDRESS
 VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS
+VITE_USDC_ADDRESS=$USDC_ADDRESS
 
 # Optional: WalletConnect Project ID (for production)
 # VITE_WALLETCONNECT_PROJECT_ID=your_project_id
@@ -47,6 +49,7 @@ echo "📋 Updated addresses:"
 echo "  Carton:      $CARTON_ADDRESS"
 echo "  Predictions: $PREDICTIONS_ADDRESS"
 echo "  Treasury:    $TREASURY_ADDRESS"
+echo "  USDC:        $USDC_ADDRESS"
 
 echo ""
 echo "🧩 Exporting fresh ABIs to frontend..."
@@ -54,6 +57,8 @@ echo "🧩 Exporting fresh ABIs to frontend..."
 forge inspect Carton abi --format-json > frontend/src/lib/contracts/carton-abi.json
 forge inspect Predictions abi --format-json > frontend/src/lib/contracts/predictions-abi.json
 forge inspect Treasury abi --format-json > frontend/src/lib/contracts/treasury-abi.json
+# Extract MockERC20 ABI from compiled output
+jq '.abi' out/MockERC20.sol/MockERC20.json > frontend/src/lib/contracts/usdc-abi.json
 
 if [ $? -eq 0 ]; then
   echo "✅ ABIs exported successfully."

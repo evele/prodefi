@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {Carton} from "../src/Carton.sol";
 import {Predictions} from "../src/Predictions.sol";
 import {Treasury} from "../src/Treasury.sol";
+import {MockERC20} from "../src/mocks/MockERC20.sol";
 
 contract DeployScript is Script {
     function run() public {
@@ -37,6 +38,17 @@ contract DeployScript is Script {
         Treasury treasury = new Treasury(deployer, address(carton), address(predictions));
         console.log("Treasury deployed at:", address(treasury));
 
+        // Deploy MockUSDC (6 decimals like real USDC)
+        console.log("\nDeploying MockUSDC...");
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        console.log("MockUSDC deployed at:", address(usdc));
+
+        // Configure USDC in Carton
+        console.log("\nConfiguring USDC support...");
+        carton.setAcceptedToken(address(usdc), true);
+        carton.setTokenPrice(address(usdc), 10 ** 6); // 1 USDC = 10^6
+        console.log("USDC accepted with price: 1 USDC");
+
         // Setup inicial
         console.log("\nSetting up contracts...");
 
@@ -67,6 +79,14 @@ contract DeployScript is Script {
         distribution[3] = 5; // 4th place
         treasury.setPrizeDistribution(tournamentId, address(0), distribution); // address(0) = ETH
         console.log("Prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
+
+        // Set USDC prize distribution (same as ETH)
+        treasury.setPrizeDistribution(tournamentId, address(usdc), distribution);
+        console.log("USDC prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
+
+        // Mint USDC to deployer for testing purchases
+        usdc.mint(deployer, 1000 * 10 ** 6);
+        console.log("Minted 1000 USDC to deployer");
 
         vm.stopBroadcast();
 

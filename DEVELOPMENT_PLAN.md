@@ -439,4 +439,78 @@ Done criteria:
 - Updated CLAUDE.md with closeTournament functionality
 - Updated DEVELOPMENT_PLAN.md with completed lifecycle feature and test counts
 
-*Last updated: October 14, 2025*
+## Session (October 15, 2025)
+
+### Completed: ERC20 Backend Infrastructure
+
+**What was implemented:**
+1. **MockERC20 Contract** (`src/mocks/MockERC20.sol`)
+   - Configurable decimals (USDC uses 6 decimals)
+   - Public `mint()` for testing
+   - Based on OpenZeppelin ERC20
+
+2. **Deploy Script Updates** (`script/Deploy.s.sol`)
+   - Deploys MockUSDC with 6 decimals
+   - Configures Carton: `setAcceptedToken(USDC, true)` and `setTokenPrice(USDC, 1 USDC)`
+   - Sets USDC prize distribution in Treasury (50%, 30%, 15%, 5%)
+   - Mints 1000 USDC to deployer for testing
+
+3. **Deploy Script Automation** (`deploy.sh`)
+   - Extracts USDC address from deploy output
+   - Updates frontend .env with `VITE_USDC_ADDRESS`
+   - Exports USDC ABI to `frontend/src/lib/contracts/usdc-abi.json`
+   - Fixed multiple MockERC20 conflicts using `jq` to extract from compiled output
+
+4. **Integration Tests** (`test/ERC20Integration.t.sol`)
+   - 3 new tests for complete ERC20 flow
+   - `test_BuyCartonWithETH_AutoDepositsToTreasury()` - ETH flow verification
+   - `test_BuyCartonWithUSDC_AutoDepositsToTreasury()` - USDC approve + buy flow
+   - `test_MultiAssetPrizePool()` - Dual prize pools (ETH + USDC)
+
+5. **Frontend Configuration** (`frontend/src/lib/contracts/`)
+   - Added `USDC` to `CONTRACT_ADDRESSES` in `index.ts`
+   - Imported and exported `USDC_ABI` in `abis.ts`
+
+**Test Results:** 109 tests passing (was 106)
+- Carton: 35 tests
+- Treasury: 52 tests
+- Predictions: 19 tests
+- ERC20Integration: 3 tests (new)
+
+### Current Status: Ready for Frontend Implementation
+
+**✅ Backend Complete:**
+- Multi-asset purchase flow working (ETH + USDC)
+- Treasury receiving both asset types
+- Deploy automation complete
+- Frontend config updated (addresses + ABIs)
+
+**🚧 Next: Frontend Multi-Asset Purchase UI**
+
+User needs to implement the ERC20 purchase flow in the frontend. This is a learning task following the guidance workflow.
+
+**Key Requirements:**
+
+1. **Currency Selector** - UI to choose between ETH and USDC
+2. **ERC20 Approve Flow** - Two-step transaction process:
+   - Check allowance: `usdc.allowance(user, CARTON_ADDRESS)`
+   - If insufficient: call `usdc.approve(CARTON_ADDRESS, amount)`
+   - Then: call `carton.buyCartonWithToken(USDC_ADDRESS)`
+3. **Balance Display** - Show USDC balance alongside ETH
+4. **Prize Pool Display** - Read and show both ETH and USDC prize pools from Treasury
+5. **State Management** - Handle multi-step transaction flow with proper loading states
+
+**Technical References:**
+- Current ETH flow: `frontend/src/routes/index.tsx:33-43`
+- Prize pool card: `frontend/src/routes/index.tsx:224-260`
+- Wagmi hooks: `useReadContract`, `useWriteContract`, `useWaitForTransactionReceipt`
+- Deployed addresses in `frontend/.env` (auto-generated)
+- Test wallet has 1000 USDC available for testing
+
+**Learning Focus:**
+- ERC20 approve pattern (why 2 transactions?)
+- Allowance checking and state management
+- Multi-step transaction UX
+- Reading contract state for display
+
+*Last updated: October 15, 2025*
