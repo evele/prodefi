@@ -55,6 +55,10 @@ contract DeployScript is Script {
         treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
         console.log("Carton granted FUND_DEPOSITOR_ROLE on Treasury");
 
+        // Grant TOURNAMENT_MANAGER_ROLE to deployer
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), deployer);
+        console.log("Deployer granted TOURNAMENT_MANAGER_ROLE on Treasury");
+
         // Configurar distribución de premios en Treasury para torneo 1 (50%, 30%, 15%, 5%)
         uint8[] memory distribution = new uint8[](4);
         distribution[0] = 50; // 1st place

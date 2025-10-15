@@ -25,6 +25,12 @@ contract Treasury is AccessControl {
     // Prize distribution by tournament and asset type
     mapping(uint256 => mapping(address => uint8[])) public prizePoolDistributions;
 
+    // Snapshots prizepool to finalize
+    mapping(uint256 => mapping(address => uint256)) public closedPrizePools;
+
+    // Flag of closed tournament
+    mapping(uint256 => mapping(address => bool)) public isClosedTournament;
+
     Carton public cartonContract;
     Predictions public predictionsContract;
 
@@ -39,6 +45,7 @@ contract Treasury is AccessControl {
         uint256 amount
     );
     event SetPrizeDistribution(uint256 indexed tournamentId, address indexed token, uint8[] percentages);
+    event TournamentClosed(uint256 indexed tournamentId, address indexed token, uint256 closedPrizePool);
 
     constructor(address defaultAdmin, address cartonAddress, address predictionsAddress) {
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
@@ -51,6 +58,7 @@ contract Treasury is AccessControl {
     /// @param tournamentId Tournament ID
     function depositFromSales(uint256 tournamentId) external payable onlyRole(FUND_DEPOSITOR_ROLE) {
         require(msg.value > 0, "Amount must be greater than 0");
+        require(!isClosedTournament[tournamentId][address(0)], "Tournament already closed");
         prizePools[tournamentId][address(0)] += msg.value;
         emit DepositFromSale(tournamentId, address(0), msg.value);
     }
@@ -65,6 +73,7 @@ contract Treasury is AccessControl {
     {
         require(token != address(0), "Use depositFromSales for ETH");
         require(amount > 0, "Amount must be greater than 0");
+        require(!isClosedTournament[tournamentId][token], "Tournament already closed");
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         prizePools[tournamentId][token] += amount;
@@ -76,6 +85,7 @@ contract Treasury is AccessControl {
     /// @param tokenId Token ID to claim prize for
     /// @param token Token address (address(0) for ETH)
     function claimPrize(uint256 tournamentId, uint256 tokenId, address token) external {
+        require(isClosedTournament[tournamentId][token], "Tournament not closed");
         require(cartonContract.balanceOf(msg.sender, tokenId) > 0, "Not token owner");
         require(!claimed[tournamentId][tokenId][token], "Already claimed");
 
@@ -83,7 +93,7 @@ contract Treasury is AccessControl {
         require(position > 0 && position <= prizePoolDistributions[tournamentId][token].length, "Invalid position");
 
         uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
-        uint256 prize_amount = (prizePools[tournamentId][token] * percentage_position) / 100;
+        uint256 prize_amount = (closedPrizePools[tournamentId][token] * percentage_position) / 100;
         require(prize_amount > 0, "No prize available");
 
         claimed[tournamentId][tokenId][token] = true;
@@ -142,7 +152,13 @@ contract Treasury is AccessControl {
     {
         require(position > 0 && position <= prizePoolDistributions[tournamentId][token].length, "Invalid position");
         uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
-        return (prizePools[tournamentId][token] * percentage_position) / 100;
+
+        // Use closed pool if tournament is closed, otherwise use current pool
+        uint256 poolToUse = isClosedTournament[tournamentId][token]
+            ? closedPrizePools[tournamentId][token]
+            : prizePools[tournamentId][token];
+
+        return (poolToUse * percentage_position) / 100;
     }
 
     /// @notice Check if user has claimed prize for specific asset
@@ -176,5 +192,19 @@ contract Treasury is AccessControl {
             result[i] = assets[i];
         }
         return result;
+    }
+
+    /// @notice Closes tournament and snapshots prize pool for claims
+    /// @param tournamentId Tournament ID
+    /// @param token Token address (address(0) for ETH)
+    function closeTournament(uint256 tournamentId, address token) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
+        require(!isClosedTournament[tournamentId][token], "Tournament already closed");
+        require(prizePools[tournamentId][token] > 0, "No prize pool");
+        require(prizePoolDistributions[tournamentId][token].length > 0, "No prize distribution");
+
+        closedPrizePools[tournamentId][token] = prizePools[tournamentId][token];
+        isClosedTournament[tournamentId][token] = true;
+
+        emit TournamentClosed(tournamentId, token, closedPrizePools[tournamentId][token]);
     }
 }
