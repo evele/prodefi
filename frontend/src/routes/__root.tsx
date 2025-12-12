@@ -4,7 +4,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useUserBalance } from '../hooks/useBalance'
 
 function RootLayout() {
-  const { balance, symbol, isLoading, isConnected } = useUserBalance()
+  const { isConnected, eth, usdc } = useUserBalance()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
@@ -24,9 +24,12 @@ function RootLayout() {
             {/* Balance Display */}
             {isConnected && (
               <div className="text-right">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Balance</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Balances</div>
                 <div className="font-mono font-semibold text-gray-800 dark:text-white">
-                  {isLoading ? 'Loading...' : `${balance} ${symbol}`}
+                  {eth.isLoading ? 'Loading...' : `${eth.amount} ${eth.symbol}`}
+                </div>
+                <div className="font-mono text-gray-700 dark:text-gray-200 text-sm">
+                  {usdc.isLoading ? 'Loading...' : `${usdc.amount} ${usdc.symbol}`}
                 </div>
               </div>
             )}

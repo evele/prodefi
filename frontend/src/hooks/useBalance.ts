@@ -1,26 +1,46 @@
-import { useAccount, useBalance } from 'wagmi'
-import { formatEther } from 'viem'
+import { useAccount, useBalance, useReadContract } from 'wagmi'
+import { formatEther, formatUnits } from 'viem'
+import { CONTRACT_ADDRESSES, USDC_ABI } from '../lib/contracts'
 
 export function useUserBalance() {
   const { address, isConnected } = useAccount()
-  
-  const { data: balance, isLoading, error } = useBalance({
+  const userAddress = address as `0x${string}` | undefined
+
+  const {
+    data: ethBalance,
+    isLoading: isEthLoading,
+    error: ethError,
+  } = useBalance({
     address,
     query: {
       enabled: !!address && isConnected,
-      refetchInterval: 5000, // Refresh every 5 seconds
-    }
+      refetchInterval: 5000,
+    },
   })
 
-  const formattedBalance = balance 
-    ? parseFloat(formatEther(balance.value)).toFixed(4)
-    : '0.0000'
+  const { data: usdcRawBalance, isLoading: isUsdcLoading } = useReadContract({
+    address: CONTRACT_ADDRESSES.USDC,
+    abi: USDC_ABI,
+    functionName: 'balanceOf',
+    args: userAddress ? [userAddress] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+      refetchInterval: 5000,
+    },
+  })
 
   return {
-    balance: formattedBalance,
-    symbol: balance?.symbol || 'ETH',
-    isLoading,
-    error,
-    isConnected
+    isConnected,
+    eth: {
+      amount: ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0.0000',
+      symbol: ethBalance?.symbol ?? 'ETH',
+      isLoading: isEthLoading,
+      error: ethError,
+    },
+    usdc: {
+      amount: usdcRawBalance ? Number(formatUnits(usdcRawBalance, 6)).toFixed(2) : '0.00',
+      symbol: 'USDC',
+      isLoading: isUsdcLoading,
+    },
   }
 }

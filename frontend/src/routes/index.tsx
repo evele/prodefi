@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
-import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI } from '../lib/contracts'
-import { formatEther } from 'viem'
+import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
+import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI, ZERO_ADDRESS } from '../lib/contracts'
+import { formatEther, formatUnits } from 'viem'
 import { toast } from "sonner"
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
@@ -14,9 +14,19 @@ export const Route = createFileRoute('/')({
   component: HomePage,
 })
 
+const POSITION_META = [
+  { label: '1st Place (50%)', position: 1 },
+  { label: '2nd Place (30%)', position: 2 },
+  { label: '3rd Place (15%)', position: 3 },
+  { label: '4th Place (5%)', position: 4 },
+] as const
+
 function HomePage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
+  const normalizedAddress = userAddress as `0x${string}` | undefined
+  const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
+  const [lastPurchaseCurrency, setLastPurchaseCurrency] = useState<'ETH' | 'USDC'>('ETH')
 
   const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -24,16 +34,149 @@ function HomePage() {
     functionName: 'cartonPrice',
   })
 
-  const { writeContract, data: hash, isPending, error } =  useWriteContract()
+  const { data: activeTournamentId } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'activeTournamentId',
+  })
+  const tournamentId = activeTournamentId ?? 0n
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
+  const {
+    writeContract: writePurchase,
+    data: purchaseHash,
+    isPending: isPurchasePending,
+    error: purchaseError,
+  } = useWriteContract()
+
+  const {
+    writeContract: writeApprove,
+    data: approveHash,
+    isPending: isApprovePending,
+    error: approveError,
+  } = useWriteContract()
+
+  const { isLoading: isPurchaseConfirming, isSuccess: isPurchaseSuccess } = useWaitForTransactionReceipt({
+    hash: purchaseHash,
   })
 
-  const buyCarton = () => {
-    if (!cartonPrice) return
+  const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({
+    hash: approveHash,
+  })
 
-    writeContract({
+  const { data: usdcPrice, isLoading: usdcPriceLoading } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'tokenPrices',
+    args: [CONTRACT_ADDRESSES.USDC],
+  })
+
+  const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
+    address: CONTRACT_ADDRESSES.USDC,
+    abi: USDC_ABI,
+    functionName: 'allowance',
+    args: normalizedAddress ? [normalizedAddress, CONTRACT_ADDRESSES.CARTON] : undefined,
+    query: {
+      enabled: Boolean(normalizedAddress) && isConnected,
+      refetchInterval: 15000,
+    },
+  })
+
+  const usdcPriceValue = usdcPrice ?? 0n
+  const usdcAllowanceValue = usdcAllowance ?? 0n
+  const needsApproval = currency === 'USDC' && usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
+  const isBuying = isPurchasePending || isPurchaseConfirming
+  const isApproving = isApprovePending || isApproveConfirming
+
+  const priceDisplay =
+    currency === 'ETH'
+      ? priceLoading
+        ? 'Loading...'
+        : cartonPrice
+          ? `${formatEther(cartonPrice)} ETH`
+          : 'Price not set'
+      : usdcPriceLoading
+        ? 'Loading...'
+        : usdcPriceValue > 0n
+          ? `${formatUnits(usdcPriceValue, 6)} USDC`
+          : 'Price not set'
+
+  const buyButtonText = () => {
+    if (!isConnected) return 'Connect Wallet to Buy'
+    if (currency === 'ETH') {
+      return isBuying ? 'Buying...' : 'Buy with ETH'
+    }
+    return isBuying ? 'Buying...' : 'Buy with USDC'
+  }
+
+  const canBuy =
+    currency === 'ETH'
+      ? Boolean(cartonPrice)
+      : usdcPriceValue > 0n && !needsApproval
+
+  const { data: ethPrizePool } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'getPrizePool',
+    args: tournamentId > 0n ? [tournamentId, ZERO_ADDRESS] : undefined,
+    query: { enabled: tournamentId > 0n },
+  })
+
+  const { data: usdcPrizePool } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'getPrizePool',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n },
+  })
+
+  const prizeContracts = useMemo(() => {
+    if (tournamentId === 0n) return []
+    return POSITION_META.flatMap((meta) => [
+      {
+        address: CONTRACT_ADDRESSES.TREASURY,
+        abi: TREASURY_ABI,
+        functionName: 'getUserPrizeAmount',
+        args: [tournamentId, ZERO_ADDRESS, BigInt(meta.position)],
+      } as const,
+      {
+        address: CONTRACT_ADDRESSES.TREASURY,
+        abi: TREASURY_ABI,
+        functionName: 'getUserPrizeAmount',
+        args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
+      } as const,
+    ])
+  }, [tournamentId])
+
+  const { data: prizeAmounts } = useReadContracts({
+    contracts: prizeContracts,
+    query: { enabled: prizeContracts.length > 0 },
+  })
+
+  const ethPositionAmounts = POSITION_META.map((_, index) => {
+    const entry = prizeAmounts?.[index * 2]
+    return (entry?.result as bigint | undefined) ?? 0n
+  })
+
+  const usdcPositionAmounts = POSITION_META.map((_, index) => {
+    const entry = prizeAmounts?.[index * 2 + 1]
+    return (entry?.result as bigint | undefined) ?? 0n
+  })
+
+  const formatAssetValue = (amount: bigint, asset: 'ETH' | 'USDC') => {
+    if (amount === 0n) return `-- ${asset}`
+    return asset === 'ETH'
+      ? `${Number(formatEther(amount)).toFixed(3)} ${asset}`
+      : `${Number(formatUnits(amount, 6)).toFixed(2)} ${asset}`
+  }
+
+  const prizeSections = [
+    { asset: 'ETH' as const, total: ethPrizePool ?? 0n, values: ethPositionAmounts },
+    { asset: 'USDC' as const, total: usdcPrizePool ?? 0n, values: usdcPositionAmounts },
+  ]
+
+  const buyCartonWithEth = () => {
+    if (!cartonPrice) return
+    writePurchase({
       address: CONTRACT_ADDRESSES.CARTON,
       abi: CARTON_ABI,
       functionName: 'buyCarton',
@@ -42,13 +185,43 @@ function HomePage() {
     })
   }
 
+  const buyCartonWithUsdc = () => {
+    if (!usdcPriceValue) return
+    writePurchase({
+      address: CONTRACT_ADDRESSES.CARTON,
+      abi: CARTON_ABI,
+      functionName: 'buyCartonWithToken',
+      args: [CONTRACT_ADDRESSES.USDC],
+    })
+  }
+
+  const approveUsdc = () => {
+    if (!usdcPriceValue) return
+    writeApprove({
+      address: CONTRACT_ADDRESSES.USDC,
+      abi: USDC_ABI,
+      functionName: 'approve',
+      args: [CONTRACT_ADDRESSES.CARTON, usdcPriceValue],
+    })
+  }
+
+  const handleBuyClick = () => {
+    if (currency === 'ETH') {
+      setLastPurchaseCurrency('ETH')
+      buyCartonWithEth()
+    } else {
+      setLastPurchaseCurrency('USDC')
+      buyCartonWithUsdc()
+    }
+  }
+
   const {data: cartonsUser, refetch: refetchCartonsUser} = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'getUserTokens',
-    args: [userAddress],
+    args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: !!userAddress && isConnected,
+      enabled: Boolean(normalizedAddress) && isConnected,
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
     }
@@ -110,28 +283,49 @@ function HomePage() {
     }
   } 
 
-  const buyButtonText = () => {
-    if (!isConnected) return "Connect Wallet to Buy"
-    if (isPending) return "Buying..."
-    return "Buy Carton"
-  }
+  useEffect(() => {
+    if (purchaseHash) {
+      toast.info('Waiting for purchase confirmation...', { id: purchaseHash })
+    }
+  }, [purchaseHash])
 
   useEffect(() => {
-    toast.info("Waiting for transaction to be confirmed...", {
-      id: hash
-    })
-  }, [hash])
+    if (isPurchaseSuccess && purchaseHash) {
+      toast.success(
+        lastPurchaseCurrency === 'ETH'
+          ? 'Carton purchased with ETH! 🎫'
+          : 'Carton purchased with USDC! 🎫',
+        { id: purchaseHash },
+      )
+      refetchCartonsUser()
+      refetchAllowance()
+    }
+  }, [isPurchaseSuccess, purchaseHash, lastPurchaseCurrency, refetchCartonsUser, refetchAllowance])
 
   useEffect(() => {
-    if (isSuccess) {
-      toast.success("Carton purchased successfully! 🎫", {
-        id: hash
-      })
+    if (purchaseError) {
+      toast.error(`Transaction failed: ${purchaseError.message}`)
     }
-    if (error) {
-      toast.error("Transaction failed: " + error.message)
+  }, [purchaseError])
+
+  useEffect(() => {
+    if (approveHash) {
+      toast.info('Waiting for approval confirmation...', { id: approveHash })
     }
-  }, [isSuccess, error, hash])
+  }, [approveHash])
+
+  useEffect(() => {
+    if (isApproveSuccess && approveHash) {
+      toast.success('USDC approval confirmed. You can now buy with USDC.', { id: approveHash })
+      refetchAllowance()
+    }
+  }, [isApproveSuccess, approveHash, refetchAllowance])
+
+  useEffect(() => {
+    if (approveError) {
+      toast.error(`Approval failed: ${approveError.message}`)
+    }
+  }, [approveError])
 
   return (
     <>
@@ -149,17 +343,45 @@ function HomePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="text-2xl font-bold text-green-600">
-                {priceLoading
-                  ? "Loading..."
-                  : cartonPrice
-                    ? `${formatEther(cartonPrice)} ETH`
-                    : "Price not set"
-                }
+              <div className="flex gap-2">
+                <Button
+                  variant={currency === 'ETH' ? 'default' : 'outline'}
+                  onClick={() => setCurrency('ETH')}
+                  className="flex-1"
+                >
+                  Pay in ETH
+                </Button>
+                <Button
+                  variant={currency === 'USDC' ? 'default' : 'outline'}
+                  onClick={() => setCurrency('USDC')}
+                  className="flex-1"
+                >
+                  Pay in USDC
+                </Button>
               </div>
-              <Button className="w-full" disabled={!isConnected || !cartonPrice} onClick={buyCarton}>
+              <div className="text-2xl font-bold text-green-600">{priceDisplay}</div>
+              {currency === 'USDC' && needsApproval && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={!isConnected || isApproving || usdcPriceValue === 0n}
+                  onClick={approveUsdc}
+                >
+                  {isApproving ? 'Approving...' : 'Approve USDC'}
+                </Button>
+              )}
+              <Button
+                className="w-full"
+                disabled={!isConnected || !canBuy || isBuying}
+                onClick={handleBuyClick}
+              >
                 {buyButtonText()}
               </Button>
+              {currency === 'USDC' && needsApproval && (
+                <p className="text-xs text-gray-500">
+                  Approval required only once per token. After approving you can buy instantly.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -232,30 +454,35 @@ function HomePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>1st Place (50%)</span>
-                <span className="font-bold">-- ETH</span>
+            {tournamentId === 0n ? (
+              <p className="text-sm text-gray-500">
+                Configure an active tournament in the Carton contract to see live prize pools.
+              </p>
+            ) : (
+              <div className="space-y-6">
+                {prizeSections.map((section) => (
+                  <div key={section.asset} className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>{section.asset} Pool</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatAssetValue(section.total, section.asset)}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {POSITION_META.map((meta, idx) => (
+                        <div className="flex justify-between" key={`${section.asset}-${meta.position}`}>
+                          <span>{meta.label}</span>
+                          <span className="font-bold">{formatAssetValue(section.values[idx], section.asset)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Live amounts update with each purchase and lock in once the tournament is closed.
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between">
-                <span>2nd Place (30%)</span>
-                <span className="font-bold">-- ETH</span>
-              </div>
-              <div className="flex justify-between">
-                <span>3rd Place (15%)</span>
-                <span className="font-bold">-- ETH</span>
-              </div>
-              <div className="flex justify-between">
-                <span>4th Place (5%)</span>
-                <span className="font-bold">-- ETH</span>
-              </div>
-              <div className="border-t pt-2 mt-4">
-                <div className="flex justify-between font-bold">
-                  <span>Total Pool</span>
-                  <span>0.0 ETH</span>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
