@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
-import { http, createConfig } from 'wagmi'
+import { http } from 'wagmi'
 import type { Chain } from 'viem'
 
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo'
@@ -15,14 +15,12 @@ const anvilChain: Chain = {
   },
 }
 
-export const config = createConfig(
-  getDefaultConfig({
-    appName: 'ProDefi',
-    projectId,
-    transports: {
-      [anvilChain.id]: http(anvilChain.rpcUrls.default.http[0]!),
-    },
-    chains: [anvilChain],
-    ssr: false,
-  }),
-)
+export const config = getDefaultConfig({
+  appName: 'ProDefi',
+  projectId,
+  transports: {
+    [anvilChain.id]: http(anvilChain.rpcUrls.default.http[0]!),
+  },
+  chains: [anvilChain],
+  ssr: false,
+})

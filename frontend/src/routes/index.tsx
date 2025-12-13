@@ -501,10 +501,15 @@ function HomePage() {
               </div>
               <div className="flex justify-between">
                 <span>Contracts:</span>
-                <span className="text-yellow-600">Not Deployed</span>
+                <span className="text-green-700 font-mono">Configured</span>
               </div>
-              <div className="text-xs text-gray-500 mt-4">
-                ⚠️ Make sure to run `anvil` and deploy contracts first
+              <div className="text-xs text-gray-500 mt-4 space-y-1">
+                <div className="font-semibold">Addresses (from frontend/.env):</div>
+                <div className="font-mono break-all">Carton: {CONTRACT_ADDRESSES.CARTON}</div>
+                <div className="font-mono break-all">Predictions: {CONTRACT_ADDRESSES.PREDICTIONS}</div>
+                <div className="font-mono break-all">Treasury: {CONTRACT_ADDRESSES.TREASURY}</div>
+                <div className="font-mono break-all">USDC: {CONTRACT_ADDRESSES.USDC}</div>
+                <div>Run `anvil` on 127.0.0.1:8545 to interact with these deployments.</div>
               </div>
             </div>
           </CardContent>

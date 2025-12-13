@@ -10,6 +10,11 @@ contract Predictions is Ownable {
     // Anchor for off-chain teams metadata (id -> name mapping)
     bytes32 public teamsHash;
     bool public teamsHashFrozen;
+    // Mapping teamId => groupId to validate fixtures by group (e.g. World Cup groups)
+    mapping(uint8 => uint8) public teamGroup;
+    bytes32 public teamGroupsHash;
+    bool public teamGroupsSet;
+    bool public teamGroupsFrozen;
 
     event TeamsHashUpdated(bytes32 oldHash, bytes32 newHash);
     event TeamsHashFrozen();
@@ -94,6 +99,8 @@ contract Predictions is Ownable {
 
     // Event for when positions are updated
     event PositionsUpdated(uint256[] positions);
+    event TeamGroupsSet(bytes32 groupsHash);
+    event TeamGroupsFrozen();
 
     // Getter function to obtain positions
     function getPositions() public view returns (uint256[] memory) {
@@ -103,6 +110,50 @@ contract Predictions is Ownable {
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
         cartones = IERC1155(_cartones);
+    }
+
+    struct TeamGroup {
+        uint8 teamId;
+        uint8 groupId;
+    }
+
+    /// @notice Configure team -> group mapping to validate fixtures
+    /// @dev Can be called multiple times before predictions start; frozen via freezeTeamGroups
+    function setTeamGroups(TeamGroup[] calldata groups) external onlyOwner {
+        require(!predictionsStarted, "Predictions already started");
+        require(!teamGroupsFrozen, "Team groups frozen");
+        require(groups.length > 0, "No groups provided");
+
+        // Reset previous mapping to allow corrections before freeze
+        for (uint8 i = 1; i <= MAX_TEAM_ID; i++) {
+            if (teamGroup[i] != 0) {
+                teamGroup[i] = 0;
+            }
+        }
+
+        bool[33] memory seenTeam; // MAX_TEAM_ID is 32, index 0 unused
+        bytes32 hash;
+        for (uint256 i = 0; i < groups.length; i++) {
+            uint8 teamId = groups[i].teamId;
+            uint8 groupId = groups[i].groupId;
+            require(teamId > 0 && teamId <= MAX_TEAM_ID, "Invalid teamId");
+            require(groupId > 0, "Invalid groupId");
+            require(!seenTeam[teamId], "Duplicate teamId");
+            seenTeam[teamId] = true;
+
+            teamGroup[teamId] = groupId;
+            hash = keccak256(abi.encodePacked(hash, teamId, groupId));
+        }
+
+        teamGroupsHash = hash;
+        teamGroupsSet = true;
+        emit TeamGroupsSet(hash);
+    }
+
+    function freezeTeamGroups() external onlyOwner {
+        require(!teamGroupsFrozen, "teamGroups already frozen");
+        teamGroupsFrozen = true;
+        emit TeamGroupsFrozen();
     }
 
     // Allow owner to set teams metadata hash; can be frozen
@@ -173,13 +224,32 @@ contract Predictions is Ownable {
         require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!used[tokenId], "Prediction already submitted");
         require(_prediction.length == totalGames, "Must submit predictions for all games");
+        require(teamGroupsSet, "Team groups not set");
+
+        // Track used pairs (teamA, teamB) to avoid duplicates in the same submission
+        bool[33][33] memory usedPair; // MAX_TEAM_ID is 32, index 0 unused
 
         // Verify that team IDs are valid
         for (uint256 i = 0; i < _prediction.length; i++) {
-            require(_prediction[i].team1 < MAX_TEAM_ID, "Invalid team1 ID");
-            require(_prediction[i].team2 < MAX_TEAM_ID, "Invalid team2 ID");
+            require(_prediction[i].team1 > 0 && _prediction[i].team1 <= MAX_TEAM_ID, "Invalid team1 ID");
+            require(_prediction[i].team2 > 0 && _prediction[i].team2 <= MAX_TEAM_ID, "Invalid team2 ID");
             require(_prediction[i].id <= totalGames, "Invalid game ID");
             require(!games[_prediction[i].id].set, "Cannot predict after results are set");
+
+            uint8 group1 = teamGroup[_prediction[i].team1];
+            uint8 group2 = teamGroup[_prediction[i].team2];
+            require(group1 != 0 && group2 != 0, "Team group not configured");
+            require(group1 == group2, "Teams must belong to same group");
+
+            // Normalize pair order to detect duplicates (A,B) == (B,A)
+            uint8 minTeam = _prediction[i].team1 < _prediction[i].team2
+                ? _prediction[i].team1
+                : _prediction[i].team2;
+            uint8 maxTeam = _prediction[i].team1 < _prediction[i].team2
+                ? _prediction[i].team2
+                : _prediction[i].team1;
+            require(!usedPair[minTeam][maxTeam], "Duplicate pairing");
+            usedPair[minTeam][maxTeam] = true;
         }
 
         used[tokenId] = true;

@@ -198,7 +198,9 @@ This file contains current status, next tasks, priorities, and session planning.
 ## Notes for Tomorrow
 
 ### Immediate Focus
-**Start with `depositFromSales()` implementation** - it's the simplest function and builds foundation for everything else.
+**Frontend multi-activo y validación de fixture por grupos**
+- Front: completar UI multi-activo (ETH/USDC) y prize pools; en admin dev ya se puede setear/congelar team groups y teams hash.
+- Back: team groups on-chain con hash + freeze ya implementado; las predicciones validan grupos/pares únicos.
 
 ### Questions to Consider
 1. What percentage of Carton sales should go to Treasury?

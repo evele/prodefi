@@ -86,6 +86,27 @@ export const PREDICTIONS_ABI = [
   },
   {
     type: 'function',
+    name: 'teamGroupsHash',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'teamGroupsSet',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'teamGroupsFrozen',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'totalGames',
     stateMutability: 'view',
     inputs: [],
@@ -181,6 +202,29 @@ export const PREDICTIONS_ABI = [
         ],
       },
     ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setTeamGroups',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'groups',
+        type: 'tuple[]',
+        components: [
+          { name: 'teamId', type: 'uint8' },
+          { name: 'groupId', type: 'uint8' },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'freezeTeamGroups',
+    stateMutability: 'nonpayable',
+    inputs: [],
     outputs: [],
   },
 ] as const satisfies Abi

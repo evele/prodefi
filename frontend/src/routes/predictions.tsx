@@ -8,7 +8,7 @@ import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
-import { teams, computeTeamsHash, teamsById } from '../lib/teams'
+import { teams, computeTeamsHash, computeTeamGroupsHash, teamsById } from '../lib/teams'
 import type { Game } from '../lib/types'
 import { GameCard } from '../components/GameCard'
 
@@ -186,15 +186,20 @@ function PredictionsPage() {
     abi: PREDICTIONS_ABI,
     functionName: 'teamsHash',
   })
+  const { data: onchainTeamGroupsHash } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'teamGroupsHash',
+  })
 
   const [teamsHashStatus, setTeamsHashStatus] = useState<'unknown' | 'match' | 'mismatch' | 'unset'>('unknown')
+  const [groupsHashStatus, setGroupsHashStatus] = useState<'unknown' | 'match' | 'mismatch' | 'unset'>('unknown')
   useEffect(() => {
     const run = async () => {
       try {
         if (!onchainTeamsHash) { setTeamsHashStatus('unset'); return }
         if (!teams.length) { setTeamsHashStatus('unknown'); return }
         const local = await computeTeamsHash(teams)
-        console.log("TH",local, onchainTeamsHash)
         setTeamsHashStatus(local.toLowerCase() === (onchainTeamsHash as string).toLowerCase() ? 'match' : 'mismatch')
       } catch {
         setTeamsHashStatus('unknown')
@@ -202,6 +207,20 @@ function PredictionsPage() {
     }
     run()
   }, [onchainTeamsHash])
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        if (!onchainTeamGroupsHash) { setGroupsHashStatus('unset'); return }
+        if (!teams.length) { setGroupsHashStatus('unknown'); return }
+        const local = await computeTeamGroupsHash(teams)
+        setGroupsHashStatus(local.toLowerCase() === (onchainTeamGroupsHash as string).toLowerCase() ? 'match' : 'mismatch')
+      } catch {
+        setGroupsHashStatus('unknown')
+      }
+    }
+    run()
+  }, [onchainTeamGroupsHash])
 
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
@@ -244,6 +263,20 @@ function PredictionsPage() {
             {teamsHashStatus === 'match' && 'Teams metadata verified'}
             {teamsHashStatus === 'mismatch' && 'Teams metadata mismatch — check your list'}
             {teamsHashStatus === 'unset' && 'On-chain teams hash not set'}
+          </div>
+        )}
+        {/* Team groups hash verification banner */}
+        {groupsHashStatus !== 'unknown' && (
+          <div className={`mt-2 p-2 rounded text-xs border ${
+            groupsHashStatus === 'match'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : groupsHashStatus === 'mismatch'
+              ? 'bg-red-50 border-red-200 text-red-700'
+              : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+          }`}>
+            {groupsHashStatus === 'match' && 'Team groups verified'}
+            {groupsHashStatus === 'mismatch' && 'Team groups mismatch — check your list'}
+            {groupsHashStatus === 'unset' && 'On-chain team groups hash not set'}
           </div>
         )}
         {/* Deadline banner */}

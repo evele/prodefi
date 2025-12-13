@@ -48,6 +48,7 @@ abstract contract BaseTest is Test {
     function setUp() public virtual {
         _deployContracts();
         _setupRoles();
+        _setDefaultTeamGroups();
         _setDefaultDeadline();
     }
 
@@ -66,6 +67,20 @@ abstract contract BaseTest is Test {
     function _setDefaultDeadline() internal {
         uint256 deadline = block.timestamp + DEFAULT_DEADLINE_OFFSET;
         predictions.setSubmissionDeadline(deadline);
+    }
+
+    function _setDefaultTeamGroups() internal {
+        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](8);
+        // Pair teams into groups to allow valid fixtures (1-2, 3-4, 5-6, 7-8)
+        groups[0] = Predictions.TeamGroup({teamId: TEAM_1, groupId: 1});
+        groups[1] = Predictions.TeamGroup({teamId: TEAM_2, groupId: 1});
+        groups[2] = Predictions.TeamGroup({teamId: TEAM_3, groupId: 2});
+        groups[3] = Predictions.TeamGroup({teamId: TEAM_4, groupId: 2});
+        groups[4] = Predictions.TeamGroup({teamId: TEAM_5, groupId: 3});
+        groups[5] = Predictions.TeamGroup({teamId: TEAM_6, groupId: 3});
+        groups[6] = Predictions.TeamGroup({teamId: TEAM_7, groupId: 4});
+        groups[7] = Predictions.TeamGroup({teamId: TEAM_8, groupId: 4});
+        predictions.setTeamGroups(groups);
     }
 
     // ========== CARTON HELPERS ==========

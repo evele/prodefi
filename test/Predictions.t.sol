@@ -23,6 +23,18 @@ contract PredictionsTest is Test {
         // 4) Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
         preds.setSubmissionDeadline(deadline);
+
+        // 5) Configure team groups (pairs) so submissions validate group consistency
+        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](8);
+        groups[0] = Predictions.TeamGroup({teamId: 1, groupId: 1});
+        groups[1] = Predictions.TeamGroup({teamId: 2, groupId: 1});
+        groups[2] = Predictions.TeamGroup({teamId: 3, groupId: 2});
+        groups[3] = Predictions.TeamGroup({teamId: 4, groupId: 2});
+        groups[4] = Predictions.TeamGroup({teamId: 5, groupId: 3});
+        groups[5] = Predictions.TeamGroup({teamId: 6, groupId: 3});
+        groups[6] = Predictions.TeamGroup({teamId: 7, groupId: 4});
+        groups[7] = Predictions.TeamGroup({teamId: 8, groupId: 4});
+        preds.setTeamGroups(groups);
     }
 
     function testSubmitAndReadPicks() public {
@@ -181,6 +193,9 @@ contract PredictionsTest is Test {
         // Intentar hacer predicción después de que se establezcan resultados
         Predictions.Game[] memory arr5 = new Predictions.Game[](4);
         arr5[0] = Predictions.Game({id: 1, team1: 1, team2: 2, result: [uint8(0), uint8(1)], set: false});
+        arr5[1] = Predictions.Game({id: 2, team1: 3, team2: 4, result: [uint8(0), uint8(0)], set: false});
+        arr5[2] = Predictions.Game({id: 3, team1: 5, team2: 6, result: [uint8(0), uint8(0)], set: false});
+        arr5[3] = Predictions.Game({id: 4, team1: 7, team2: 8, result: [uint8(0), uint8(0)], set: false});
         vm.prank(user);
         vm.expectRevert("Cannot predict after results are set");
         preds.submitPrediction(TOKEN_ID, arr5);
