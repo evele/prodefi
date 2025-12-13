@@ -242,12 +242,8 @@ contract Predictions is Ownable {
             require(group1 == group2, "Teams must belong to same group");
 
             // Normalize pair order to detect duplicates (A,B) == (B,A)
-            uint8 minTeam = _prediction[i].team1 < _prediction[i].team2
-                ? _prediction[i].team1
-                : _prediction[i].team2;
-            uint8 maxTeam = _prediction[i].team1 < _prediction[i].team2
-                ? _prediction[i].team2
-                : _prediction[i].team1;
+            uint8 minTeam = _prediction[i].team1 < _prediction[i].team2 ? _prediction[i].team1 : _prediction[i].team2;
+            uint8 maxTeam = _prediction[i].team1 < _prediction[i].team2 ? _prediction[i].team2 : _prediction[i].team1;
             require(!usedPair[minTeam][maxTeam], "Duplicate pairing");
             usedPair[minTeam][maxTeam] = true;
         }
