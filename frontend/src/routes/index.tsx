@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { TokenStatusBadge } from '../components/TokenStatusBadge'
+import { useUserBalance } from '../hooks/useBalance'
 
 
 export const Route = createFileRoute('/')({
@@ -27,6 +28,7 @@ function HomePage() {
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
   const [lastPurchaseCurrency, setLastPurchaseCurrency] = useState<'ETH' | 'USDC'>('ETH')
+  const { eth: ethBalance, usdc: usdcBalance } = useUserBalance()
 
   const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -112,6 +114,14 @@ function HomePage() {
     currency === 'ETH'
       ? Boolean(cartonPrice)
       : usdcPriceValue > 0n && !needsApproval
+
+  const balanceDisplay = () => {
+    if (!isConnected) return null
+    if (currency === 'ETH') {
+      return ethBalance.isLoading ? 'Loading balance...' : `${ethBalance.amount} ${ethBalance.symbol}`
+    }
+    return usdcBalance.isLoading ? 'Loading balance...' : `${usdcBalance.amount} ${usdcBalance.symbol}`
+  }
 
   const { data: ethPrizePool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
@@ -360,6 +370,12 @@ function HomePage() {
                 </Button>
               </div>
               <div className="text-2xl font-bold text-green-600">{priceDisplay}</div>
+              {isConnected && (
+                <div className="text-xs text-gray-600">Balance: {balanceDisplay()}</div>
+              )}
+              <div className="text-xs text-gray-500">
+                Dev pricing only: ETH and USDC are fixed and not pegged to USD.
+              </div>
               {currency === 'USDC' && needsApproval && (
                 <Button
                   variant="outline"
