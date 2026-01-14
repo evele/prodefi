@@ -199,8 +199,9 @@ This file contains current status, next tasks, priorities, and session planning.
 
 ### Immediate Focus
 **Frontend multi-activo y validación de fixture por grupos**
-- Front: completar UI multi-activo (ETH/USDC) y prize pools; en admin dev ya se puede setear/congelar team groups y teams hash.
+- Front: validar UI multi-activo (ETH/USDC) y prize pools; en admin dev ya se puede setear/congelar team groups y teams hash.
 - Back: team groups on-chain con hash + freeze ya implementado; las predicciones validan grupos/pares únicos.
+- UI: agregar flags de países a la interfaz (definir fuente de assets y mapear por teamId/countryCode).
 
 ### Questions to Consider
 1. What percentage of Carton sales should go to Treasury?
@@ -479,7 +480,7 @@ Done criteria:
 - Predictions: 19 tests
 - ERC20Integration: 3 tests (new)
 
-### Current Status: Ready for Frontend Implementation
+### Current Status: Frontend Multi-Asset UI Implemented
 
 **✅ Backend Complete:**
 - Multi-asset purchase flow working (ETH + USDC)
@@ -487,20 +488,20 @@ Done criteria:
 - Deploy automation complete
 - Frontend config updated (addresses + ABIs)
 
-**🚧 Next: Frontend Multi-Asset Purchase UI**
+**✅ Frontend Multi-Asset Purchase UI**
 
-User needs to implement the ERC20 purchase flow in the frontend. This is a learning task following the guidance workflow.
+Frontend now includes the ERC20 purchase flow and multi-asset prize pool display.
 
 **Key Requirements:**
 
-1. **Currency Selector** - UI to choose between ETH and USDC
-2. **ERC20 Approve Flow** - Two-step transaction process:
+1. **Currency Selector** - UI to choose between ETH and USDC ✅
+2. **ERC20 Approve Flow** - Two-step transaction process ✅
    - Check allowance: `usdc.allowance(user, CARTON_ADDRESS)`
    - If insufficient: call `usdc.approve(CARTON_ADDRESS, amount)`
    - Then: call `carton.buyCartonWithToken(USDC_ADDRESS)`
-3. **Balance Display** - Show USDC balance alongside ETH
-4. **Prize Pool Display** - Read and show both ETH and USDC prize pools from Treasury
-5. **State Management** - Handle multi-step transaction flow with proper loading states
+3. **Balance Display** - Show USDC balance alongside ETH ✅
+4. **Prize Pool Display** - Read and show both ETH and USDC prize pools from Treasury ✅
+5. **State Management** - Handle multi-step transaction flow with proper loading states ✅
 
 **Technical References:**
 - Current ETH flow: `frontend/src/routes/index.tsx:33-43`
