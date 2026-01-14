@@ -43,6 +43,7 @@
 - Use `DEVELOPMENT_PLAN.md` for active tasks, priorities, and session planning.
 - Do not duplicate content across files; update the canonical source instead.
 - Keep this AGENTS.md focused on contributor workflow; propose process updates via PR referencing those files.
+- English practice: When the user writes in English, interpret the intent and point out at most 1–2 key grammar/syntax errors, excluding minor punctuation fixes; avoid full rewrites unless requested.
 
 ## Notes (Dev-only UI & Lookups)
 - Admin page exists only for development at `/admin/dev`; the navbar link is rendered only when `import.meta.env.DEV` is true. Do not expose/admin-link in production builds.
