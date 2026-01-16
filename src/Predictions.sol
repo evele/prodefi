@@ -24,7 +24,7 @@ contract Predictions is Ownable {
     uint8 immutable LOCAL = 0;
     uint8 immutable EMPATE = 1;
     uint8 immutable VISITANTE = 2;
-    uint8 immutable MAX_TEAM_ID = 32; // Maximum allowed team ID
+    uint8 immutable MAX_TEAM_ID = 48; // Maximum allowed team ID
     uint8 immutable MAX_WINNERS = 4; // Maximum number of winner teams to predict
     uint8 constant POINTS_FIRST = 19; // Points for guessing first place
     uint8 constant POINTS_SECOND = 16; // Points for guessing second place

@@ -8,9 +8,63 @@ import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
-import { teams, computeTeamsHash, computeTeamGroupsHash, teamsById } from '../lib/teams'
+import { computeTeamsHash, computeTeamGroupsHash, teams2026 } from '../lib/teams'
+import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
 import type { Game } from '../lib/types'
 import { GameCard } from '../components/GameCard'
+
+const PRIMARY_GROUP_TEAM_IDS = teams2026Config
+  .filter((team) => team.groupId === PRIMARY_GROUP_ID)
+  .map((team) => team.id)
+  .sort((a, b) => a - b)
+
+const buildRoundRobinGames = (teamIds: number[]): Game[] => {
+  const gamesList: Game[] = []
+  if (teamIds.length === 4) {
+    const rounds = [
+      [
+        [teamIds[0], teamIds[1]],
+        [teamIds[2], teamIds[3]],
+      ],
+      [
+        [teamIds[0], teamIds[2]],
+        [teamIds[1], teamIds[3]],
+      ],
+      [
+        [teamIds[0], teamIds[3]],
+        [teamIds[1], teamIds[2]],
+      ],
+    ]
+    let gameId = 1
+    for (const round of rounds) {
+      for (const match of round) {
+        gamesList.push({
+          id: gameId,
+          team1: match[0],
+          team2: match[1],
+          result: [0, 0],
+          set: false,
+        })
+        gameId += 1
+      }
+    }
+    return gamesList
+  }
+  let gameId = 1
+  for (let i = 0; i < teamIds.length; i += 1) {
+    for (let j = i + 1; j < teamIds.length; j += 1) {
+      gamesList.push({
+        id: gameId,
+        team1: teamIds[i],
+        team2: teamIds[j],
+        result: [0, 0],
+        set: false,
+      })
+      gameId += 1
+    }
+  }
+  return gamesList
+}
 
 export const Route = createFileRoute('/predictions')({
   component: PredictionsPage,
@@ -25,16 +79,7 @@ function PredictionsPage() {
   // Normalize tokenId once as bigint for on-chain reads
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
 
-  const TEAMS = [1,2,3,4]
-
-  const [games, setGames] = useState<Game[]>([
-    { id: 1, team1: TEAMS[0], team2: TEAMS[1],result: [0,0], set: false },
-    { id: 2, team1: TEAMS[2], team2: TEAMS[3],result: [0,0], set: false }, 
-    { id: 3, team1: TEAMS[0], team2: TEAMS[2],result: [0,0], set: false },
-    { id: 4, team1: TEAMS[1], team2: TEAMS[3],result: [0,0], set: false }, 
-    { id: 5, team1: TEAMS[0], team2: TEAMS[3],result: [0,0], set: false },
-    { id: 6, team1: TEAMS[1], team2: TEAMS[2],result: [0,0], set: false }, 
-  ])
+  const [games, setGames] = useState<Game[]>(() => buildRoundRobinGames(PRIMARY_GROUP_TEAM_IDS))
 
   const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0,0,0,0])
 
@@ -170,6 +215,12 @@ function PredictionsPage() {
     functionName: 'submissionDeadline',
     query: { refetchInterval: 10000, refetchOnWindowFocus: true },
   })
+  const { data: totalGames } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'totalGames',
+    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
+  })
 
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
@@ -198,8 +249,8 @@ function PredictionsPage() {
     const run = async () => {
       try {
         if (!onchainTeamsHash) { setTeamsHashStatus('unset'); return }
-        if (!teams.length) { setTeamsHashStatus('unknown'); return }
-        const local = await computeTeamsHash(teams)
+        if (!teams2026.length) { setTeamsHashStatus('unknown'); return }
+        const local = await computeTeamsHash(teams2026)
         setTeamsHashStatus(local.toLowerCase() === (onchainTeamsHash as string).toLowerCase() ? 'match' : 'mismatch')
       } catch {
         setTeamsHashStatus('unknown')
@@ -212,8 +263,9 @@ function PredictionsPage() {
     const run = async () => {
       try {
         if (!onchainTeamGroupsHash) { setGroupsHashStatus('unset'); return }
-        if (!teams.length) { setGroupsHashStatus('unknown'); return }
-        const local = await computeTeamGroupsHash(teams)
+        const primaryGroupConfig = teams2026Config.filter((team) => team.groupId === PRIMARY_GROUP_ID)
+        if (!primaryGroupConfig.length) { setGroupsHashStatus('unknown'); return }
+        const local = await computeTeamGroupsHash(primaryGroupConfig)
         setGroupsHashStatus(local.toLowerCase() === (onchainTeamGroupsHash as string).toLowerCase() ? 'match' : 'mismatch')
       } catch {
         setGroupsHashStatus('unknown')
@@ -221,6 +273,10 @@ function PredictionsPage() {
     }
     run()
   }, [onchainTeamGroupsHash])
+
+  const totalGamesMismatch = totalGames !== undefined && Number(totalGames) !== games.length
+  const isGroupsHashValid = groupsHashStatus === 'match'
+  const canSubmitGames = !isExpired && !isPending && !isConfirming && isGroupsHashValid && !totalGamesMismatch
 
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
@@ -279,6 +335,11 @@ function PredictionsPage() {
             {groupsHashStatus === 'unset' && 'On-chain team groups hash not set'}
           </div>
         )}
+        {totalGamesMismatch && (
+          <div className="mt-2 p-2 rounded text-xs border bg-red-50 border-red-200 text-red-700">
+            Total games mismatch — on-chain expects {String(totalGames)}, UI has {games.length}.
+          </div>
+        )}
         {/* Deadline banner */}
         <div
           className={`mt-4 p-3 rounded-lg border text-sm ${
@@ -325,7 +386,7 @@ function PredictionsPage() {
               ⚽ Game Predictions
             </CardTitle>
             <CardDescription>
-              Predict the scores for 4 key tournament games
+              Predict the scores for {games.length} group-stage games
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -339,7 +400,7 @@ function PredictionsPage() {
               {/* Más juegos... */}
               <Button 
                 className="w-full" 
-                disabled={isExpired || isPending || isConfirming}
+                disabled={!canSubmitGames}
                 onClick={submitPrediction}
               >
                 {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : 'Submit Game Predictions'}
@@ -360,10 +421,10 @@ function PredictionsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <TeamWinnerSelector label="1st Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={1} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
-              <TeamWinnerSelector label="2nd Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={2} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
-              <TeamWinnerSelector label="3rd Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={3} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
-              <TeamWinnerSelector label="4th Place" teams={teams} selectedTeams={winnerPrediction} currentPosition={4} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
+              <TeamWinnerSelector label="1st Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
+              <TeamWinnerSelector label="2nd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
+              <TeamWinnerSelector label="3rd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
+              <TeamWinnerSelector label="4th Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
               <Button className="w-full" disabled={isExpired}>
                 Submit Winner Predictions
               </Button>

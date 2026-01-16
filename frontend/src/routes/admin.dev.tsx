@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { toast } from 'sonner'
-import { teams } from '../lib/teams'
+import { computeTeamsHash, teams2026 } from '../lib/teams'
+import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
 
 export const Route = createFileRoute('/admin/dev')({
   component: AdminPage,
@@ -97,9 +98,17 @@ function AdminPage() {
 
   const [teamsHash, setTeamsHashLocal] = useState<string>('')
   useEffect(() => {
-    if (onchainTeamsHash && (onchainTeamsHash as string) !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+    const zero = '0x0000000000000000000000000000000000000000000000000000000000000000'
+    if (onchainTeamsHash && (onchainTeamsHash as string) !== zero) {
       setTeamsHashLocal(onchainTeamsHash as string)
+      return
     }
+
+    const run = async () => {
+      const local = await computeTeamsHash(teams2026)
+      setTeamsHashLocal(local)
+    }
+    run()
   }, [onchainTeamsHash])
   const [teamGroupsHash, setTeamGroupsHashLocal] = useState<string>('')
   useEffect(() => {
@@ -108,14 +117,26 @@ function AdminPage() {
     }
   }, [onchainTeamGroupsHash])
 
-  const { writeContract, data: txHash, isPending } = useWriteContract()
-  const { isLoading: isMining, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
+  const { isLoading: isMining, isSuccess, error: txError } = useWaitForTransactionReceipt({ hash: txHash })
 
   useEffect(() => {
     if (isSuccess) {
       toast.success('Transaction confirmed')
     }
   }, [isSuccess])
+  useEffect(() => {
+    if (writeError) {
+      console.error('Write error:', writeError)
+      toast.error('Transaction rejected')
+    }
+  }, [writeError])
+  useEffect(() => {
+    if (txError) {
+      console.error('Transaction error:', txError)
+      toast.error('Transaction failed')
+    }
+  }, [txError])
 
   const submitTeamsHash = () => {
     if (!teamsHash || !teamsHash.startsWith('0x') || teamsHash.length !== 66) {
@@ -135,11 +156,12 @@ function AdminPage() {
   }
 
   const setTeamGroups = () => {
-    // Build groups from local teams list: convert group letter to numeric bucket (A=1, B=2, ...)
-    const payload = teams.map((t) => ({
+    const payload = teams2026Config
+      .filter((t) => t.groupId === PRIMARY_GROUP_ID)
+      .map((t) => ({
       teamId: t.id,
-      groupId: t.group.toUpperCase().charCodeAt(0) - 64,
-    }))
+      groupId: t.groupId,
+      }))
     writeContract({
       address: predictions,
       abi: PREDICTIONS_ABI,
@@ -217,7 +239,7 @@ function AdminPage() {
             </div>
 
             <div>
-              <div className="mb-2 font-medium">Team Groups (from local teams list)</div>
+              <div className="mb-2 font-medium">Team Groups (from teams2026 config)</div>
               <div className="text-xs text-gray-600 mb-1">
                 On-chain hash: {onchainTeamGroupsHash ? (onchainTeamGroupsHash as string) : '—'} • Set: {String(Boolean(teamGroupsSet))} • Frozen: {String(Boolean(teamGroupsFrozen))}
               </div>
@@ -237,7 +259,7 @@ function AdminPage() {
                 </Button>
               </div>
               <div className="text-xs text-gray-600 mt-1">
-                Uses the local teams list (id+group) to call setTeamGroups on-chain. You can update before freezing; freeze to lock.
+                Uses Group A from teams2026 config (id+groupId) to call setTeamGroups on-chain. You can update before freezing; freeze to lock.
               </div>
             </div>
 
