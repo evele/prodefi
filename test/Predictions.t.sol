@@ -173,7 +173,7 @@ contract PredictionsTest is Test {
         Predictions.Game[] memory arr4 = new Predictions.Game[](4);
         arr4[0] = Predictions.Game({
             id: 1,
-            team1: 33, // ID de equipo inválido
+            team1: 50, // ID de equipo inválido
             team2: 2,
             result: [uint8(0), uint8(1)],
             set: false
@@ -239,7 +239,7 @@ contract PredictionsTest is Test {
         // Intentar predecir equipo inválido
         vm.prank(user);
         vm.expectRevert("Invalid team ID");
-        preds.predictWinners(TOKEN_ID, [33, 2, 3, 4]);
+        preds.predictWinners(TOKEN_ID, [50, 2, 3, 4]);
     }
 
     function testWinnerPrediction_DuplicateTeams() public setup {
