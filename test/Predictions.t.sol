@@ -168,12 +168,12 @@ contract PredictionsTest is Test {
         vm.expectRevert("Must submit predictions for all games");
         preds.submitPrediction(TOKEN_ID, arr3);
 
-        // 11) Intentar enviar un ID de equipo inválido
+        // 11) Intentar enviar un ID de equipo inválido (> MAX_TEAM_ID)
 
         Predictions.Game[] memory arr4 = new Predictions.Game[](4);
         arr4[0] = Predictions.Game({
             id: 1,
-            team1: 33, // ID de equipo inválido
+            team1: 49, // ID de equipo inválido (MAX_TEAM_ID = 48)
             team2: 2,
             result: [uint8(0), uint8(1)],
             set: false
@@ -236,10 +236,10 @@ contract PredictionsTest is Test {
     }
 
     function testWinnerPrediction_InvalidTeam() public setup {
-        // Intentar predecir equipo inválido
+        // Intentar predecir equipo inválido (>= MAX_TEAM_ID)
         vm.prank(user);
         vm.expectRevert("Invalid team ID");
-        preds.predictWinners(TOKEN_ID, [33, 2, 3, 4]);
+        preds.predictWinners(TOKEN_ID, [49, 2, 3, 4]);
     }
 
     function testWinnerPrediction_DuplicateTeams() public setup {
@@ -371,5 +371,86 @@ contract PredictionsTest is Test {
         uint8[2] memory result = preds.getGameResults(1);
         assertEq(result[0], 2, "Team1 goals should be 2");
         assertEq(result[1], 1, "Team2 goals should be 1");
+    }
+
+    // ========== Team ID > 32 tests (array sizing fix) ==========
+
+    function testTeamGroups_HighTeamIds() public {
+        // Deploy fresh contracts to avoid "Predictions already started" guard
+        Carton cart2 = new Carton(address(this), address(this), address(this));
+        Predictions preds2 = new Predictions(address(cart2));
+        preds2.setSubmissionDeadline(block.timestamp + 1 days);
+
+        // Configure groups with team IDs > 32
+        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](4);
+        groups[0] = Predictions.TeamGroup({teamId: 33, groupId: 9});
+        groups[1] = Predictions.TeamGroup({teamId: 34, groupId: 9});
+        groups[2] = Predictions.TeamGroup({teamId: 47, groupId: 12});
+        groups[3] = Predictions.TeamGroup({teamId: 48, groupId: 12});
+        preds2.setTeamGroups(groups);
+
+        // Verify groups were set
+        assertEq(preds2.teamGroup(33), 9);
+        assertEq(preds2.teamGroup(48), 12);
+    }
+
+    function testSubmitPrediction_HighTeamIds() public {
+        // Deploy fresh contracts
+        Carton cart2 = new Carton(address(this), address(this), address(this));
+        Predictions preds2 = new Predictions(address(cart2));
+        preds2.setSubmissionDeadline(block.timestamp + 1 days);
+        preds2.setTotalGames(2);
+
+        uint256 tokenId = cart2.mint(user, 1, "");
+
+        // Configure groups with high team IDs
+        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](4);
+        groups[0] = Predictions.TeamGroup({teamId: 33, groupId: 9});
+        groups[1] = Predictions.TeamGroup({teamId: 34, groupId: 9});
+        groups[2] = Predictions.TeamGroup({teamId: 47, groupId: 12});
+        groups[3] = Predictions.TeamGroup({teamId: 48, groupId: 12});
+        preds2.setTeamGroups(groups);
+
+        // Submit predictions with high team IDs
+        Predictions.Game[] memory games = new Predictions.Game[](2);
+        games[0] = Predictions.Game({id: 0, team1: 33, team2: 34, result: [uint8(1), uint8(0)], set: false});
+        games[1] = Predictions.Game({id: 1, team1: 47, team2: 48, result: [uint8(2), uint8(2)], set: false});
+
+        vm.prank(user);
+        preds2.submitPrediction(tokenId, games);
+
+        Predictions.Game[] memory stored = preds2.getPrediction(tokenId);
+        assertEq(stored.length, 2);
+        assertEq(stored[0].team1, 33);
+        assertEq(stored[1].team2, 48);
+    }
+
+    function testWinnerPrediction_HighTeamIds() public setup {
+        // Predict winners with high team IDs (all valid: 1-48)
+        vm.prank(user);
+        preds.predictWinners(TOKEN_ID, [33, 34, 47, 48]);
+
+        uint8[4] memory prediction = preds.getWinnersPrediction(TOKEN_ID);
+        assertEq(prediction[0], 33);
+        assertEq(prediction[3], 48);
+    }
+
+    function testWinnerPrediction_RevertTeamIdZero() public setup {
+        vm.prank(user);
+        vm.expectRevert("Invalid team ID");
+        preds.predictWinners(TOKEN_ID, [0, 2, 3, 4]);
+    }
+
+    function testSetOfficialWinners_RevertTeamIdZero() public {
+        vm.expectRevert("Invalid team ID");
+        preds.setOfficialWinners([0, 2, 3, 4]);
+    }
+
+    function testSetOfficialWinners_MaxTeamIdValid() public {
+        // Team 48 (== MAX_TEAM_ID) should now be valid
+        preds.setOfficialWinners([45, 46, 47, 48]);
+
+        (bool isSet) = preds.officialWinners();
+        assertTrue(isSet);
     }
 }

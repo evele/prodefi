@@ -131,7 +131,7 @@ contract Predictions is Ownable {
             }
         }
 
-        bool[33] memory seenTeam; // MAX_TEAM_ID is 32, index 0 unused
+        bool[49] memory seenTeam; // index 0 unused, size = MAX_TEAM_ID + 1
         bytes32 hash;
         for (uint256 i = 0; i < groups.length; i++) {
             uint8 teamId = groups[i].teamId;
@@ -227,7 +227,10 @@ contract Predictions is Ownable {
         require(teamGroupsSet, "Team groups not set");
 
         // Track used pairs (teamA, teamB) to avoid duplicates in the same submission
-        bool[33][33] memory usedPair; // MAX_TEAM_ID is 32, index 0 unused
+        // TODO: This matrix allocates 49x49 = 2401 memory slots just to check duplicates
+        // among 4-6 games. Consider replacing with a simple O(n²) loop over previous games
+        // which would be cheaper in gas for small totalGames values.
+        bool[49][49] memory usedPair; // index 0 unused, size = MAX_TEAM_ID + 1
 
         // Verify that team IDs are valid
         for (uint256 i = 0; i < _prediction.length; i++) {
@@ -337,7 +340,7 @@ contract Predictions is Ownable {
 
         // Validate that team IDs are valid
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
-            require(teams[i] < MAX_TEAM_ID, "Invalid team ID");
+            require(teams[i] > 0 && teams[i] <= MAX_TEAM_ID, "Invalid team ID");
         }
 
         winnersPredictions[tokenId] = WinnersPrediction({teams: teams, set: true});
@@ -367,7 +370,7 @@ contract Predictions is Ownable {
 
         // Validate that team IDs are valid and there are no duplicates
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
-            require(teams[i] < MAX_TEAM_ID, "Invalid team ID");
+            require(teams[i] > 0 && teams[i] <= MAX_TEAM_ID, "Invalid team ID");
             for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
                 require(teams[i] != teams[j], "Duplicate team ID");
             }
