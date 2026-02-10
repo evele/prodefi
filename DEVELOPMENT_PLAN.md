@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 9, 2026*
+*Last updated: February 10, 2026*
 
 ---
 
@@ -42,23 +42,12 @@ For permanent technical information about the project, see CLAUDE.md.
 | Admin: close tournament | `/admin/dev` | **Not started** |
 | Admin: set teams/groups/deadline | `/admin/dev` | Done |
 
-### Known Bugs in Contracts (non-blocking for MVP but must fix before deploy)
+### Known Bugs in Contracts — FIXED (Feb 9, 2026)
 
-1. **Array sizing mismatch in Predictions.sol**
-   - `bool[33] memory seenTeam` in `setTeamGroups()` (line 134) - sized for 32 teams
-   - `bool[33][33] memory usedPair` in `submitPrediction()` (line 230) - sized for 32 teams
-   - But `MAX_TEAM_ID = 48` (World Cup 2026 has 48 teams)
-   - **Impact**: Any team with ID > 32 will cause out-of-bounds revert
-   - **Fix**: Change to `bool[49]` and `bool[49][49]`
-
-2. **Inconsistent team ID validation**
-   - `submitPrediction()` validates `team > 0 && team <= MAX_TEAM_ID` (valid: 1-48)
-   - `predictWinners()` validates `team < MAX_TEAM_ID` (valid: 0-47)
-   - `setOfficialWinners()` validates `team < MAX_TEAM_ID` (valid: 0-47)
-   - **Impact**: Team 48 valid for games but not for winners; team 0 valid for winners but not games
-   - **Fix**: Unify to `team > 0 && team <= MAX_TEAM_ID` everywhere
-
-3. **PredictionsFactory.sol** exists (38 lines) but is untested, undeployed, and unreferenced. Dead code.
+All critical bugs fixed. Only dead code cleanup remains:
+- ~~Array sizing mismatch (`bool[33]` → `bool[49]`)~~ FIXED
+- ~~Inconsistent team ID validation~~ FIXED (unified to `> 0 && <= MAX_TEAM_ID`)
+- `PredictionsFactory.sol`, `Counter.sol`, `Counter.t.sol` — dead code, pending deletion
 
 ### Other Observations
 
@@ -85,11 +74,12 @@ The complete tournament flow is:
 
 ### MVP Tasks (Priority Order)
 
-#### 1. Fix contract bugs (Small - before any deploy)
-- Fix array sizes in `Predictions.sol` (`bool[49]`, `bool[49][49]`)
-- Unify team ID validation (`> 0 && <= MAX_TEAM_ID` everywhere)
-- Add tests for team IDs > 32
-- Delete `PredictionsFactory.sol` and `Counter.sol/Counter.t.sol` if not needed
+#### 1. Fix contract bugs (Small - before any deploy) -- MOSTLY DONE
+- ~~Fix array sizes in `Predictions.sol` (`bool[49]`, `bool[49][49]`)~~ DONE
+- ~~Unify team ID validation (`> 0 && <= MAX_TEAM_ID` everywhere)~~ DONE
+- ~~Add tests for team IDs > 32~~ DONE (Feb 9)
+- Delete `PredictionsFactory.sol` and `Counter.sol/Counter.t.sol` — pending cleanup
+- **Pending decision**: Optimizar validación de duplicados en `submitPrediction()` — ver `discusion.md`
 
 #### 2. Wire winner predictions submit (Small)
 - Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI

@@ -227,9 +227,8 @@ contract Predictions is Ownable {
         require(teamGroupsSet, "Team groups not set");
 
         // Track used pairs (teamA, teamB) to avoid duplicates in the same submission
-        // TODO: This matrix allocates 49x49 = 2401 memory slots just to check duplicates
-        // among 4-6 games. Consider replacing with a simple O(n²) loop over previous games
-        // which would be cheaper in gas for small totalGames values.
+        // TODO: Optimize or redesign this validation — see discusion.md for options
+        // (O(n²) loop vs moving fixtures on-chain)
         bool[49][49] memory usedPair; // index 0 unused, size = MAX_TEAM_ID + 1
 
         // Verify that team IDs are valid
