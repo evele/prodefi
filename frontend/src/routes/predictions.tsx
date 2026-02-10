@@ -96,16 +96,23 @@ function PredictionsPage() {
     return new Set(nonZero).size === winnerPrediction.length && nonZero.length === 4
   }, [winnerPrediction])
 
-  // TODO: fix rerenders
-  const buildFixture = useMemo(() => {
+  // Compute matchday groupings once based on game IDs (stable)
+  const matchdayGroups = useMemo(() => {
     const gamesAmount = games.length
     const matchdays = Math.floor(gamesAmount / 2)
-    console.log("BF", matchdays)
-    const fixture = new Map<number, Game[]>()
-    games.map((game) => {
-      fixture.set(Math.floor(game.id / matchdays)+1, [...fixture.get(Math.floor(game.id / matchdays)+1) || [], game])
-    })
-    return fixture
+    const groups = new Map<number, number[]>()
+    for (const game of games) {
+      const matchday = Math.floor(game.id / matchdays) + 1
+      const existing = groups.get(matchday) || []
+      groups.set(matchday, [...existing, game.id])
+    }
+    return groups
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games.length]) // Only recompute when game count changes, not scores
+
+  // Create a lookup for current game state
+  const gamesById = useMemo(() => {
+    return new Map(games.map(g => [g.id, g]))
   }, [games])
     
  
@@ -391,10 +398,13 @@ function PredictionsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[...buildFixture.values()].map((matchday) => (
-                matchday.map((game, index) => (
-                  <GameCard key={index} game={game} isUsed={!!cartonGroupsState} isExpired={isExpired} onScoreChange={updateGameScore} />
-                )))
+              {[...matchdayGroups.values()].map((gameIds) => (
+                gameIds.map((gameId) => {
+                  const game = gamesById.get(gameId)!
+                  return (
+                    <GameCard key={gameId} game={game} isUsed={!!cartonGroupsState} isExpired={isExpired} onScoreChange={updateGameScore} />
+                  )
+                }))
               )}
 
               {/* Más juegos... */}
