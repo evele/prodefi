@@ -173,16 +173,18 @@ function PredictionsPage() {
 
   const submitPrediction = async() => {
     if (!tokenId) return
-    console.log("Games to submit:", games)
+
+    // Map local Game state to lightweight Prediction struct for the contract
+    const predictions = games.map(g => ({ gameId: g.id, result: g.result }))
+    console.log("Predictions to submit:", predictions)
     console.log("Token ID:", tokenId)
-    console.log("Games length:", games.length)
 
     try {
       writeContract({
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'submitPrediction',
-        args: [tokenId, games],
+        args: [tokenId, predictions],
       })
       toast.loading('Transaction pending...', { id: 'submit-prediction' })
     } catch (error) {

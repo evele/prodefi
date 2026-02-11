@@ -112,27 +112,25 @@ contract TreasuryTest is BaseTest {
 
         // Submit predictions manually (like in _setupCompleteScenario but with owner control)
         // User 1 - Perfect predictions
-        Predictions.Game[] memory games1 = _createValidGamePrediction();
-        _submitCompletePredictions(user1, TOKEN_ID_1, games1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
+        Predictions.Prediction[] memory preds1 = _createValidGamePrediction();
+        _submitCompletePredictions(user1, TOKEN_ID_1, preds1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
 
         // User 2 - Good predictions
         uint8[8] memory results2 = [2, 0, 1, 2, 0, 1, 2, 1];
-        Predictions.Game[] memory games2 =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results2);
-        _submitCompletePredictions(user2, TOKEN_ID_2, games2, [TEAM_1, TEAM_3, TEAM_2, TEAM_4]);
+        Predictions.Prediction[] memory preds2 = _createGamePrediction(results2);
+        _submitCompletePredictions(user2, TOKEN_ID_2, preds2, [TEAM_1, TEAM_3, TEAM_2, TEAM_4]);
 
         // User 3 - Poor predictions
         uint8[8] memory results3 = [1, 1, 2, 0, 1, 0, 1, 2];
-        Predictions.Game[] memory games3 =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results3);
-        _submitCompletePredictions(user3, TOKEN_ID_3, games3, [TEAM_5, TEAM_6, TEAM_7, TEAM_8]);
+        Predictions.Prediction[] memory preds3 = _createGamePrediction(results3);
+        _submitCompletePredictions(user3, TOKEN_ID_3, preds3, [TEAM_5, TEAM_6, TEAM_7, TEAM_8]);
 
-        // Set official results (with admin permission)
+        // Set official results (with admin permission, 1-based gameIds)
         vm.startPrank(admin);
-        predictions.setResults(0, 2, 1);
-        predictions.setResults(1, 1, 1);
-        predictions.setResults(2, 0, 2);
-        predictions.setResults(3, 3, 0);
+        predictions.setResults(1, 2, 1);
+        predictions.setResults(2, 1, 1);
+        predictions.setResults(3, 0, 2);
+        predictions.setResults(4, 3, 0);
         predictions.setOfficialWinners([TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
         vm.stopPrank();
 

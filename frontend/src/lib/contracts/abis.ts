@@ -194,11 +194,8 @@ export const PREDICTIONS_ABI = [
         name: '_prediction',
         type: 'tuple[]',
         components: [
-          { name: 'id', type: 'uint8' },
-          { name: 'team1', type: 'uint8' },
-          { name: 'team2', type: 'uint8' },
+          { name: 'gameId', type: 'uint8' },
           { name: 'result', type: 'uint8[2]' },
-          { name: 'set', type: 'bool' },
         ],
       },
     ],

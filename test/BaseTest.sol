@@ -109,39 +109,31 @@ abstract contract BaseTest is Test {
 
     // ========== PREDICTION HELPERS ==========
 
-    /// @notice Create a valid game prediction array
-    function _createValidGamePrediction() internal pure returns (Predictions.Game[] memory) {
-        Predictions.Game[] memory games = new Predictions.Game[](4);
-        games[0] = Predictions.Game({id: 0, team1: TEAM_1, team2: TEAM_2, result: [2, 1], set: false});
-        games[1] = Predictions.Game({id: 1, team1: TEAM_3, team2: TEAM_4, result: [1, 1], set: false});
-        games[2] = Predictions.Game({id: 2, team1: TEAM_5, team2: TEAM_6, result: [0, 2], set: false});
-        games[3] = Predictions.Game({id: 3, team1: TEAM_7, team2: TEAM_8, result: [3, 0], set: false});
-        return games;
+    /// @notice Create a valid game prediction array (1-based gameIds)
+    function _createValidGamePrediction() internal pure returns (Predictions.Prediction[] memory) {
+        Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
+        preds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
+        preds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
+        preds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
+        preds[3] = Predictions.Prediction({gameId: 4, result: [uint8(3), uint8(0)]});
+        return preds;
     }
 
-    /// @notice Create custom game prediction
+    /// @notice Create custom game prediction (1-based gameIds)
     function _createGamePrediction(
-        uint8[4] memory team1s,
-        uint8[4] memory team2s,
-        uint8[8] memory results // [game0_team1, game0_team2, game1_team1, game1_team2, ...]
-    ) internal pure returns (Predictions.Game[] memory) {
-        Predictions.Game[] memory games = new Predictions.Game[](4);
+        uint8[8] memory results // [game1_team1, game1_team2, game2_team1, game2_team2, ...]
+    ) internal pure returns (Predictions.Prediction[] memory) {
+        Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
-            games[i] = Predictions.Game({
-                id: uint8(i),
-                team1: team1s[i],
-                team2: team2s[i],
-                result: [results[i * 2], results[i * 2 + 1]],
-                set: false
-            });
+            preds[i] = Predictions.Prediction({gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]]});
         }
-        return games;
+        return preds;
     }
 
     /// @notice Submit game prediction for user
-    function _submitGamePrediction(address user, uint256 tokenId, Predictions.Game[] memory games) internal {
+    function _submitGamePrediction(address user, uint256 tokenId, Predictions.Prediction[] memory preds) internal {
         vm.prank(user);
-        predictions.submitPrediction(tokenId, games);
+        predictions.submitPrediction(tokenId, preds);
     }
 
     /// @notice Submit winner prediction for user
@@ -154,27 +146,27 @@ abstract contract BaseTest is Test {
     function _submitCompletePredictions(
         address user,
         uint256 tokenId,
-        Predictions.Game[] memory games,
+        Predictions.Prediction[] memory preds,
         uint8[4] memory winners
     ) internal {
-        _submitGamePrediction(user, tokenId, games);
+        _submitGamePrediction(user, tokenId, preds);
         _submitWinnerPrediction(user, tokenId, winners);
     }
 
     // ========== GAME RESULT HELPERS ==========
 
-    /// @notice Set all game results with default values
+    /// @notice Set all game results with default values (1-based gameIds)
     function _setDefaultGameResults() internal {
-        predictions.setResults(0, 2, 1);
-        predictions.setResults(1, 1, 1);
-        predictions.setResults(2, 0, 2);
-        predictions.setResults(3, 3, 0);
+        predictions.setResults(1, 2, 1);
+        predictions.setResults(2, 1, 1);
+        predictions.setResults(3, 0, 2);
+        predictions.setResults(4, 3, 0);
     }
 
-    /// @notice Set custom game results
+    /// @notice Set custom game results (1-based gameIds)
     function _setGameResults(uint8[8] memory results) internal {
         for (uint8 i = 0; i < 4; i++) {
-            predictions.setResults(i, results[i * 2], results[i * 2 + 1]);
+            predictions.setResults(i + 1, results[i * 2], results[i * 2 + 1]);
         }
     }
 
@@ -237,21 +229,18 @@ abstract contract BaseTest is Test {
         _mintCartonsToUsers();
 
         // User 1 - Perfect predictions
-        Predictions.Game[] memory games1 = _createValidGamePrediction();
-        _submitCompletePredictions(user1, TOKEN_ID_1, games1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
+        Predictions.Prediction[] memory preds1 = _createValidGamePrediction();
+        _submitCompletePredictions(user1, TOKEN_ID_1, preds1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
 
         // User 2 - Good predictions
-        // uint8[4] memory teams2 = [TEAM_2, TEAM_3, TEAM_4, TEAM_5]; // Unused variable
         uint8[8] memory results2 = [2, 0, 1, 2, 0, 1, 2, 1];
-        Predictions.Game[] memory games2 =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results2);
-        _submitCompletePredictions(user2, TOKEN_ID_2, games2, [TEAM_1, TEAM_3, TEAM_2, TEAM_4]);
+        Predictions.Prediction[] memory preds2 = _createGamePrediction(results2);
+        _submitCompletePredictions(user2, TOKEN_ID_2, preds2, [TEAM_1, TEAM_3, TEAM_2, TEAM_4]);
 
         // User 3 - Poor predictions
         uint8[8] memory results3 = [1, 1, 2, 0, 1, 0, 1, 2];
-        Predictions.Game[] memory games3 =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results3);
-        _submitCompletePredictions(user3, TOKEN_ID_3, games3, [TEAM_5, TEAM_6, TEAM_7, TEAM_8]);
+        Predictions.Prediction[] memory preds3 = _createGamePrediction(results3);
+        _submitCompletePredictions(user3, TOKEN_ID_3, preds3, [TEAM_5, TEAM_6, TEAM_7, TEAM_8]);
 
         // Set official results
         _setDefaultGameResults();

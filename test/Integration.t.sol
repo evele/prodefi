@@ -18,20 +18,18 @@ contract IntegrationTest is BaseTest {
         // ========== PHASE 1: GAME PREDICTIONS ==========
 
         // User 1 predictions - very accurate (will match official results exactly)
-        Predictions.Game[] memory user1Games = _createValidGamePrediction();
-        _submitGamePrediction(user1, TOKEN_ID_1, user1Games);
+        Predictions.Prediction[] memory user1Preds = _createValidGamePrediction();
+        _submitGamePrediction(user1, TOKEN_ID_1, user1Preds);
 
         // User 2 predictions - moderately accurate
         uint8[8] memory results2 = [2, 0, 1, 2, 1, 2, 2, 1];
-        Predictions.Game[] memory user2Games =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results2);
-        _submitGamePrediction(user2, TOKEN_ID_2, user2Games);
+        Predictions.Prediction[] memory user2Preds = _createGamePrediction(results2);
+        _submitGamePrediction(user2, TOKEN_ID_2, user2Preds);
 
         // User 3 predictions - less accurate
         uint8[8] memory results3 = [1, 1, 2, 0, 0, 1, 1, 1];
-        Predictions.Game[] memory user3Games =
-            _createGamePrediction([TEAM_1, TEAM_3, TEAM_5, TEAM_7], [TEAM_2, TEAM_4, TEAM_6, TEAM_8], results3);
-        _submitGamePrediction(user3, TOKEN_ID_3, user3Games);
+        Predictions.Prediction[] memory user3Preds = _createGamePrediction(results3);
+        _submitGamePrediction(user3, TOKEN_ID_3, user3Preds);
 
         // ========== PHASE 2: WINNER PREDICTIONS ==========
 
@@ -98,10 +96,10 @@ contract IntegrationTest is BaseTest {
     function testDeadlineEnforcement() public {
         _moveToAfterDeadline();
 
-        Predictions.Game[] memory games = _createValidGamePrediction();
+        Predictions.Prediction[] memory preds = _createValidGamePrediction();
 
         _expectRevertWithMessage("Prediction deadline passed");
-        _submitGamePrediction(user1, TOKEN_ID_1, games);
+        _submitGamePrediction(user1, TOKEN_ID_1, preds);
 
         _expectRevertWithMessage("Prediction deadline passed");
         _submitWinnerPrediction(user1, TOKEN_ID_1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);

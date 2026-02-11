@@ -67,26 +67,22 @@ contract Predictions is Ownable {
     }*/
 
     struct Game {
-        uint8 id; //will be here too, just to be easy to return (I think)
+        uint8 id;
         uint8 team1;
         uint8 team2;
         uint8[2] result;
         bool set;
     }
 
+    // Lightweight struct for user predictions (only gameId + result)
+    struct Prediction {
+        uint8 gameId;
+        uint8[2] result;
+    }
+
     mapping(uint8 => Game) public games;
-    /* 10 points per team
-       3 fourth -- not for now
-       4 third
-       6 second
-       9 first
-    */
 
-    /* for later
-    uint8[3] public winners;
-    mapping(uint256 => uint8[3]) winnersPredictions; // token ID -> array of 4 team ids */
-
-    mapping(uint256 => Game[]) predictions; // token ID -> prediction (Game[])
+    mapping(uint256 => Prediction[]) predictions; // token ID -> prediction (Prediction[])
 
     // uint256[] public positions; // array of token IDs ordered from higher to lower
 
@@ -220,57 +216,32 @@ contract Predictions is Ownable {
         _;
     }
 
-    function submitPrediction(uint256 tokenId, Game[] calldata _prediction) external onlyCartonOwner(tokenId) {
+    function submitPrediction(uint256 tokenId, Prediction[] calldata _prediction) external onlyCartonOwner(tokenId) {
         require(block.timestamp < submissionDeadline, "Prediction deadline passed");
         require(!used[tokenId], "Prediction already submitted");
         require(_prediction.length == totalGames, "Must submit predictions for all games");
-        require(teamGroupsSet, "Team groups not set");
 
-        // Track used pairs (teamA, teamB) to avoid duplicates in the same submission
-        // TODO: Optimize or redesign this validation — see discusion.md for options
-        // (O(n²) loop vs moving fixtures on-chain)
-        bool[49][49] memory usedPair; // index 0 unused, size = MAX_TEAM_ID + 1
+        bool[] memory usedGameId = new bool[](totalGames + 1);
 
-        // Verify that team IDs are valid
         for (uint256 i = 0; i < _prediction.length; i++) {
-            require(_prediction[i].team1 > 0 && _prediction[i].team1 <= MAX_TEAM_ID, "Invalid team1 ID");
-            require(_prediction[i].team2 > 0 && _prediction[i].team2 <= MAX_TEAM_ID, "Invalid team2 ID");
-            require(_prediction[i].id <= totalGames, "Invalid game ID");
-            require(!games[_prediction[i].id].set, "Cannot predict after results are set");
-
-            uint8 group1 = teamGroup[_prediction[i].team1];
-            uint8 group2 = teamGroup[_prediction[i].team2];
-            require(group1 != 0 && group2 != 0, "Team group not configured");
-            require(group1 == group2, "Teams must belong to same group");
-
-            // Normalize pair order to detect duplicates (A,B) == (B,A)
-            uint8 minTeam = _prediction[i].team1 < _prediction[i].team2 ? _prediction[i].team1 : _prediction[i].team2;
-            uint8 maxTeam = _prediction[i].team1 < _prediction[i].team2 ? _prediction[i].team2 : _prediction[i].team1;
-            require(!usedPair[minTeam][maxTeam], "Duplicate pairing");
-            usedPair[minTeam][maxTeam] = true;
+            require(_prediction[i].gameId > 0 && _prediction[i].gameId <= totalGames, "Invalid game ID");
+            require(!usedGameId[_prediction[i].gameId], "Duplicate game ID");
+            require(!games[_prediction[i].gameId].set, "Cannot predict after results are set");
+            usedGameId[_prediction[i].gameId] = true;
         }
 
         used[tokenId] = true;
         if (!predictionsStarted) predictionsStarted = true;
 
-        // Copiar cada predicción manualmente
         for (uint256 i = 0; i < _prediction.length; i++) {
-            predictions[tokenId].push(
-                Game({
-                    id: _prediction[i].id,
-                    team1: _prediction[i].team1,
-                    team2: _prediction[i].team2,
-                    result: _prediction[i].result,
-                    set: false
-                })
-            );
+            predictions[tokenId].push(Prediction({gameId: _prediction[i].gameId, result: _prediction[i].result}));
         }
 
         emit PredictionsSubmitted(msg.sender, tokenId);
     }
 
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
-        require(gameId <= totalGames, "Invalid game ID");
+        require(gameId > 0 && gameId <= totalGames, "Invalid game ID");
         require(!games[gameId].set, "Results already set for this game");
 
         games[gameId].result = [team1Goals, team2Goals];
@@ -279,28 +250,28 @@ contract Predictions is Ownable {
         emit ResultsSet(gameId, team1Goals, team2Goals);
     }
 
-    function getPrediction(uint256 tokenId) external view returns (Game[] memory) {
+    function getPrediction(uint256 tokenId) external view returns (Prediction[] memory) {
         return predictions[tokenId];
     }
 
     function getGameResults(uint8 gameId) external view returns (uint8[2] memory) {
-        require(gameId <= totalGames, "Invalid game ID");
+        require(gameId > 0 && gameId <= totalGames, "Invalid game ID");
         return games[gameId].result;
     }
 
     // Funciones de cálculo de puntos
     function calculatePoints(uint256 tokenId, uint8 index) public view returns (uint8) {
-        require(games[predictions[tokenId][index].id].set, "Result not set for this game");
+        require(games[predictions[tokenId][index].gameId].set, "Result not set for this game");
 
         uint8 points = abs(
             int8(
                 7
                     - (
                         calculateDifferencePoints(
-                            predictions[tokenId][index].result[0], games[predictions[tokenId][index].id].result[0]
+                            predictions[tokenId][index].result[0], games[predictions[tokenId][index].gameId].result[0]
                         )
                             + calculateDifferencePoints(
-                                predictions[tokenId][index].result[1], games[predictions[tokenId][index].id].result[1]
+                                predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
                             )
                     )
             )
@@ -309,7 +280,7 @@ contract Predictions is Ownable {
         if (
             getLocalEmpateVisitante(predictions[tokenId][index].result[0], predictions[tokenId][index].result[1])
                 == getLocalEmpateVisitante(
-                    games[predictions[tokenId][index].id].result[0], games[predictions[tokenId][index].id].result[1]
+                    games[predictions[tokenId][index].gameId].result[0], games[predictions[tokenId][index].gameId].result[1]
                 )
         ) {
             points += 2;
