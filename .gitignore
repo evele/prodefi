@@ -15,5 +15,3 @@ docs/
 # Dotenv file
 .env
 
-# Claude Code project instructions
-CLAUDE.md
