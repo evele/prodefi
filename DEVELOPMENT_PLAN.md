@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 10, 2026*
+*Last updated: February 13, 2026*
 
 ---
 
@@ -79,7 +79,8 @@ The complete tournament flow is:
 - ~~Unify team ID validation (`> 0 && <= MAX_TEAM_ID` everywhere)~~ DONE
 - ~~Add tests for team IDs > 32~~ DONE (Feb 9)
 - Delete `PredictionsFactory.sol` and `Counter.sol/Counter.t.sol` — pending cleanup
-- **Pending decision**: Optimizar validación de duplicados en `submitPrediction()` — ver `discusion.md`
+- **Dead code cleanup**: Revisar `DEAD_CODE_REVIEW.md` — picks mapping, Game struct fields, teamGroup system sin uso, etc.
+- ~~**Pending decision**: Optimizar validación de duplicados en `submitPrediction()`~~ RESUELTO (ya usa gameId + bool[], discusion.md eliminado)
 
 #### 2. Wire winner predictions submit (Small)
 - Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI
@@ -150,6 +151,7 @@ The complete tournament flow is:
 - **Oct 14, 2025**: Tournament lifecycle (`closeTournament` + snapshot), 106 tests
 - **Oct 15, 2025**: MockERC20, deploy automation, frontend multi-asset UI
 - **Feb 9, 2026**: Fixed 2 stale tests (team ID 33->49), identified contract bugs, full project review
+- **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
 
 ## Related Documents
 
