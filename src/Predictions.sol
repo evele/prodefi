@@ -60,16 +60,11 @@ contract Predictions is Ownable {
     event ResultsSet(uint8 indexed gameId, uint8 team1Goals, uint8 team2Goals);
     event TotalGamesUpdated(uint8 oldValue, uint8 newValue);
 
-    /* NOTE: check if should use this or not
-    modifier onlyBeforeResults(uint8 gameId) {
-        require(!games[gameId].set, "Results already set for this game");
-        _;
-    }*/
-
+    /// @notice Stores the official result for a game
+    /// @dev result[0] = team1 goals, result[1] = team2 goals.
+    /// Team assignment per gameId is defined off-chain; integrity is anchored by `teamsHash`.
     struct Game {
         uint8 id;
-        uint8 team1;
-        uint8 team2;
         uint8[2] result;
         bool set;
     }
@@ -86,7 +81,6 @@ contract Predictions is Ownable {
 
     // uint256[] public positions; // array of token IDs ordered from higher to lower
 
-    uint256 immutable MAX_INT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
 
     mapping(uint256 => bool) public used;
     mapping(uint256 => uint8[]) public picks;
@@ -192,7 +186,7 @@ contract Predictions is Ownable {
         require(_predictionIds.length > 0, "No predictions provided");
         require(_predictionIds.length == _predictionPoints.length, "Arrays must have same length");
 
-        uint256 maxPoints = MAX_INT;
+        uint256 maxPoints = type(uint256).max;
         delete positions;
 
         for (uint256 i = 0; i < _predictionPoints.length; i++) {
