@@ -374,25 +374,6 @@ contract PredictionsTest is Test {
 
     // ========== Team ID > 32 tests (array sizing fix) ==========
 
-    function testTeamGroups_HighTeamIds() public {
-        // Deploy fresh contracts to avoid "Predictions already started" guard
-        Carton cart2 = new Carton(address(this), address(this), address(this));
-        Predictions preds2 = new Predictions(address(cart2));
-        preds2.setSubmissionDeadline(block.timestamp + 1 days);
-
-        // Configure groups with team IDs > 32
-        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](4);
-        groups[0] = Predictions.TeamGroup({teamId: 33, groupId: 9});
-        groups[1] = Predictions.TeamGroup({teamId: 34, groupId: 9});
-        groups[2] = Predictions.TeamGroup({teamId: 47, groupId: 12});
-        groups[3] = Predictions.TeamGroup({teamId: 48, groupId: 12});
-        preds2.setTeamGroups(groups);
-
-        // Verify groups were set
-        assertEq(preds2.teamGroup(33), 9);
-        assertEq(preds2.teamGroup(48), 12);
-    }
-
     function testWinnerPrediction_HighTeamIds() public setup {
         // Predict winners with high team IDs (all valid: 1-48)
         vm.prank(user);

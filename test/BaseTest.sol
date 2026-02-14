@@ -48,7 +48,6 @@ abstract contract BaseTest is Test {
     function setUp() public virtual {
         _deployContracts();
         _setupRoles();
-        _setDefaultTeamGroups();
         _setDefaultDeadline();
     }
 
@@ -69,24 +68,15 @@ abstract contract BaseTest is Test {
         predictions.setSubmissionDeadline(deadline);
     }
 
-    function _setDefaultTeamGroups() internal {
-        Predictions.TeamGroup[] memory groups = new Predictions.TeamGroup[](8);
-        // Pair teams into groups to allow valid fixtures (1-2, 3-4, 5-6, 7-8)
-        groups[0] = Predictions.TeamGroup({teamId: TEAM_1, groupId: 1});
-        groups[1] = Predictions.TeamGroup({teamId: TEAM_2, groupId: 1});
-        groups[2] = Predictions.TeamGroup({teamId: TEAM_3, groupId: 2});
-        groups[3] = Predictions.TeamGroup({teamId: TEAM_4, groupId: 2});
-        groups[4] = Predictions.TeamGroup({teamId: TEAM_5, groupId: 3});
-        groups[5] = Predictions.TeamGroup({teamId: TEAM_6, groupId: 3});
-        groups[6] = Predictions.TeamGroup({teamId: TEAM_7, groupId: 4});
-        groups[7] = Predictions.TeamGroup({teamId: TEAM_8, groupId: 4});
-        predictions.setTeamGroups(groups);
-    }
-
     // ========== CARTON HELPERS ==========
 
     /// @notice Mint a single carton to user
-    function _mintCarton(address user, uint256 /* tokenId */ ) internal {
+    function _mintCarton(
+        address user,
+        uint256 /* tokenId */
+    )
+        internal
+    {
         vm.prank(minter);
         carton.mint(user, 1, "");
     }
@@ -102,7 +92,14 @@ abstract contract BaseTest is Test {
     }
 
     /// @notice Mint batch cartons
-    function _mintBatchCartons(address user, uint256[] memory, /* ids */ uint256[] memory amounts) internal {
+    function _mintBatchCartons(
+        address user,
+        uint256[] memory,
+        /* ids */
+        uint256[] memory amounts
+    )
+        internal
+    {
         vm.prank(minter);
         carton.mintBatch(user, amounts, "");
     }
@@ -122,7 +119,11 @@ abstract contract BaseTest is Test {
     /// @notice Create custom game prediction (1-based gameIds)
     function _createGamePrediction(
         uint8[8] memory results // [game1_team1, game1_team2, game2_team1, game2_team2, ...]
-    ) internal pure returns (Predictions.Prediction[] memory) {
+    )
+        internal
+        pure
+        returns (Predictions.Prediction[] memory)
+    {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
             preds[i] = Predictions.Prediction({gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]]});

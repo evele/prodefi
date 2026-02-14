@@ -149,13 +149,6 @@
   },
   {
     "type": "function",
-    "name": "freezeTeamGroups",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "freezeTeamsHash",
     "inputs": [],
     "outputs": [],
@@ -174,16 +167,6 @@
     "outputs": [
       {
         "name": "id",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "team1",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "team2",
         "type": "uint8",
         "internalType": "uint8"
       },
@@ -284,20 +267,10 @@
       {
         "name": "",
         "type": "tuple[]",
-        "internalType": "struct Predictions.Game[]",
+        "internalType": "struct Predictions.Prediction[]",
         "components": [
           {
-            "name": "id",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "team1",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "team2",
+            "name": "gameId",
             "type": "uint8",
             "internalType": "uint8"
           },
@@ -305,11 +278,6 @@
             "name": "result",
             "type": "uint8[2]",
             "internalType": "uint8[2]"
-          },
-          {
-            "name": "set",
-            "type": "bool",
-            "internalType": "bool"
           }
         ]
       }
@@ -357,30 +325,6 @@
         "name": "",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "picks",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
       }
     ],
     "stateMutability": "view"
@@ -517,31 +461,6 @@
   },
   {
     "type": "function",
-    "name": "setTeamGroups",
-    "inputs": [
-      {
-        "name": "groups",
-        "type": "tuple[]",
-        "internalType": "struct Predictions.TeamGroup[]",
-        "components": [
-          {
-            "name": "teamId",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "groupId",
-            "type": "uint8",
-            "internalType": "uint8"
-          }
-        ]
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setTeamsHash",
     "inputs": [
       {
@@ -591,20 +510,10 @@
       {
         "name": "_prediction",
         "type": "tuple[]",
-        "internalType": "struct Predictions.Game[]",
+        "internalType": "struct Predictions.Prediction[]",
         "components": [
           {
-            "name": "id",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "team1",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "team2",
+            "name": "gameId",
             "type": "uint8",
             "internalType": "uint8"
           },
@@ -612,75 +521,12 @@
             "name": "result",
             "type": "uint8[2]",
             "internalType": "uint8[2]"
-          },
-          {
-            "name": "set",
-            "type": "bool",
-            "internalType": "bool"
           }
         ]
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "teamGroup",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "teamGroupsFrozen",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "teamGroupsHash",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "teamGroupsSet",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -927,25 +773,6 @@
         "type": "uint8",
         "indexed": false,
         "internalType": "uint8"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TeamGroupsFrozen",
-    "inputs": [],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TeamGroupsSet",
-    "inputs": [
-      {
-        "name": "groupsHash",
-        "type": "bytes32",
-        "indexed": false,
-        "internalType": "bytes32"
       }
     ],
     "anonymous": false

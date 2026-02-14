@@ -6,8 +6,8 @@ import { Button } from '../components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { toast } from 'sonner'
-import { computeTeamsHash, teams2026 } from '../lib/teams'
-import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
+import { computeTeamsHash } from '../lib/teams'
+import { teams2026Config } from '../lib/teams2026.config'
 
 export const Route = createFileRoute('/admin/dev')({
   component: AdminPage,
@@ -57,25 +57,6 @@ function AdminPage() {
     functionName: 'teamsHashFrozen',
     query: { refetchInterval: 10_000 },
   })
-  const { data: onchainTeamGroupsHash } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamGroupsHash',
-    query: { refetchInterval: 10_000 },
-  })
-  const { data: teamGroupsSet } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamGroupsSet',
-    query: { refetchInterval: 10_000 },
-  })
-  const { data: teamGroupsFrozen } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamGroupsFrozen',
-    query: { refetchInterval: 10_000 },
-  })
-
   // totalGames config
   const { data: onchainTotalGames } = useReadContract({
     address: predictions,
@@ -105,17 +86,11 @@ function AdminPage() {
     }
 
     const run = async () => {
-      const local = await computeTeamsHash(teams2026)
+      const local = await computeTeamsHash(teams2026Config)
       setTeamsHashLocal(local)
     }
     run()
   }, [onchainTeamsHash])
-  const [teamGroupsHash, setTeamGroupsHashLocal] = useState<string>('')
-  useEffect(() => {
-    if (onchainTeamGroupsHash && (onchainTeamGroupsHash as string) !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-      setTeamGroupsHashLocal(onchainTeamGroupsHash as string)
-    }
-  }, [onchainTeamGroupsHash])
 
   const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
   const { isLoading: isMining, isSuccess, error: txError } = useWaitForTransactionReceipt({ hash: txHash })
@@ -153,25 +128,6 @@ function AdminPage() {
 
   const freeze = () => {
     writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamsHash' })
-  }
-
-  const setTeamGroups = () => {
-    const payload = teams2026Config
-      .filter((t) => t.groupId === PRIMARY_GROUP_ID)
-      .map((t) => ({
-      teamId: t.id,
-      groupId: t.groupId,
-      }))
-    writeContract({
-      address: predictions,
-      abi: PREDICTIONS_ABI,
-      functionName: 'setTeamGroups',
-      args: [payload],
-    })
-  }
-
-  const freezeTeamGroups = () => {
-    writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamGroups' })
   }
 
   // Deadline
@@ -236,31 +192,6 @@ function AdminPage() {
               </div>
               <div className="text-xs text-gray-600 mt-1">Frozen: {String(isFrozen)}</div>
               <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!isOwner || Boolean(isFrozen) || isPending || isMining}>Freeze</Button>
-            </div>
-
-            <div>
-              <div className="mb-2 font-medium">Team Groups (from teams2026 config)</div>
-              <div className="text-xs text-gray-600 mb-1">
-                On-chain hash: {onchainTeamGroupsHash ? (onchainTeamGroupsHash as string) : '—'} • Set: {String(Boolean(teamGroupsSet))} • Frozen: {String(Boolean(teamGroupsFrozen))}
-              </div>
-              <div className="flex gap-2 items-center">
-                <Button
-                  onClick={setTeamGroups}
-                  disabled={!isOwner || Boolean(teamGroupsFrozen) || isPending || isMining}
-                >
-                  {isPending || isMining ? 'Setting...' : 'Set Team Groups'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={freezeTeamGroups}
-                  disabled={!isOwner || Boolean(teamGroupsFrozen) || isPending || isMining}
-                >
-                  {isPending || isMining ? 'Freezing...' : 'Freeze Team Groups'}
-                </Button>
-              </div>
-              <div className="text-xs text-gray-600 mt-1">
-                Uses Group A from teams2026 config (id+groupId) to call setTeamGroups on-chain. You can update before freezing; freeze to lock.
-              </div>
             </div>
 
             <div>

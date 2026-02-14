@@ -7,14 +7,10 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
     IERC1155 public cartones;
-    // Anchor for off-chain teams metadata (id -> name mapping)
+    /// @notice Anchor for off-chain teams config (id + name + groupId)
+    /// @dev Set via setTeamsHash(); frontend verifies local config against this before submitting predictions
     bytes32 public teamsHash;
     bool public teamsHashFrozen;
-    // Mapping teamId => groupId to validate fixtures by group (e.g. World Cup groups)
-    mapping(uint8 => uint8) public teamGroup;
-    bytes32 public teamGroupsHash;
-    bool public teamGroupsSet;
-    bool public teamGroupsFrozen;
 
     event TeamsHashUpdated(bytes32 oldHash, bytes32 newHash);
     event TeamsHashFrozen();
@@ -81,16 +77,12 @@ contract Predictions is Ownable {
 
     // uint256[] public positions; // array of token IDs ordered from higher to lower
 
-
     mapping(uint256 => bool) public used;
-    mapping(uint256 => uint8[]) public picks;
     uint256[] public positions; // array of token IDs ordered from highest to lowest
     mapping(uint256 => uint256) public tokenPositions; // tokenId => position (1-indexed)
 
     // Event for when positions are updated
     event PositionsUpdated(uint256[] positions);
-    event TeamGroupsSet(bytes32 groupsHash);
-    event TeamGroupsFrozen();
 
     // Getter function to obtain positions
     function getPositions() public view returns (uint256[] memory) {
@@ -100,50 +92,6 @@ contract Predictions is Ownable {
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
         cartones = IERC1155(_cartones);
-    }
-
-    struct TeamGroup {
-        uint8 teamId;
-        uint8 groupId;
-    }
-
-    /// @notice Configure team -> group mapping to validate fixtures
-    /// @dev Can be called multiple times before predictions start; frozen via freezeTeamGroups
-    function setTeamGroups(TeamGroup[] calldata groups) external onlyOwner {
-        require(!predictionsStarted, "Predictions already started");
-        require(!teamGroupsFrozen, "Team groups frozen");
-        require(groups.length > 0, "No groups provided");
-
-        // Reset previous mapping to allow corrections before freeze
-        for (uint8 i = 1; i <= MAX_TEAM_ID; i++) {
-            if (teamGroup[i] != 0) {
-                teamGroup[i] = 0;
-            }
-        }
-
-        bool[49] memory seenTeam; // index 0 unused, size = MAX_TEAM_ID + 1
-        bytes32 hash;
-        for (uint256 i = 0; i < groups.length; i++) {
-            uint8 teamId = groups[i].teamId;
-            uint8 groupId = groups[i].groupId;
-            require(teamId > 0 && teamId <= MAX_TEAM_ID, "Invalid teamId");
-            require(groupId > 0, "Invalid groupId");
-            require(!seenTeam[teamId], "Duplicate teamId");
-            seenTeam[teamId] = true;
-
-            teamGroup[teamId] = groupId;
-            hash = keccak256(abi.encodePacked(hash, teamId, groupId));
-        }
-
-        teamGroupsHash = hash;
-        teamGroupsSet = true;
-        emit TeamGroupsSet(hash);
-    }
-
-    function freezeTeamGroups() external onlyOwner {
-        require(!teamGroupsFrozen, "teamGroups already frozen");
-        teamGroupsFrozen = true;
-        emit TeamGroupsFrozen();
     }
 
     // Allow owner to set teams metadata hash; can be frozen
@@ -260,21 +208,20 @@ contract Predictions is Ownable {
         uint8 points = abs(
             int8(
                 7
-                    - (
-                        calculateDifferencePoints(
+                    - (calculateDifferencePoints(
                             predictions[tokenId][index].result[0], games[predictions[tokenId][index].gameId].result[0]
                         )
-                            + calculateDifferencePoints(
-                                predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
-                            )
-                    )
+                        + calculateDifferencePoints(
+                            predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
+                        ))
             )
         );
 
         if (
             getLocalEmpateVisitante(predictions[tokenId][index].result[0], predictions[tokenId][index].result[1])
                 == getLocalEmpateVisitante(
-                    games[predictions[tokenId][index].gameId].result[0], games[predictions[tokenId][index].gameId].result[1]
+                    games[predictions[tokenId][index].gameId].result[0],
+                    games[predictions[tokenId][index].gameId].result[1]
                 )
         ) {
             points += 2;

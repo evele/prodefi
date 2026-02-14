@@ -3,13 +3,13 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 13, 2026*
+*Last updated: February 14, 2026*
 
 ---
 
 ## Current Status
 
-### Smart Contracts: COMPLETE (109 tests passing)
+### Smart Contracts: COMPLETE (116 tests passing)
 
 | Contract | Tests | Status |
 |---|---|---|
@@ -18,7 +18,7 @@ For permanent technical information about the project, see CLAUDE.md.
 | Predictions.sol | 14 | Complete - game/winner predictions, points, positions |
 | ERC20Integration | 3 | Complete - end-to-end multi-asset flow |
 | Integration | 3 | Complete - full workflow, deadline enforcement |
-| Counter (boilerplate) | 2 | Foundry template, can be removed |
+| ~~Counter (boilerplate)~~ | ~~2~~ | ~~Deleted (Feb 14)~~ |
 
 **Deploy script**: Complete with full Treasury integration, role configuration, MockUSDC deployment.
 
@@ -40,7 +40,7 @@ For permanent technical information about the project, see CLAUDE.md.
 | Admin: set official winners | `/admin/dev` | **Not started** |
 | Admin: set positions | `/admin/dev` | **Not started** |
 | Admin: close tournament | `/admin/dev` | **Not started** |
-| Admin: set teams/groups/deadline | `/admin/dev` | Done |
+| Admin: set teams hash/deadline | `/admin/dev` | Done |
 
 ### Known Bugs in Contracts — FIXED (Feb 9, 2026)
 
@@ -51,7 +51,6 @@ All critical bugs fixed. Only dead code cleanup remains:
 
 ### Other Observations
 
-- `Counter.sol` + `Counter.t.sol` are Foundry boilerplate, can be deleted
 - `useWatchContractEvent` for `CartonPurchased` is commented out (doesn't work on Anvil, polling used instead)
 - `TODO: fix rerenders` in `predictions.tsx` around `buildFixture`
 - No testnet/mainnet deployment config exists (everything targets Anvil localhost)
@@ -78,9 +77,17 @@ The complete tournament flow is:
 - ~~Fix array sizes in `Predictions.sol` (`bool[49]`, `bool[49][49]`)~~ DONE
 - ~~Unify team ID validation (`> 0 && <= MAX_TEAM_ID` everywhere)~~ DONE
 - ~~Add tests for team IDs > 32~~ DONE (Feb 9)
-- Delete `PredictionsFactory.sol` and `Counter.sol/Counter.t.sol` — pending cleanup
-- **Dead code cleanup**: Revisar `DEAD_CODE_REVIEW.md` — picks mapping, Game struct fields, teamGroup system sin uso, etc.
+- ~~Delete `Counter.sol/Counter.t.sol`~~ DONE (Feb 14)
+- `PredictionsFactory.sol` — keeping for future multi-tournament support
+- ~~**Dead code cleanup**: `picks` mapping, `Game` struct dead fields, `MAX_INT`, `teamGroup` system~~ DONE (Feb 14)
+  - `picks` mapping removed
+  - `Game.team1`/`Game.team2` removed (only `id`, `result`, `set` remain)
+  - `MAX_INT` replaced with `type(uint256).max`
+  - `teamGroup` system fully removed (mapping, hash, set/frozen flags, setTeamGroups, freezeTeamGroups, events)
+  - `teamsHash` consolidated: now anchors id+name+groupId (was id+name only); frontend uses single hash for all verification
+  - Commented `onlyBeforeResults` modifier removed
 - ~~**Pending decision**: Optimizar validación de duplicados en `submitPrediction()`~~ RESUELTO (ya usa gameId + bool[], discusion.md eliminado)
+- **Frontend pending**: After redeploying contracts, admin must `setTeamsHash` with the new consolidated hash (id+name+groupId) via `/admin/dev`
 
 #### 2. Wire winner predictions submit (Small)
 - Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI
@@ -152,6 +159,7 @@ The complete tournament flow is:
 - **Oct 15, 2025**: MockERC20, deploy automation, frontend multi-asset UI
 - **Feb 9, 2026**: Fixed 2 stale tests (team ID 33->49), identified contract bugs, full project review
 - **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
+- **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 
 ## Related Documents
 

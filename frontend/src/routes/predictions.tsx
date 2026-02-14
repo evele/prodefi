@@ -8,7 +8,7 @@ import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
-import { computeTeamsHash, computeTeamGroupsHash, teams2026 } from '../lib/teams'
+import { computeTeamsHash, teams2026 } from '../lib/teams'
 import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
 import type { Game } from '../lib/types'
 import { GameCard } from '../components/GameCard'
@@ -240,26 +240,20 @@ function PredictionsPage() {
   const remaining = useMemo(() => (deadline ? Number(deadline) - now : undefined), [deadline, now])
   const isExpired = remaining !== undefined && remaining <= 0
 
-  // Verify off-chain teams metadata hash vs on-chain anchor
+  // Verify off-chain teams config hash vs on-chain anchor
   const { data: onchainTeamsHash } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'teamsHash',
   })
-  const { data: onchainTeamGroupsHash } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamGroupsHash',
-  })
 
   const [teamsHashStatus, setTeamsHashStatus] = useState<'unknown' | 'match' | 'mismatch' | 'unset'>('unknown')
-  const [groupsHashStatus, setGroupsHashStatus] = useState<'unknown' | 'match' | 'mismatch' | 'unset'>('unknown')
   useEffect(() => {
     const run = async () => {
       try {
         if (!onchainTeamsHash) { setTeamsHashStatus('unset'); return }
-        if (!teams2026.length) { setTeamsHashStatus('unknown'); return }
-        const local = await computeTeamsHash(teams2026)
+        if (!teams2026Config.length) { setTeamsHashStatus('unknown'); return }
+        const local = await computeTeamsHash(teams2026Config)
         setTeamsHashStatus(local.toLowerCase() === (onchainTeamsHash as string).toLowerCase() ? 'match' : 'mismatch')
       } catch {
         setTeamsHashStatus('unknown')
@@ -268,24 +262,9 @@ function PredictionsPage() {
     run()
   }, [onchainTeamsHash])
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        if (!onchainTeamGroupsHash) { setGroupsHashStatus('unset'); return }
-        const primaryGroupConfig = teams2026Config.filter((team) => team.groupId === PRIMARY_GROUP_ID)
-        if (!primaryGroupConfig.length) { setGroupsHashStatus('unknown'); return }
-        const local = await computeTeamGroupsHash(primaryGroupConfig)
-        setGroupsHashStatus(local.toLowerCase() === (onchainTeamGroupsHash as string).toLowerCase() ? 'match' : 'mismatch')
-      } catch {
-        setGroupsHashStatus('unknown')
-      }
-    }
-    run()
-  }, [onchainTeamGroupsHash])
-
   const totalGamesMismatch = totalGames !== undefined && Number(totalGames) !== games.length
-  const isGroupsHashValid = groupsHashStatus === 'match'
-  const canSubmitGames = !isExpired && !isPending && !isConfirming && isGroupsHashValid && !totalGamesMismatch
+  const isTeamsHashValid = teamsHashStatus === 'match'
+  const canSubmitGames = !isExpired && !isPending && !isConfirming && isTeamsHashValid && !totalGamesMismatch
 
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
@@ -325,23 +304,9 @@ function PredictionsPage() {
               ? 'bg-red-50 border-red-200 text-red-700'
               : 'bg-yellow-50 border-yellow-200 text-yellow-700'
           }`}>
-            {teamsHashStatus === 'match' && 'Teams metadata verified'}
-            {teamsHashStatus === 'mismatch' && 'Teams metadata mismatch — check your list'}
+            {teamsHashStatus === 'match' && 'Teams config verified (id + name + group)'}
+            {teamsHashStatus === 'mismatch' && 'Teams config mismatch — check your list'}
             {teamsHashStatus === 'unset' && 'On-chain teams hash not set'}
-          </div>
-        )}
-        {/* Team groups hash verification banner */}
-        {groupsHashStatus !== 'unknown' && (
-          <div className={`mt-2 p-2 rounded text-xs border ${
-            groupsHashStatus === 'match'
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : groupsHashStatus === 'mismatch'
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-          }`}>
-            {groupsHashStatus === 'match' && 'Team groups verified'}
-            {groupsHashStatus === 'mismatch' && 'Team groups mismatch — check your list'}
-            {groupsHashStatus === 'unset' && 'On-chain team groups hash not set'}
           </div>
         )}
         {totalGamesMismatch && (

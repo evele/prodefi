@@ -1,4 +1,4 @@
-import { encodePacked, keccak256, stringToHex } from 'viem'
+import { keccak256, stringToHex } from 'viem'
 import type { Team } from './types'
 import { teams2026Config, type TeamGroupConfig } from './teams2026.config'
 
@@ -36,30 +36,12 @@ export function indexTeamsById(list: Team[]): Record<number, string> {
   }, {} as Record<number, string>)
 }
 
-export async function computeTeamsHash(list: Team[]): Promise<string> {
+export async function computeTeamsHash(list: TeamGroupConfig[]): Promise<string> {
   const normalized = list
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((team) => `${team.id}:${team.name.trim().toLowerCase()}`)
+    .map((team) => `${team.id}:${team.name.trim().toLowerCase()}:${team.groupId}`)
     .join('|')
 
   return keccak256(stringToHex(normalized))
-}
-
-export async function computeTeamGroupsHash(list: TeamGroupConfig[]): Promise<string> {
-  const normalized = list
-    .slice()
-    .sort((a, b) => a.id - b.id)
-
-  let hash = (`0x${'0'.repeat(64)}`) as `0x${string}`
-  for (const team of normalized) {
-    hash = keccak256(
-      encodePacked(
-        ['bytes32', 'uint8', 'uint8'],
-        [hash, team.id, team.groupId]
-      )
-    )
-  }
-
-  return hash
 }
