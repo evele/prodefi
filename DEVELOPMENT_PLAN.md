@@ -117,6 +117,18 @@ The complete tournament flow is:
 - Call `claimPrize(tournamentId, tokenId, token)` with button
 - Show ETH + USDC claimable amounts separately
 
+### Pre-MVP: Validation & Traction (Pending Decision)
+
+Antes de seguir avanzando con el frontend, evaluar si conviene lanzar una landing + waitlist para validar tracción. Decisiones pendientes:
+
+- **Target audience**: ¿Cripto-nativos con wallet o público general? Cambia completamente el mensaje y onboarding
+- **Canal de distribución**: ¿Dónde mandar tráfico? (Twitter/X cripto, comunidades deportivas, Reddit, ads pagos). Sin tráfico la landing no valida nada
+- **Métrica de éxito**: Definir de antemano qué número de signups = tracción suficiente para seguir construyendo
+- **Stack de la landing**: ¿No-code (Carrd, Framer) para ir rápido, o página estática propia? No necesita ser parte del monorepo
+- **Waitlist tooling**: Mailchimp, Buttondown, Google Form, o algo custom
+
+Estado: **Pensando, retomar semana del 16 Feb 2026**
+
 ### Post-MVP (Nice to have)
 
 - ERC20 allowlist per tournament

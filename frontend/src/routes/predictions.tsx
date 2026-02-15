@@ -166,9 +166,14 @@ function PredictionsPage() {
   }
 
   const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract: writeContractWinners, data: hashWinners, isPending: isPendingWinners, error: errorWinners} = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+  })
+
+  const { isLoading: isConfirmingWinners, isSuccess: isSuccessWinners} = useWaitForTransactionReceipt({
+    hashWinners,
   })
 
   const submitPrediction = async() => {
@@ -201,12 +206,41 @@ function PredictionsPage() {
     }
   }
 
+  const submitWinners = async() => {
+    if (!tokenId) return
+    try {
+      writeContractWinners({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'predictWinners',
+        args: [tokenId, winnerPrediction],
+      })
+      toast.loading('Transaction pending...', { id: 'submit-winners' })
+    } catch (error) {
+      console.error('Error submiting winners prediction:', error)
+
+      // Log completo del error
+      console.log('Full error object:', JSON.stringify(error, null, 2))
+
+      if (error && typeof error === 'object' && 'message' in error) {
+        toast.error(`Failed: ${error.message}`)
+      } else {
+        toast.error('Failed to submit winners prediction')
+      }
+    }
+  }
+
+
+
   // Toast notifications based on transaction status
   useEffect(() => {
     if (isSuccess) {
       toast.success('Predictions submitted successfully!', { id: 'submit-prediction' })
     }
-  }, [isSuccess])
+    if (isSuccessWinners) {
+      toast.success('Predictions submitted successfully!', { id: 'submit-winners' })
+    }
+  }, [isSuccess, isSuccessWinners])
 
   useEffect(() => {
     if (error) {
@@ -215,6 +249,13 @@ function PredictionsPage() {
       toast.error(`Transaction failed: ${error.message || 'Unknown error'}`, { id: 'submit-prediction' })
     }
   }, [error])
+
+  useEffect(() => {
+    if (errorWinners) {
+      console.error('Wagmi winners error:', errorWinners)
+      toast.error(`Transaction failed: ${errorWinners.message || 'Unknown error'}`, { id: 'submit-winners' })
+    }
+  }, [errorWinners])
 
 
   // Read submission deadline and keep a live countdown
@@ -402,8 +443,12 @@ function PredictionsPage() {
               <TeamWinnerSelector label="2nd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
               <TeamWinnerSelector label="3rd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
               <TeamWinnerSelector label="4th Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
-              <Button className="w-full" disabled={isExpired}>
-                Submit Winner Predictions
+              <Button
+                className="w-full"
+                disabled={isExpired || !hasValidWinners || isPendingWinners || isConfirmingWinners || !isTeamsHashValid}
+                onClick={submitWinners}
+              >
+                {isPendingWinners ? 'Confirming...' : isConfirmingWinners ? 'Processing...' : 'Submit Winner Predictions'}
               </Button>
             </div>
           </CardContent>
