@@ -8,7 +8,7 @@ import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
-import { computeTeamsHash, teams2026 } from '../lib/teams'
+import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
 import type { Game } from '../lib/types'
 import { GameCard } from '../components/GameCard'
@@ -135,11 +135,35 @@ function PredictionsPage() {
         functionName: 'winnersPredictions',
         args: [tokenId],
         query: {
-        // enabled: !!userAddress && isConnected, NOTE: proably this is handled by the father
         refetchInterval: 10000,
         refetchOnWindowFocus: true,
         }
     })
+
+  // Read submitted predictions from contract
+  const { data: submittedGames, refetch: refetchSubmittedGames } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'getPrediction',
+    args: [tokenId],
+    query: {
+      enabled: !!tokenId && !!cartonGroupsState,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const { data: submittedWinners, refetch: refetchSubmittedWinners } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'getWinnersPrediction',
+    args: [tokenId],
+    query: {
+      enabled: !!tokenId && !!cartonWinnersState,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
 
     const cartonStatus = () => {
         if (cartonGroupsState && cartonWinnersState) {
@@ -236,11 +260,15 @@ function PredictionsPage() {
   useEffect(() => {
     if (isSuccess) {
       toast.success('Predictions submitted successfully!', { id: 'submit-prediction' })
+      refetchCartonUsedState()
+      refetchSubmittedGames()
     }
     if (isSuccessWinners) {
       toast.success('Predictions submitted successfully!', { id: 'submit-winners' })
+      refetchCartonWinnersState()
+      refetchSubmittedWinners()
     }
-  }, [isSuccess, isSuccessWinners])
+  }, [isSuccess, isSuccessWinners, refetchCartonUsedState, refetchSubmittedGames, refetchCartonWinnersState, refetchSubmittedWinners])
 
   useEffect(() => {
     if (error) {
@@ -465,9 +493,54 @@ function PredictionsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8 text-gray-500">
-              No predictions submitted yet. Buy a prediction card to get started!
-            </div>
+            {!tokenId ? (
+              <div className="text-center py-8 text-gray-500">
+                Select a carton to view predictions.
+              </div>
+            ) : cartonStatus() === 'none' ? (
+              <div className="text-center py-8 text-gray-500">
+                No predictions submitted yet for Carton #{tokenId.toString()}.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Submitted Game Predictions */}
+                {submittedGames && (submittedGames as unknown as { gameId: number; result: [number, number] }[]).length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Game Predictions</h4>
+                    <div className="grid gap-2">
+                      {(submittedGames as unknown as { gameId: number; result: [number, number] }[]).map((pred) => {
+                        const game = gamesById.get(pred.gameId)
+                        return (
+                          <div key={pred.gameId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
+                            <span className="flex-1 text-right">{game ? teamsById[game.team1] : `Team ?`}</span>
+                            <span className="mx-3 font-mono font-bold">{Number(pred.result[0])} - {Number(pred.result[1])}</span>
+                            <span className="flex-1 text-left">{game ? teamsById[game.team2] : `Team ?`}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submitted Winner Predictions */}
+                {submittedWinners && (submittedWinners as unknown as number[]).some((id) => Number(id) !== 0) && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Winner Predictions</h4>
+                    <div className="grid gap-2">
+                      {(['1st', '2nd', '3rd', '4th'] as const).map((label, i) => {
+                        const teamId = Number((submittedWinners as unknown as number[])[i])
+                        return (
+                          <div key={label} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
+                            <span className="font-medium w-8">{label}</span>
+                            <span>{teamId > 0 ? teamsById[teamId] ?? `Team #${teamId}` : '—'}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

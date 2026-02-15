@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 14, 2026*
+*Last updated: February 15, 2026*
 
 ---
 
@@ -32,7 +32,7 @@ For permanent technical information about the project, see CLAUDE.md.
 | Prize pools display (ETH + USDC) | `/` | Done |
 | Submission deadline countdown | `/` | Done |
 | Game predictions submit | `/predictions` | Done |
-| Winner predictions UI | `/predictions` | UI built, **submit not wired to contract** |
+| Winner predictions UI + submit | `/predictions` | Done |
 | View submitted predictions | `/predictions` | **Placeholder only** |
 | Leaderboard | `/leaderboard` | **100% mock/hardcoded data** |
 | Claim prizes | - | **Not started** |
@@ -63,7 +63,7 @@ The complete tournament flow is:
 
 1. Admin configures torneo (teams, groups, deadline) --> **DONE**
 2. Users compran cartones (ETH/USDC) --> **DONE**
-3. Users envian predicciones (partidos + ganadores) --> **partidos DONE, ganadores falta wire**
+3. Users envian predicciones (partidos + ganadores) --> **DONE**
 4. Admin setea resultados de partidos --> **falta UI admin**
 5. Admin setea ganadores oficiales --> **falta UI admin**
 6. Sistema calcula puntos y posiciones --> **contrato listo, falta UI admin**
@@ -89,29 +89,28 @@ The complete tournament flow is:
 - ~~**Pending decision**: Optimizar validación de duplicados en `submitPrediction()`~~ RESUELTO (ya usa gameId + bool[], discusion.md eliminado)
 - **Frontend pending**: After redeploying contracts, admin must `setTeamsHash` with the new consolidated hash (id+name+groupId) via `/admin/dev`
 
-#### 2. Wire winner predictions submit (Small)
-- Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI
-- The form state and UI already exist, just needs the `writeContract` call
+#### ~~2. Wire winner predictions submit (Small)~~ DONE
+- ~~Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI~~
 
-#### 3. Show submitted predictions (Medium)
+#### 2. Show submitted predictions (Medium)
 - Read `getPrediction(tokenId)` and `getWinnersPrediction(tokenId)` from contract
 - Display user's game scores and winner picks after submission
 - Replace the placeholder "No predictions submitted yet"
 
-#### 4. Admin panel: tournament lifecycle (Medium)
+#### 3. Admin panel: tournament lifecycle (Medium)
 - `setResults(gameId, team1Goals, team2Goals)` - set results per game
 - `setOfficialWinners(uint8[4])` - set tournament winners
 - `setPositions(uint256[], uint256[])` - set final leaderboard
 - `closeTournament(tournamentId, token)` - close and snapshot prize pool
 - All contract functions exist, just need UI forms + `writeContract` calls
 
-#### 5. Real leaderboard (Medium)
+#### 4. Real leaderboard (Medium)
 - Read `getPositions()` from contract
 - Read `calculateTotalPoints(tokenId)` per token
 - Display ranked list with points, replacing mock data
 - Show game points + winner points breakdown
 
-#### 6. Prize claiming UI (Medium)
+#### 5. Prize claiming UI (Medium)
 - Read `getUserPrizeAmount(tournamentId, position)` to show claimable amount
 - Read `hasUserClaimed(tournamentId, tokenId)` for claim status
 - Call `claimPrize(tournamentId, tokenId, token)` with button

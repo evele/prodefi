@@ -180,6 +180,39 @@ export const PREDICTIONS_ABI = [
     ],
     outputs: [],
   },
+  {
+    type: 'function',
+    name: 'predictWinners',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'tokenId', type: 'uint256' },
+      { name: '_winners', type: 'uint8[4]' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getPrediction',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple[]',
+        components: [
+          { name: 'gameId', type: 'uint8' },
+          { name: 'result', type: 'uint8[2]' },
+        ],
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getWinnersPrediction',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint8[4]' }],
+  },
 ] as const satisfies Abi
 
 export const TREASURY_ABI = [

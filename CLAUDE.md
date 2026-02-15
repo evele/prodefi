@@ -234,8 +234,7 @@ Tests use Foundry's testing framework with:
 ### Current Phase: Prediction System
 - ✅ **Show owned cartones**: Complete with real-time updates
 - ✅ **Game predictions**: Complete implementation with working contract submission
-- ✅ **Winner predictions UI**: State management, form UI with disabled duplicates
-- 🚧 **Winner prediction submission**: Ready for contract integration (next session)
+- ✅ **Winner predictions UI + submit**: State management, form UI, contract submission wired
 - ✅ **Display real prize pool data**: From Treasury contract
 - **Prediction display**: Show user's submitted predictions
 
