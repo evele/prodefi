@@ -23,6 +23,7 @@ contract PredictionsTest is Test {
         // 4) Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
         preds.setSubmissionDeadline(deadline);
+        preds.setTotalGames(4);
     }
 
     function testSubmitAndReadPicks() public {

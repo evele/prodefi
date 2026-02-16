@@ -34,9 +34,10 @@ contract TreasuryTest is BaseTest {
 
         _setupRoles();
 
-        vm.prank(admin);
-        uint256 deadline = block.timestamp + DEFAULT_DEADLINE_OFFSET;
-        predictions.setSubmissionDeadline(deadline);
+        vm.startPrank(admin);
+        predictions.setSubmissionDeadline(block.timestamp + DEFAULT_DEADLINE_OFFSET);
+        predictions.setTotalGames(4);
+        vm.stopPrank();
         _deployTreasury();
         _setupTreasuryRoles();
         _setupInitialData();

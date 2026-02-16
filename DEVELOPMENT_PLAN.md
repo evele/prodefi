@@ -33,7 +33,7 @@ For permanent technical information about the project, see CLAUDE.md.
 | Submission deadline countdown | `/` | Done |
 | Game predictions submit | `/predictions` | Done |
 | Winner predictions UI + submit | `/predictions` | Done |
-| View submitted predictions | `/predictions` | **Placeholder only** |
+| View submitted predictions | `/predictions` | Done |
 | Leaderboard | `/leaderboard` | **100% mock/hardcoded data** |
 | Claim prizes | - | **Not started** |
 | Admin: set results | `/admin/dev` | **Not started** |
@@ -92,10 +92,10 @@ The complete tournament flow is:
 #### ~~2. Wire winner predictions submit (Small)~~ DONE
 - ~~Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI~~
 
-#### 2. Show submitted predictions (Medium)
-- Read `getPrediction(tokenId)` and `getWinnersPrediction(tokenId)` from contract
-- Display user's game scores and winner picks after submission
-- Replace the placeholder "No predictions submitted yet"
+#### ~~2. Show submitted predictions (Medium)~~ DONE
+- ~~Read `getPrediction(tokenId)` and `getWinnersPrediction(tokenId)` from contract~~
+- ~~Display user's game scores and winner picks after submission~~
+- ~~Replace the placeholder "No predictions submitted yet"~~
 
 #### 3. Admin panel: tournament lifecycle (Medium)
 - `setResults(gameId, team1Goals, team2Goals)` - set results per game

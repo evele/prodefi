@@ -2,68 +2,55 @@ import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
+import { GroupsView, type GroupData } from '../components/GroupsView'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
-import { PRIMARY_GROUP_ID, teams2026Config } from '../lib/teams2026.config'
+import { teams2026Config } from '../lib/teams2026.config'
 import type { Game } from '../lib/types'
-import { GameCard } from '../components/GameCard'
 
-const PRIMARY_GROUP_TEAM_IDS = teams2026Config
-  .filter((team) => team.groupId === PRIMARY_GROUP_ID)
-  .map((team) => team.id)
-  .sort((a, b) => a - b)
+/** Build round-robin games for all groups. Returns flat game list + group metadata. */
+const buildAllGroupGames = (): { games: Game[]; groups: GroupData[] } => {
+  // Collect unique groups preserving config order
+  const groupMap = new Map<number, { groupLabel: string; teamIds: number[] }>()
+  for (const t of teams2026Config) {
+    let entry = groupMap.get(t.groupId)
+    if (!entry) {
+      entry = { groupLabel: t.groupLabel, teamIds: [] }
+      groupMap.set(t.groupId, entry)
+    }
+    entry.teamIds.push(t.id)
+  }
 
-const buildRoundRobinGames = (teamIds: number[]): Game[] => {
-  const gamesList: Game[] = []
-  if (teamIds.length === 4) {
-    const rounds = [
-      [
-        [teamIds[0], teamIds[1]],
-        [teamIds[2], teamIds[3]],
-      ],
-      [
-        [teamIds[0], teamIds[2]],
-        [teamIds[1], teamIds[3]],
-      ],
-      [
-        [teamIds[0], teamIds[3]],
-        [teamIds[1], teamIds[2]],
-      ],
-    ]
-    let gameId = 1
-    for (const round of rounds) {
-      for (const match of round) {
-        gamesList.push({
-          id: gameId,
-          team1: match[0],
-          team2: match[1],
+  const allGames: Game[] = []
+  const groups: GroupData[] = []
+  let gameId = 1
+
+  for (const [groupId, { groupLabel, teamIds }] of groupMap) {
+    const ids = teamIds.sort((a, b) => a - b)
+    const groupGames: Game[] = []
+
+    // Round-robin: for 4 teams generates 6 matches
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const game: Game = {
+          id: gameId++,
+          team1: ids[i],
+          team2: ids[j],
           result: [0, 0],
           set: false,
-        })
-        gameId += 1
+        }
+        groupGames.push(game)
+        allGames.push(game)
       }
     }
-    return gamesList
+
+    groups.push({ groupId, groupLabel, games: groupGames })
   }
-  let gameId = 1
-  for (let i = 0; i < teamIds.length; i += 1) {
-    for (let j = i + 1; j < teamIds.length; j += 1) {
-      gamesList.push({
-        id: gameId,
-        team1: teamIds[i],
-        team2: teamIds[j],
-        result: [0, 0],
-        set: false,
-      })
-      gameId += 1
-    }
-  }
-  return gamesList
+
+  return { games: allGames, groups }
 }
 
 export const Route = createFileRoute('/predictions')({
@@ -79,7 +66,7 @@ function PredictionsPage() {
   // Normalize tokenId once as bigint for on-chain reads
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
 
-  const [games, setGames] = useState<Game[]>(() => buildRoundRobinGames(PRIMARY_GROUP_TEAM_IDS))
+  const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
 
   const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0,0,0,0])
 
@@ -96,21 +83,7 @@ function PredictionsPage() {
     return new Set(nonZero).size === winnerPrediction.length && nonZero.length === 4
   }, [winnerPrediction])
 
-  // Compute matchday groupings once based on game IDs (stable)
-  const matchdayGroups = useMemo(() => {
-    const gamesAmount = games.length
-    const matchdays = Math.floor(gamesAmount / 2)
-    const groups = new Map<number, number[]>()
-    for (const game of games) {
-      const matchday = Math.floor(game.id / matchdays) + 1
-      const existing = groups.get(matchday) || []
-      groups.set(matchday, [...existing, game.id])
-    }
-    return groups
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [games.length]) // Only recompute when game count changes, not scores
-
-  // Create a lookup for current game state
+  // Lookup for current game state (used by submitted predictions display)
   const gamesById = useMemo(() => {
     return new Map(games.map(g => [g.id, g]))
   }, [games])
@@ -179,13 +152,34 @@ function PredictionsPage() {
     }
   
   const updateGameScore = (gameId: number, team: 0 | 1, score: number) => {
-    setGames((prevGames) => {
-      const updatedGames = [...prevGames]
-      const gameIndex = updatedGames.findIndex((game) => game.id === gameId)
-      if (gameIndex !== -1) {
-        updatedGames[gameIndex].result[team] = score
+    setGameState((prev) => {
+      const updatedGames = prev.games.map((g) =>
+        g.id === gameId
+          ? { ...g, result: (team === 0 ? [score, g.result[1]] : [g.result[0], score]) as [number, number] }
+          : g
+      )
+      const updatedGroups = prev.groups.map((group) => ({
+        ...group,
+        games: group.games.map((g) =>
+          g.id === gameId
+            ? { ...g, result: (team === 0 ? [score, g.result[1]] : [g.result[0], score]) as [number, number] }
+            : g
+        ),
+      }))
+      return { games: updatedGames, groups: updatedGroups }
+    })
+  }
+
+  const fillRandomScores = () => {
+    setGameState((prev) => {
+      const randomize = (g: Game): Game => ({
+        ...g,
+        result: [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)],
+      })
+      return {
+        games: prev.games.map(randomize),
+        groups: prev.groups.map((group) => ({ ...group, games: group.games.map(randomize) })),
       }
-      return updatedGames
     })
   }
 
@@ -421,40 +415,40 @@ function PredictionsPage() {
         )}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Game Predictions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              ⚽ Game Predictions
-            </CardTitle>
-            <CardDescription>
+      {/* Game Predictions */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-semibold">Game Predictions</h3>
+            <p className="text-sm text-muted-foreground">
               Predict the scores for {games.length} group-stage games
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[...matchdayGroups.values()].map((gameIds) => (
-                gameIds.map((gameId) => {
-                  const game = gamesById.get(gameId)!
-                  return (
-                    <GameCard key={gameId} game={game} isUsed={!!cartonGroupsState} isExpired={isExpired} onScoreChange={updateGameScore} />
-                  )
-                }))
-              )}
-
-              {/* Más juegos... */}
-              <Button 
-                className="w-full" 
-                disabled={!canSubmitGames}
-                onClick={submitPrediction}
-              >
-                {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : 'Submit Game Predictions'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {import.meta.env.DEV && (
+              <Button variant="outline" size="sm" onClick={fillRandomScores} disabled={!!cartonGroupsState || isExpired}>
+                Fill Random
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            )}
+          </div>
+        </div>
 
+        <GroupsView
+          groups={groups}
+          disabled={!!cartonGroupsState || isExpired}
+          onScoreChange={updateGameScore}
+        />
+
+        <Button
+          className="w-full"
+          disabled={!canSubmitGames}
+          onClick={submitPrediction}
+        >
+          {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : 'Submit Game Predictions'}
+        </Button>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-2 mt-8">
         {/* Winner Predictions */}
         <Card>
           <CardHeader>

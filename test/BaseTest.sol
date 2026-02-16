@@ -66,6 +66,7 @@ abstract contract BaseTest is Test {
     function _setDefaultDeadline() internal {
         uint256 deadline = block.timestamp + DEFAULT_DEADLINE_OFFSET;
         predictions.setSubmissionDeadline(deadline);
+        predictions.setTotalGames(4);
     }
 
     // ========== CARTON HELPERS ==========

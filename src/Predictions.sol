@@ -16,7 +16,7 @@ contract Predictions is Ownable {
     event TeamsHashFrozen();
 
     // Number of games required in a prediction (configurable by owner before submissions start)
-    uint8 public totalGames = 4;
+    uint8 public totalGames = 72;
     uint8 immutable LOCAL = 0;
     uint8 immutable EMPATE = 1;
     uint8 immutable VISITANTE = 2;
