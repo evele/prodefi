@@ -14,3 +14,9 @@ export type Game = {
   result: [number, number]
   set: boolean
 }
+
+export type GroupData = {
+  groupId: number
+  groupLabel: string
+  games: Game[]
+}

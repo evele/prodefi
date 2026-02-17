@@ -1,11 +1,7 @@
 import { GroupMatches } from './GroupMatches'
-import type { Game } from '../lib/types'
+import type { GroupData } from '../lib/types'
 
-export type GroupData = {
-  groupId: number
-  groupLabel: string
-  games: Game[]
-}
+export type { GroupData }
 
 type GroupsViewProps = {
   groups: GroupData[]

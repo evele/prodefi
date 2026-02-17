@@ -213,6 +213,69 @@ export const PREDICTIONS_ABI = [
     inputs: [{ name: 'tokenId', type: 'uint256' }],
     outputs: [{ name: '', type: 'uint8[4]' }],
   },
+  {
+    type: 'function',
+    name: 'setResults',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'gameId', type: 'uint8' },
+      { name: 'team1Goals', type: 'uint8' },
+      { name: 'team2Goals', type: 'uint8' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setOfficialWinners',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'teams', type: 'uint8[4]' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setPositions',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: '_predictionIds', type: 'uint256[]' },
+      { name: '_predictionPoints', type: 'uint256[]' },
+    ],
+    outputs: [{ name: 'success', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'getPositions',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256[]' }],
+  },
+  {
+    type: 'function',
+    name: 'calculateTotalPoints',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'officialWinners',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'teams', type: 'uint8[4]' },
+      { name: 'set', type: 'bool' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'games',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'uint8' }],
+    outputs: [
+      { name: 'id', type: 'uint8' },
+      { name: 'result', type: 'uint8[2]' },
+      { name: 'set', type: 'bool' },
+    ],
+  },
 ] as const satisfies Abi
 
 export const TREASURY_ABI = [
@@ -236,6 +299,43 @@ export const TREASURY_ABI = [
       { name: 'position', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'closeTournament',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'tournamentId', type: 'uint256' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isClosedTournament',
+    stateMutability: 'view',
+    inputs: [
+      { name: '', type: 'uint256' },
+      { name: '', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'TOURNAMENT_MANAGER_ROLE',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'hasRole',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'role', type: 'bytes32' },
+      { name: 'account', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
   },
 ] as const satisfies Abi
 

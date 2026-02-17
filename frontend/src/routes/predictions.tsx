@@ -3,55 +3,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
-import { GroupsView, type GroupData } from '../components/GroupsView'
+import { GroupsView } from '../components/GroupsView'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
+import { buildAllGroupGames } from '../lib/games'
 import type { Game } from '../lib/types'
-
-/** Build round-robin games for all groups. Returns flat game list + group metadata. */
-const buildAllGroupGames = (): { games: Game[]; groups: GroupData[] } => {
-  // Collect unique groups preserving config order
-  const groupMap = new Map<number, { groupLabel: string; teamIds: number[] }>()
-  for (const t of teams2026Config) {
-    let entry = groupMap.get(t.groupId)
-    if (!entry) {
-      entry = { groupLabel: t.groupLabel, teamIds: [] }
-      groupMap.set(t.groupId, entry)
-    }
-    entry.teamIds.push(t.id)
-  }
-
-  const allGames: Game[] = []
-  const groups: GroupData[] = []
-  let gameId = 1
-
-  for (const [groupId, { groupLabel, teamIds }] of groupMap) {
-    const ids = teamIds.sort((a, b) => a - b)
-    const groupGames: Game[] = []
-
-    // Round-robin: for 4 teams generates 6 matches
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        const game: Game = {
-          id: gameId++,
-          team1: ids[i],
-          team2: ids[j],
-          result: [0, 0],
-          set: false,
-        }
-        groupGames.push(game)
-        allGames.push(game)
-      }
-    }
-
-    groups.push({ groupId, groupLabel, games: groupGames })
-  }
-
-  return { games: allGames, groups }
-}
 
 export const Route = createFileRoute('/predictions')({
   component: PredictionsPage,
