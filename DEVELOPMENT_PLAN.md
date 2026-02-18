@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 15, 2026*
+*Last updated: February 18, 2026*
 
 ---
 
@@ -22,7 +22,7 @@ For permanent technical information about the project, see CLAUDE.md.
 
 **Deploy script**: Complete with full Treasury integration, role configuration, MockUSDC deployment.
 
-### Frontend: ~60% Complete
+### Frontend: ~85% Complete (MVP flow complete)
 
 | Feature | Route | Status |
 |---|---|---|
@@ -34,20 +34,21 @@ For permanent technical information about the project, see CLAUDE.md.
 | Game predictions submit | `/predictions` | Done |
 | Winner predictions UI + submit | `/predictions` | Done |
 | View submitted predictions | `/predictions` | Done |
-| Leaderboard | `/leaderboard` | **100% mock/hardcoded data** |
-| Claim prizes | - | **Not started** |
-| Admin: set results | `/admin/dev` | **Not started** |
-| Admin: set official winners | `/admin/dev` | **Not started** |
-| Admin: set positions | `/admin/dev` | **Not started** |
-| Admin: close tournament | `/admin/dev` | **Not started** |
+| Leaderboard | `/leaderboard` | Done — real on-chain data |
+| Claim prizes | `/predictions` | Done — ClaimSection per carton |
+| Admin: set results | `/admin/dev` | Done |
+| Admin: set official winners | `/admin/dev` | Done |
+| Admin: set positions | `/admin/dev` | Done |
+| Admin: close tournament | `/admin/dev` | Done |
 | Admin: set teams hash/deadline | `/admin/dev` | Done |
 
-### Known Bugs in Contracts — FIXED (Feb 9, 2026)
+### Known Bugs in Contracts — FIXED
 
-All critical bugs fixed. Only dead code cleanup remains:
+All critical bugs fixed. All dead code cleaned up:
 - ~~Array sizing mismatch (`bool[33]` → `bool[49]`)~~ FIXED
 - ~~Inconsistent team ID validation~~ FIXED (unified to `> 0 && <= MAX_TEAM_ID`)
-- `PredictionsFactory.sol`, `Counter.sol`, `Counter.t.sol` — dead code, pending deletion
+- ~~`Counter.sol`, `Counter.t.sol`~~ DELETED (Feb 14)
+- `PredictionsFactory.sol` — kept intentionally for future multi-tournament support
 
 ### Other Observations
 
@@ -64,30 +65,19 @@ The complete tournament flow is:
 1. Admin configures torneo (teams, groups, deadline) --> **DONE**
 2. Users compran cartones (ETH/USDC) --> **DONE**
 3. Users envian predicciones (partidos + ganadores) --> **DONE**
-4. Admin setea resultados de partidos --> **falta UI admin**
-5. Admin setea ganadores oficiales --> **falta UI admin**
-6. Sistema calcula puntos y posiciones --> **contrato listo, falta UI admin**
-7. Admin cierra torneo --> **falta UI admin**
-8. Users ven leaderboard --> **falta todo**
-9. Users claimean premios --> **falta todo**
+4. Admin setea resultados de partidos --> **DONE**
+5. Admin setea ganadores oficiales --> **DONE**
+6. Sistema calcula puntos y posiciones --> **contrato listo, UI admin DONE**
+7. Admin cierra torneo --> **DONE**
+8. Users ven leaderboard --> **DONE**
+9. Users claimean premios --> **DONE**
 
 ### MVP Tasks (Priority Order)
 
-#### 1. Fix contract bugs (Small - before any deploy) -- MOSTLY DONE
-- ~~Fix array sizes in `Predictions.sol` (`bool[49]`, `bool[49][49]`)~~ DONE
-- ~~Unify team ID validation (`> 0 && <= MAX_TEAM_ID` everywhere)~~ DONE
-- ~~Add tests for team IDs > 32~~ DONE (Feb 9)
-- ~~Delete `Counter.sol/Counter.t.sol`~~ DONE (Feb 14)
-- `PredictionsFactory.sol` — keeping for future multi-tournament support
-- ~~**Dead code cleanup**: `picks` mapping, `Game` struct dead fields, `MAX_INT`, `teamGroup` system~~ DONE (Feb 14)
-  - `picks` mapping removed
-  - `Game.team1`/`Game.team2` removed (only `id`, `result`, `set` remain)
-  - `MAX_INT` replaced with `type(uint256).max`
-  - `teamGroup` system fully removed (mapping, hash, set/frozen flags, setTeamGroups, freezeTeamGroups, events)
-  - `teamsHash` consolidated: now anchors id+name+groupId (was id+name only); frontend uses single hash for all verification
-  - Commented `onlyBeforeResults` modifier removed
-- ~~**Pending decision**: Optimizar validación de duplicados en `submitPrediction()`~~ RESUELTO (ya usa gameId + bool[], discusion.md eliminado)
-- **Frontend pending**: After redeploying contracts, admin must `setTeamsHash` with the new consolidated hash (id+name+groupId) via `/admin/dev`
+#### ~~1. Fix contract bugs~~ DONE (Feb 14)
+- All array sizes, team ID validation, dead code (picks, Game struct, MAX_INT, teamGroup system, Counter) cleaned up
+- `teamsHash` consolidated to anchor id+name+groupId; frontend uses single hash verification
+- **Note**: After redeploying contracts, admin must `setTeamsHash` with the consolidated hash via `/admin/dev`
 
 #### ~~2. Wire winner predictions submit (Small)~~ DONE
 - ~~Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI~~
@@ -97,24 +87,24 @@ The complete tournament flow is:
 - ~~Display user's game scores and winner picks after submission~~
 - ~~Replace the placeholder "No predictions submitted yet"~~
 
-#### 3. Admin panel: tournament lifecycle (Medium)
-- `setResults(gameId, team1Goals, team2Goals)` - set results per game
-- `setOfficialWinners(uint8[4])` - set tournament winners
-- `setPositions(uint256[], uint256[])` - set final leaderboard
-- `closeTournament(tournamentId, token)` - close and snapshot prize pool
-- All contract functions exist, just need UI forms + `writeContract` calls
+#### ~~3. Admin panel: tournament lifecycle (Medium)~~ DONE
+- ~~`setResults(gameId, team1Goals, team2Goals)`~~ Done (SetResultsSection)
+- ~~`setOfficialWinners(uint8[4])`~~ Done (SetOfficialWinnersSection)
+- ~~`setPositions(uint256[], uint256[])`~~ Done (SetPositionsSection)
+- ~~`closeTournament(tournamentId, token)`~~ Done (CloseTournamentSection)
 
-#### 4. Real leaderboard (Medium)
-- Read `getPositions()` from contract
-- Read `calculateTotalPoints(tokenId)` per token
-- Display ranked list with points, replacing mock data
-- Show game points + winner points breakdown
+#### ~~4. Real leaderboard (Medium)~~ DONE (Feb 18)
+- ~~Read `getPositions()` from contract~~
+- ~~Read `calculateTotalPoints(tokenId)` per token~~
+- ~~Display ranked list with points, replacing mock data~~
+- Prize/points breakdown per asset, "You" badge, empty state
 
-#### 5. Prize claiming UI (Medium)
-- Read `getUserPrizeAmount(tournamentId, position)` to show claimable amount
-- Read `hasUserClaimed(tournamentId, tokenId)` for claim status
-- Call `claimPrize(tournamentId, tokenId, token)` with button
-- Show ETH + USDC claimable amounts separately
+#### ~~5. Prize claiming UI (Medium)~~ DONE (Feb 18)
+- ~~Read `getUserPrizeAmount(tournamentId, position)` to show claimable amount~~
+- ~~Read `hasUserClaimed(tournamentId, tokenId)` for claim status~~
+- ~~Call `claimPrize(tournamentId, tokenId, token)` with button~~
+- ~~Show ETH + USDC claimable amounts separately~~
+- `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed
 
 ### Pre-MVP: Validation & Traction (Pending Decision)
 
@@ -126,7 +116,7 @@ Antes de seguir avanzando con el frontend, evaluar si conviene lanzar una landin
 - **Stack de la landing**: ¿No-code (Carrd, Framer) para ir rápido, o página estática propia? No necesita ser parte del monorepo
 - **Waitlist tooling**: Mailchimp, Buttondown, Google Form, o algo custom
 
-Estado: **Pensando, retomar semana del 16 Feb 2026**
+Estado: **Pendiente de decisión — MVP flow ya completo, momento ideal para evaluar antes de seguir**
 
 ### Post-MVP (Nice to have)
 
@@ -171,6 +161,7 @@ Estado: **Pensando, retomar semana del 16 Feb 2026**
 - **Feb 9, 2026**: Fixed 2 stale tests (team ID 33->49), identified contract bugs, full project review
 - **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
+- **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
 
 ## Related Documents
 

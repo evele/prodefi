@@ -322,6 +322,28 @@ export const TREASURY_ABI = [
   },
   {
     type: 'function',
+    name: 'claimPrize',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'tournamentId', type: 'uint256' },
+      { name: 'tokenId', type: 'uint256' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'hasUserClaimed',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'tournamentId', type: 'uint256' },
+      { name: 'tokenId', type: 'uint256' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'TOURNAMENT_MANAGER_ROLE',
     stateMutability: 'view',
     inputs: [],

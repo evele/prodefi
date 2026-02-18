@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
+import { ClaimSection } from '../components/ClaimSection'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { toast } from 'sonner'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
@@ -435,6 +436,13 @@ function PredictionsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Prize Claims */}
+      {tokenId !== undefined && (
+        <div className="mt-8">
+          <ClaimSection tokenId={tokenId} />
+        </div>
+      )}
 
       {/* Your Predictions */}
       <div className="mt-12">
