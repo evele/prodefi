@@ -118,6 +118,38 @@ Antes de seguir avanzando con el frontend, evaluar si conviene lanzar una landin
 
 Estado: **Pendiente de decisión — MVP flow ya completo, momento ideal para evaluar antes de seguir**
 
+### Opción: Mini Apps como canal de distribución
+
+En lugar de (o además de) una landing, ProDefi podría desplegarse como Mini App en plataformas existentes con audiencia propia. Esto resuelve el problema de distribución y reduce la fricción de onboarding.
+
+**Plataformas evaluadas:**
+
+- **Lemon Cash** (`https://lemon.me/miniapps`, docs: `https://lemoncash.mintlify.app/quickstart/quickstart`)
+  - SDK: `@lemoncash/mini-app-sdk`
+  - `authenticate()` devuelve wallet del usuario directamente — sin MetaMask, sin RainbowKit
+  - `deposit()` nativo para USDC
+  - Chain: **Polygon** (requiere redeploy de contratos)
+  - Audiencia: millones de usuarios LatAm con USDC listo — público general, no cripto-nativo
+  - Encaja muy bien: compra de carton con USDC ya está implementada, solo cambia el canal
+
+- **Farcaster Mini Apps** (antes "Frames", cliente principal: Warpcast)
+  - SDK: `@farcaster/frame-sdk`
+  - Provee FID (Farcaster ID) + wallet nativa del usuario
+  - Chain: EVM (Ethereum/Base) — compatible con contratos actuales
+  - Audiencia: 100% cripto-nativa, ya tienen wallets
+  - Casi plug-and-play con el stack actual
+
+- **Beexo**
+  - A evaluar — explorar ecosistema y SDK disponible
+
+**Consideraciones generales:**
+- El frontend React/Vite es reutilizable en todos los casos
+- El modelo de contratos (ERC1155 + USDC) encaja bien con todas las plataformas
+- Lemon requiere deploy en Polygon; Farcaster es compatible con EVM actual
+- Cada plataforma resuelve distribución + identidad + wallet en un solo paso
+
+Estado: **Opción identificada — pendiente de decisión sobre qué plataforma priorizar**
+
 ### Post-MVP (Nice to have)
 
 - ERC20 allowlist per tournament

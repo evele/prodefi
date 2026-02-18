@@ -49,4 +49,43 @@ Objetivo: facilitar onboarding de usuarios no-cripto (sin wallet previa).
 
 ---
 
+## Mini Apps — Distribución en plataformas existentes
+
+Objetivo: resolver distribución y onboarding desplegando ProDefi como mini app dentro de plataformas con audiencia propia.
+
+### Lemon Cash
+
+- **URL**: https://lemon.me/miniapps
+- **Docs**: https://lemoncash.mintlify.app/quickstart/quickstart
+- **SDK**: `@lemoncash/mini-app-sdk`
+- **Que hace**: Web app que corre dentro del WebView de la app de Lemon Cash
+- **Auth**: `authenticate()` devuelve wallet address del usuario — sin MetaMask ni RainbowKit
+- **Pagos**: `deposit()` nativo para USDC
+- **Chain**: Polygon (requiere redeploy de contratos)
+- **Audiencia**: Millones de usuarios LatAm con USDC disponible — público general, no cripto-nativo
+- **Fit con ProDefi**: Alto — compra de carton con USDC ya implementada, solo cambia el canal de auth y pago
+
+### Farcaster Mini Apps
+
+- **Cliente principal**: Warpcast
+- **SDK**: `@farcaster/frame-sdk`
+- **Que hace**: Web apps que corren dentro de Warpcast (antes llamadas "Frames")
+- **Auth**: SDK provee FID (Farcaster ID) + wallet EVM nativa del usuario
+- **Chain**: EVM compatible — sin cambios en contratos actuales
+- **Audiencia**: 100% cripto-nativa, ya tienen wallets
+- **Fit con ProDefi**: Muy alto — casi plug-and-play con el stack actual
+
+### Beexo
+
+- A investigar — explorar ecosistema y SDK disponible
+
+### Consideraciones generales
+
+- El frontend React/Vite es reutilizable en todos los casos
+- Lemon requiere deploy en Polygon; Farcaster es compatible con EVM actual
+- Cada plataforma resuelve distribución + identidad + wallet en un solo paso
+- Ver decisión estratégica en DEVELOPMENT_PLAN.md → "Opción: Mini Apps como canal de distribución"
+
+---
+
 ## (Agregar mas categorias aca segun se investiguen)

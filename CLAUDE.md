@@ -292,7 +292,13 @@ Tests use Foundry's testing framework with:
 - Owner-controlled result setting and position management
 - Submission deadlines enforced for predictions
 
+## Instrucciones para Claude
+
+- Al buscar archivos, **siempre excluir `node_modules`** y `lib/` salvo que se pida explícitamente.
+- Si no se encuentra un archivo con el nombre aproximado que dio el usuario, intentar variantes antes de responder que no existe.
+
 ## Related Documents
 
 - See DEVELOPMENT_PLAN.md for active tasks and priorities.
 - See AGENTS.md for contributor workflow and repo conventions.
+- See TECH_RESEARCH.md for technology evaluations and research.
