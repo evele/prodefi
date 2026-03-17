@@ -4,15 +4,15 @@ import type { Team } from "../lib/types"
 
 
 export function TeamWinnerSelector(
-    {label, teams, selectedTeams, currentPosition, isExpired, onChange}: 
-    {label: string, teams: Team[], selectedTeams: [number, number, number, number], currentPosition: 1|2|3|4, isExpired: boolean, onChange: (teamId: number) => void}) {
+    {label, teams, selectedTeams, currentPosition, disabled, onChange}: 
+    {label: string, teams: Team[], selectedTeams: [number, number, number, number], currentPosition: 1|2|3|4, disabled: boolean, onChange: (teamId: number) => void}) {
 
     const availableTeams = teams.filter(team => !selectedTeams.includes(team.id) || team.id === selectedTeams[currentPosition-1])
     
     return (
         <div>
             <label className="text-sm font-medium">{label}</label>
-            <Select disabled={isExpired} onValueChange={(value) => onChange(Number(value))} >
+            <Select disabled={disabled} onValueChange={(value) => onChange(Number(value))} >
                 <SelectTrigger>
                 <SelectValue placeholder="Select team..." />
                 </SelectTrigger>

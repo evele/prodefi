@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi'
+import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI, ZERO_ADDRESS } from '../lib/contracts'
 import { formatEther, formatUnits } from 'viem'
-import { toast } from "sonner"
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
-import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { useUserBalance } from '../hooks/useBalance'
+import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 
 
 export const Route = createFileRoute('/')({
@@ -23,12 +23,12 @@ const POSITION_META = [
 ] as const
 
 function HomePage() {
-  const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
-  const [lastPurchaseCurrency, setLastPurchaseCurrency] = useState<'ETH' | 'USDC'>('ETH')
   const { eth: ethBalance, usdc: usdcBalance } = useUserBalance()
+  const purchaseWrite = useSimulatedContractWrite()
+  const approveWrite = useSimulatedContractWrite()
 
   const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -42,28 +42,6 @@ function HomePage() {
     functionName: 'activeTournamentId',
   })
   const tournamentId = activeTournamentId ?? 0n
-
-  const {
-    writeContract: writePurchase,
-    data: purchaseHash,
-    isPending: isPurchasePending,
-    error: purchaseError,
-  } = useWriteContract()
-
-  const {
-    writeContract: writeApprove,
-    data: approveHash,
-    isPending: isApprovePending,
-    error: approveError,
-  } = useWriteContract()
-
-  const { isLoading: isPurchaseConfirming, isSuccess: isPurchaseSuccess } = useWaitForTransactionReceipt({
-    hash: purchaseHash,
-  })
-
-  const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({
-    hash: approveHash,
-  })
 
   const { data: usdcPrice, isLoading: usdcPriceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -86,8 +64,8 @@ function HomePage() {
   const usdcPriceValue = usdcPrice ?? 0n
   const usdcAllowanceValue = usdcAllowance ?? 0n
   const needsApproval = currency === 'USDC' && usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
-  const isBuying = isPurchasePending || isPurchaseConfirming
-  const isApproving = isApprovePending || isApproveConfirming
+  const isBuying = purchaseWrite.isBusy
+  const isApproving = approveWrite.isBusy
 
   const priceDisplay =
     currency === 'ETH'
@@ -110,10 +88,35 @@ function HomePage() {
     return isBuying ? 'Buying...' : 'Buy with USDC'
   }
 
-  const canBuy =
-    currency === 'ETH'
-      ? Boolean(cartonPrice)
-      : usdcPriceValue > 0n && !needsApproval
+  const approvalBlockedMessage = (() => {
+    if (!needsApproval) return null
+    if (!isConnected) return 'Connect your wallet to approve USDC.'
+    if (usdcPriceLoading) return 'Loading USDC price...'
+    if (usdcPriceValue === 0n) return 'USDC price is not configured yet.'
+    if (approveWrite.isSimulating) return 'Checking the approval transaction...'
+    if (approveWrite.isPending) return 'Confirm the approval transaction in your wallet.'
+    if (approveWrite.isConfirming) return 'Approval transaction is being confirmed on-chain.'
+    return null
+  })()
+
+  const buyBlockedMessage = (() => {
+    if (!isConnected) return 'Connect your wallet to buy a carton.'
+    if (currency === 'ETH') {
+      if (priceLoading) return 'Loading ETH price...'
+      if (!cartonPrice) return 'ETH price is not configured yet.'
+    } else {
+      if (usdcPriceLoading) return 'Loading USDC price...'
+      if (usdcPriceValue === 0n) return 'USDC price is not configured yet.'
+      if (needsApproval) return 'Approve USDC before buying with USDC.'
+    }
+
+    if (purchaseWrite.isSimulating) return 'Checking the purchase transaction...'
+    if (purchaseWrite.isPending) return 'Confirm the purchase transaction in your wallet.'
+    if (purchaseWrite.isConfirming) return 'Purchase transaction is being confirmed on-chain.'
+    return null
+  })()
+
+  const canBuy = buyBlockedMessage === null
 
   const balanceDisplay = () => {
     if (!isConnected) return null
@@ -186,41 +189,78 @@ function HomePage() {
 
   const buyCartonWithEth = () => {
     if (!cartonPrice) return
-    writePurchase({
-      address: CONTRACT_ADDRESSES.CARTON,
-      abi: CARTON_ABI,
-      functionName: 'buyCarton',
-      args: [],
-      value: cartonPrice,
-    })
+    void purchaseWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'buyCarton',
+        args: [],
+        value: cartonPrice,
+      },
+      {
+        toastId: 'buy-carton-eth',
+        pendingMessage: 'Waiting for purchase confirmation...',
+        successMessage: 'Carton purchased with ETH!',
+        revertedMessage: 'The ETH purchase was rejected on-chain.',
+        mapError: (error) => mapBuyCartonError(error, 'ETH'),
+        onSuccess: async () => {
+          await Promise.all([refetchCartonsUser(), refetchAllowance()])
+        },
+        logLabel: 'Buy carton with ETH',
+      },
+    )
   }
 
   const buyCartonWithUsdc = () => {
     if (!usdcPriceValue) return
-    writePurchase({
-      address: CONTRACT_ADDRESSES.CARTON,
-      abi: CARTON_ABI,
-      functionName: 'buyCartonWithToken',
-      args: [CONTRACT_ADDRESSES.USDC],
-    })
+    void purchaseWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'buyCartonWithToken',
+        args: [CONTRACT_ADDRESSES.USDC],
+      },
+      {
+        toastId: 'buy-carton-usdc',
+        pendingMessage: 'Waiting for purchase confirmation...',
+        successMessage: 'Carton purchased with USDC!',
+        revertedMessage: 'The USDC purchase was rejected on-chain.',
+        mapError: (error) => mapBuyCartonError(error, 'USDC'),
+        onSuccess: async () => {
+          await Promise.all([refetchCartonsUser(), refetchAllowance()])
+        },
+        logLabel: 'Buy carton with USDC',
+      },
+    )
   }
 
   const approveUsdc = () => {
     if (!usdcPriceValue) return
-    writeApprove({
-      address: CONTRACT_ADDRESSES.USDC,
-      abi: USDC_ABI,
-      functionName: 'approve',
-      args: [CONTRACT_ADDRESSES.CARTON, usdcPriceValue],
-    })
+    void approveWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.USDC,
+        abi: USDC_ABI,
+        functionName: 'approve',
+        args: [CONTRACT_ADDRESSES.CARTON, usdcPriceValue],
+      },
+      {
+        toastId: 'approve-usdc',
+        pendingMessage: 'Waiting for approval confirmation...',
+        successMessage: 'USDC approval confirmed. You can now buy with USDC.',
+        revertedMessage: 'USDC approval was rejected on-chain.',
+        mapError: mapApproveUsdcError,
+        onSuccess: async () => {
+          await refetchAllowance()
+        },
+        logLabel: 'Approve USDC',
+      },
+    )
   }
 
   const handleBuyClick = () => {
     if (currency === 'ETH') {
-      setLastPurchaseCurrency('ETH')
       buyCartonWithEth()
     } else {
-      setLastPurchaseCurrency('USDC')
       buyCartonWithUsdc()
     }
   }
@@ -281,8 +321,6 @@ function HomePage() {
     }
   }) */
 
-  console.log('🔧 Event listener setup for:', CONTRACT_ADDRESSES.CARTON)
-
   const getUserCartonsInfo = () => {
     if (!cartonsUser || cartonsUser.length === 0) {
       return { count: 0, text: "No Cartons Owned" }
@@ -292,50 +330,6 @@ function HomePage() {
       text: `${cartonsUser.length} Carton${cartonsUser.length > 1 ? 'es' : ''} Owned`
     }
   } 
-
-  useEffect(() => {
-    if (purchaseHash) {
-      toast.info('Waiting for purchase confirmation...', { id: purchaseHash })
-    }
-  }, [purchaseHash])
-
-  useEffect(() => {
-    if (isPurchaseSuccess && purchaseHash) {
-      toast.success(
-        lastPurchaseCurrency === 'ETH'
-          ? 'Carton purchased with ETH! 🎫'
-          : 'Carton purchased with USDC! 🎫',
-        { id: purchaseHash },
-      )
-      refetchCartonsUser()
-      refetchAllowance()
-    }
-  }, [isPurchaseSuccess, purchaseHash, lastPurchaseCurrency, refetchCartonsUser, refetchAllowance])
-
-  useEffect(() => {
-    if (purchaseError) {
-      toast.error(`Transaction failed: ${purchaseError.message}`)
-    }
-  }, [purchaseError])
-
-  useEffect(() => {
-    if (approveHash) {
-      toast.info('Waiting for approval confirmation...', { id: approveHash })
-    }
-  }, [approveHash])
-
-  useEffect(() => {
-    if (isApproveSuccess && approveHash) {
-      toast.success('USDC approval confirmed. You can now buy with USDC.', { id: approveHash })
-      refetchAllowance()
-    }
-  }, [isApproveSuccess, approveHash, refetchAllowance])
-
-  useEffect(() => {
-    if (approveError) {
-      toast.error(`Approval failed: ${approveError.message}`)
-    }
-  }, [approveError])
 
   return (
     <>
@@ -380,19 +374,25 @@ function HomePage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  disabled={!isConnected || isApproving || usdcPriceValue === 0n}
+                  disabled={approvalBlockedMessage !== null}
                   onClick={approveUsdc}
                 >
                   {isApproving ? 'Approving...' : 'Approve USDC'}
                 </Button>
               )}
+              {currency === 'USDC' && needsApproval && approvalBlockedMessage && (
+                <p className="text-xs text-muted-foreground">{approvalBlockedMessage}</p>
+              )}
               <Button
                 className="w-full"
-                disabled={!isConnected || !canBuy || isBuying}
+                disabled={!canBuy}
                 onClick={handleBuyClick}
               >
                 {buyButtonText()}
               </Button>
+              {buyBlockedMessage && (
+                <p className="text-xs text-muted-foreground">{buyBlockedMessage}</p>
+              )}
               {currency === 'USDC' && needsApproval && (
                 <p className="text-xs text-gray-500">
                   Approval required only once per token. After approving you can buy instantly.

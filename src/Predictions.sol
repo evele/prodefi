@@ -208,20 +208,21 @@ contract Predictions is Ownable {
         uint8 points = abs(
             int8(
                 7
-                    - (calculateDifferencePoints(
+                    - (
+                        calculateDifferencePoints(
                             predictions[tokenId][index].result[0], games[predictions[tokenId][index].gameId].result[0]
                         )
-                        + calculateDifferencePoints(
-                            predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
-                        ))
+                            + calculateDifferencePoints(
+                                predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
+                            )
+                    )
             )
         );
 
         if (
             getLocalEmpateVisitante(predictions[tokenId][index].result[0], predictions[tokenId][index].result[1])
                 == getLocalEmpateVisitante(
-                    games[predictions[tokenId][index].gameId].result[0],
-                    games[predictions[tokenId][index].gameId].result[1]
+                    games[predictions[tokenId][index].gameId].result[0], games[predictions[tokenId][index].gameId].result[1]
                 )
         ) {
             points += 2;

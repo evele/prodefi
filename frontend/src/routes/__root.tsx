@@ -44,6 +44,7 @@ function RootLayout() {
               </Link>
               <Link 
                 to="/predictions" 
+                search={{ carton: undefined }}
                 className="px-4 py-2 rounded-lg hover:bg-white/10 transition-colors [&.active]:bg-white/20"
               >
                 Predictions

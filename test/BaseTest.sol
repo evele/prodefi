@@ -72,12 +72,7 @@ abstract contract BaseTest is Test {
     // ========== CARTON HELPERS ==========
 
     /// @notice Mint a single carton to user
-    function _mintCarton(
-        address user,
-        uint256 /* tokenId */
-    )
-        internal
-    {
+    function _mintCarton(address user, uint256 /* tokenId */ ) internal {
         vm.prank(minter);
         carton.mint(user, 1, "");
     }
@@ -98,9 +93,7 @@ abstract contract BaseTest is Test {
         uint256[] memory,
         /* ids */
         uint256[] memory amounts
-    )
-        internal
-    {
+    ) internal {
         vm.prank(minter);
         carton.mintBatch(user, amounts, "");
     }
@@ -120,11 +113,7 @@ abstract contract BaseTest is Test {
     /// @notice Create custom game prediction (1-based gameIds)
     function _createGamePrediction(
         uint8[8] memory results // [game1_team1, game1_team2, game2_team1, game2_team2, ...]
-    )
-        internal
-        pure
-        returns (Predictions.Prediction[] memory)
-    {
+    ) internal pure returns (Predictions.Prediction[] memory) {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
             preds[i] = Predictions.Prediction({gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]]});

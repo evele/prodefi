@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract } from 'wagmi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
@@ -9,40 +9,37 @@ import { toast } from 'sonner'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
+import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { mapAdminError } from '../lib/transaction-errors'
 
 export const Route = createFileRoute('/admin/dev')({
   component: AdminPage,
 })
 
-/** Reusable hook for write + wait + toast pattern */
-function useContractWrite() {
-  const { writeContract, data: txHash, isPending, error: writeError, reset } = useWriteContract()
-  const { isLoading: isMining, isSuccess, error: txError } = useWaitForTransactionReceipt({ hash: txHash })
+function useAdminWrite() {
+  const write = useSimulatedContractWrite()
 
-  useEffect(() => {
-    if (isSuccess) toast.success('Transaction confirmed')
-  }, [isSuccess])
-  useEffect(() => {
-    if (writeError) {
-      console.error('Write error:', writeError)
-      toast.error('Transaction rejected')
-    }
-  }, [writeError])
-  useEffect(() => {
-    if (txError) {
-      console.error('Transaction error:', txError)
-      toast.error('Transaction failed')
-    }
-  }, [txError])
+  const execute = (
+    parameters: Parameters<typeof write.simulateAndSend>[0],
+    options: Omit<Parameters<typeof write.simulateAndSend>[1], 'mapError'>,
+  ) => {
+    return write.simulateAndSend(parameters, {
+      ...options,
+      mapError: mapAdminError,
+    })
+  }
 
-  return { writeContract, isPending, isMining, isSuccess, reset }
+  return {
+    ...write,
+    execute,
+  }
 }
 
 // --- Set Results Section ---
 
 function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
-  const { writeContract, isPending, isMining } = useContractWrite()
+  const { execute, isBusy } = useAdminWrite()
   const { games } = useMemo(() => buildAllGroupGames(), [])
 
   // Local state for goal inputs per game
@@ -67,12 +64,21 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
       toast.error('Enter valid goal numbers')
       return
     }
-    writeContract({
-      address: predictions,
-      abi: PREDICTIONS_ABI,
-      functionName: 'setResults',
-      args: [gameId, t1, t2],
-    })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setResults',
+        args: [gameId, t1, t2],
+      },
+      {
+        toastId: `admin-set-results-${gameId}`,
+        pendingMessage: 'Waiting for result update confirmation...',
+        successMessage: `Result saved for game #${gameId}.`,
+        revertedMessage: 'Result update was rejected on-chain.',
+        logLabel: 'Admin set results',
+      },
+    )
   }
 
   return (
@@ -108,7 +114,7 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
               <Button
                 size="sm"
                 onClick={() => submitResult(game.id)}
-                disabled={!isOwner || isPending || isMining}
+                disabled={!isOwner || isBusy}
               >
                 Set
               </Button>
@@ -124,7 +130,7 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
 
 function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
-  const { writeContract, isPending, isMining } = useContractWrite()
+  const { execute, isBusy } = useAdminWrite()
 
   const { data: officialWinnersData } = useReadContract({
     address: predictions,
@@ -162,12 +168,21 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
       toast.error('All 4 teams must be different')
       return
     }
-    writeContract({
-      address: predictions,
-      abi: PREDICTIONS_ABI,
-      functionName: 'setOfficialWinners',
-      args: [ids as [number, number, number, number]],
-    })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setOfficialWinners',
+        args: [ids as [number, number, number, number]],
+      },
+      {
+        toastId: 'admin-set-official-winners',
+        pendingMessage: 'Waiting for official winners confirmation...',
+        successMessage: 'Official winners saved.',
+        revertedMessage: 'Official winners were rejected on-chain.',
+        logLabel: 'Admin set official winners',
+      },
+    )
   }
 
   return (
@@ -205,8 +220,8 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
                 </select>
               </div>
             ))}
-            <Button onClick={submit} disabled={!isOwner || isPending || isMining || winnersAlreadySet}>
-              {isPending || isMining ? 'Submitting...' : 'Set Winners'}
+            <Button onClick={submit} disabled={!isOwner || isBusy || winnersAlreadySet}>
+              {isBusy ? 'Submitting...' : 'Set Winners'}
             </Button>
           </div>
         )}
@@ -219,7 +234,7 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
 
 function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
-  const { writeContract, isPending, isMining } = useContractWrite()
+  const { execute, isBusy } = useAdminWrite()
 
   const { data: currentPositions } = useReadContract({
     address: predictions,
@@ -260,12 +275,21 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
       }
     }
 
-    writeContract({
-      address: predictions,
-      abi: PREDICTIONS_ABI,
-      functionName: 'setPositions',
-      args: [ids, points],
-    })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setPositions',
+        args: [ids, points],
+      },
+      {
+        toastId: 'admin-set-positions',
+        pendingMessage: 'Waiting for leaderboard confirmation...',
+        successMessage: 'Leaderboard positions saved.',
+        revertedMessage: 'Leaderboard positions were rejected on-chain.',
+        logLabel: 'Admin set positions',
+      },
+    )
   }
 
   const positionsArray = currentPositions as bigint[] | undefined
@@ -283,8 +307,8 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
           value={csvInput}
           onChange={(e) => setCsvInput(e.target.value)}
         />
-        <Button className="mt-2" onClick={submit} disabled={!isOwner || isPending || isMining}>
-          {isPending || isMining ? 'Submitting...' : 'Set Positions'}
+        <Button className="mt-2" onClick={submit} disabled={!isOwner || isBusy}>
+          {isBusy ? 'Submitting...' : 'Set Positions'}
         </Button>
 
         {positionsArray && positionsArray.length > 0 && (
@@ -307,7 +331,7 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
 function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { address } = useAccount()
-  const { writeContract, isPending, isMining } = useContractWrite()
+  const { execute, isBusy } = useAdminWrite()
 
   const [tournamentId, setTournamentId] = useState('1')
   const [tokenType, setTokenType] = useState<'eth' | 'usdc'>('eth')
@@ -350,12 +374,21 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       toast.error('Enter a valid tournament ID')
       return
     }
-    writeContract({
-      address: treasury,
-      abi: TREASURY_ABI,
-      functionName: 'closeTournament',
-      args: [BigInt(tid), tokenAddress],
-    })
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'closeTournament',
+        args: [BigInt(tid), tokenAddress],
+      },
+      {
+        toastId: `admin-close-${tid}-${tokenType}`,
+        pendingMessage: 'Waiting for tournament close confirmation...',
+        successMessage: 'Tournament closed successfully.',
+        revertedMessage: 'Tournament close was rejected on-chain.',
+        logLabel: 'Admin close tournament',
+      },
+    )
   }
 
   const poolDisplay = prizePool !== undefined
@@ -414,9 +447,9 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
           <Button
             onClick={submit}
-            disabled={!isOwner || !hasManagerRole || Boolean(isClosed) || isPending || isMining}
+            disabled={!isOwner || !hasManagerRole || Boolean(isClosed) || isBusy}
           >
-            {isPending || isMining ? 'Closing...' : 'Close Tournament'}
+            {isBusy ? 'Closing...' : 'Close Tournament'}
           </Button>
         </div>
       </CardContent>
@@ -428,20 +461,6 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
 function AdminPage() {
   const isDev = import.meta.env.DEV
-  if (!isDev) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin</CardTitle>
-          <CardDescription>Admin interface is disabled in production builds.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Run locally (npm run dev) to access this page.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const { address, isConnected } = useAccount()
 
@@ -505,23 +524,41 @@ function AdminPage() {
     run()
   }, [onchainTeamsHash])
 
-  const { writeContract, isPending, isMining } = useContractWrite()
+  const { execute, isBusy } = useAdminWrite()
 
   const submitTeamsHash = () => {
     if (!teamsHash || !teamsHash.startsWith('0x') || teamsHash.length !== 66) {
       toast.error('Provide a valid bytes32 (0x... 64 hex chars)')
       return
     }
-    writeContract({
-      address: predictions,
-      abi: PREDICTIONS_ABI,
-      functionName: 'setTeamsHash',
-      args: [teamsHash as `0x${string}`],
-    })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setTeamsHash',
+        args: [teamsHash as `0x${string}`],
+      },
+      {
+        toastId: 'admin-set-teams-hash',
+        pendingMessage: 'Waiting for teams hash confirmation...',
+        successMessage: 'Teams hash saved.',
+        revertedMessage: 'Teams hash update was rejected on-chain.',
+        logLabel: 'Admin set teams hash',
+      },
+    )
   }
 
   const freeze = () => {
-    writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamsHash' })
+    void execute(
+      { address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamsHash' },
+      {
+        toastId: 'admin-freeze-teams-hash',
+        pendingMessage: 'Waiting for teams hash freeze confirmation...',
+        successMessage: 'Teams hash frozen.',
+        revertedMessage: 'Teams hash freeze was rejected on-chain.',
+        logLabel: 'Admin freeze teams hash',
+      },
+    )
   }
 
   // Deadline
@@ -545,7 +582,21 @@ function AdminPage() {
     if (!deadlineLocal) return
     const ts = Math.floor(new Date(deadlineLocal).getTime() / 1000)
     if (!ts || isNaN(ts)) { toast.error('Invalid date/time'); return }
-    writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'setSubmissionDeadline', args: [BigInt(ts)] })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setSubmissionDeadline',
+        args: [BigInt(ts)],
+      },
+      {
+        toastId: 'admin-set-deadline',
+        pendingMessage: 'Waiting for deadline confirmation...',
+        successMessage: 'Submission deadline saved.',
+        revertedMessage: 'Deadline update was rejected on-chain.',
+        logLabel: 'Admin set submission deadline',
+      },
+    )
   }
 
   const setTotalGames = () => {
@@ -558,7 +609,35 @@ function AdminPage() {
       toast.error('Predictions already started; cannot change total games')
       return
     }
-    writeContract({ address: predictions, abi: PREDICTIONS_ABI, functionName: 'setTotalGames', args: [n] })
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setTotalGames',
+        args: [n],
+      },
+      {
+        toastId: 'admin-set-total-games',
+        pendingMessage: 'Waiting for total games confirmation...',
+        successMessage: 'Total games saved.',
+        revertedMessage: 'Total games update was rejected on-chain.',
+        logLabel: 'Admin set total games',
+      },
+    )
+  }
+
+  if (!isDev) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Admin</CardTitle>
+          <CardDescription>Admin interface is disabled in production builds.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-600 dark:text-gray-300">Run locally (npm run dev) to access this page.</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -581,20 +660,20 @@ function AdminPage() {
               <div className="mb-2 font-medium">Teams Hash</div>
               <div className="flex gap-2 items-center">
                 <Input value={teamsHash} onChange={(e) => setTeamsHashLocal(e.target.value)} placeholder="0x..." />
-                <Button onClick={submitTeamsHash} disabled={!isOwner || Boolean(isFrozen) || isPending || isMining}>
-                  {isPending || isMining ? 'Setting...' : 'Set Hash'}
+                <Button onClick={submitTeamsHash} disabled={!isOwner || Boolean(isFrozen) || isBusy}>
+                  {isBusy ? 'Setting...' : 'Set Hash'}
                 </Button>
               </div>
               <div className="text-xs text-gray-600 mt-1">Frozen: {String(isFrozen)}</div>
-              <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!isOwner || Boolean(isFrozen) || isPending || isMining}>Freeze</Button>
+              <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!isOwner || Boolean(isFrozen) || isBusy}>Freeze</Button>
             </div>
 
             <div>
               <div className="mb-2 font-medium">Submission Deadline</div>
               <div className="flex gap-2 items-center">
                 <Input type="datetime-local" value={deadlineLocal} onChange={(e) => setDeadlineLocal(e.target.value)} />
-                <Button onClick={setDeadline} disabled={!isOwner || isPending || isMining}>
-                  {isPending || isMining ? 'Saving...' : 'Save Deadline'}
+                <Button onClick={setDeadline} disabled={!isOwner || isBusy}>
+                  {isBusy ? 'Saving...' : 'Save Deadline'}
                 </Button>
               </div>
             </div>
@@ -604,8 +683,8 @@ function AdminPage() {
               <div className="text-xs text-gray-600 mb-1">On-chain: {onchainTotalGames !== undefined ? String(onchainTotalGames) : '—'} • Started: {String(Boolean(predictionsStarted))}</div>
               <div className="flex gap-2 items-center">
                 <Input type="number" min={1} max={255} value={totalGamesLocal} onChange={(e) => setTotalGamesLocal(e.target.value)} />
-                <Button onClick={setTotalGames} disabled={!isOwner || Boolean(predictionsStarted) || isPending || isMining}>
-                  {isPending || isMining ? 'Saving...' : 'Save'}
+                <Button onClick={setTotalGames} disabled={!isOwner || Boolean(predictionsStarted) || isBusy}>
+                  {isBusy ? 'Saving...' : 'Save'}
                 </Button>
               </div>
               <div className="text-xs text-gray-600 mt-1">Must be set before first submission. Typically derived from teams count.</div>

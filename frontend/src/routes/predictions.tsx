@@ -1,28 +1,44 @@
-import { createFileRoute, useSearch } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
 import { ClaimSection } from '../components/ClaimSection'
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
+import { useAccount, useReadContract } from 'wagmi'
 import { toast } from 'sonner'
-import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
+import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
 import type { Game } from '../lib/types'
+import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { mapPredictionErrorToMessage, mapWinnersErrorToMessage } from '../lib/transaction-errors'
+
+function normalizeCartonParam(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+
+  const trimmed = value.trim()
+  return /^\d+$/.test(trimmed) ? trimmed : undefined
+}
 
 export const Route = createFileRoute('/predictions')({
   component: PredictionsPage,
   validateSearch: (search: Record<string, unknown>) => ({
-    carton: search.carton as string | undefined,
+    carton: normalizeCartonParam(search.carton),
   }),
 })
 
-function PredictionsPage() {
+const DEADLINE_NOT_SET_MESSAGE = 'Submission deadline is not configured yet. Ask the admin to set it in /admin/dev.'
+const PREDICTION_REVERT_MESSAGE = 'Game predictions were rejected on-chain. Review the form and try again.'
+const WINNERS_REVERT_MESSAGE = 'Winner predictions were rejected on-chain. Review the form and try again.'
 
+function PredictionsPage() {
+  const navigate = useNavigate()
+  const { isConnected, address: userAddress } = useAccount()
   const { carton } = useSearch({ from: '/predictions' })
+  const normalizedAddress = userAddress as `0x${string}` | undefined
   // Normalize tokenId once as bigint for on-chain reads
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
 
@@ -32,7 +48,7 @@ function PredictionsPage() {
 
   const updateWinnerPrediction = (position: 1|2|3|4, teamId: number) => {
     setWinnerPrediction((prev) => {
-      const updated = [...prev]
+      const updated = [...prev] as [number, number, number, number]
       updated[position-1] = teamId
       return updated
     })
@@ -47,16 +63,32 @@ function PredictionsPage() {
   const gamesById = useMemo(() => {
     return new Map(games.map(g => [g.id, g]))
   }, [games])
-    
- 
+
+  const { data: ownedCartons } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'getUserTokens',
+    args: normalizedAddress ? [normalizedAddress] : undefined,
+    query: {
+      enabled: Boolean(normalizedAddress) && isConnected,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const selectedCartonIsOwned = useMemo(
+    () => tokenId !== undefined && (ownedCartons?.some((ownedTokenId) => ownedTokenId === tokenId) ?? false),
+    [ownedCartons, tokenId],
+  )
+  const hasOwnedCartons = (ownedCartons?.length ?? 0) > 0
 
   const {data: cartonGroupsState, refetch: refetchCartonUsedState} = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'used',
-    args: [tokenId],
+    args: [tokenId ?? 0n],
     query: {
-    // enabled: !!userAddress && isConnected, NOTE: proably this is handled by the father
+    enabled: tokenId !== undefined,
     refetchInterval: 10000,
     refetchOnWindowFocus: true,
     }
@@ -66,8 +98,9 @@ function PredictionsPage() {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'winnersPredictions',
-        args: [tokenId],
+        args: [tokenId ?? 0n],
         query: {
+        enabled: tokenId !== undefined,
         refetchInterval: 10000,
         refetchOnWindowFocus: true,
         }
@@ -78,9 +111,9 @@ function PredictionsPage() {
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'getPrediction',
-    args: [tokenId],
+    args: [tokenId ?? 0n],
     query: {
-      enabled: !!tokenId && !!cartonGroupsState,
+      enabled: tokenId !== undefined && !!cartonGroupsState,
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
     },
@@ -90,9 +123,9 @@ function PredictionsPage() {
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'getWinnersPrediction',
-    args: [tokenId],
+    args: [tokenId ?? 0n],
     query: {
-      enabled: !!tokenId && !!cartonWinnersState,
+      enabled: tokenId !== undefined && !!cartonWinnersState,
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
     },
@@ -143,102 +176,65 @@ function PredictionsPage() {
     })
   }
 
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
-  const { writeContract: writeContractWinners, data: hashWinners, isPending: isPendingWinners, error: errorWinners} = useWriteContract()
+  const predictionWrite = useSimulatedContractWrite()
+  const winnersWrite = useSimulatedContractWrite()
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
-  })
-
-  const { isLoading: isConfirmingWinners, isSuccess: isSuccessWinners} = useWaitForTransactionReceipt({
-    hashWinners,
-  })
-
-  const submitPrediction = async() => {
+  const submitPrediction = () => {
     if (!tokenId) return
+    if (predictionSubmitBlockedMessage) {
+      toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
+      return
+    }
 
     // Map local Game state to lightweight Prediction struct for the contract
     const predictions = games.map(g => ({ gameId: g.id, result: g.result }))
-    console.log("Predictions to submit:", predictions)
-    console.log("Token ID:", tokenId)
-
-    try {
-      writeContract({
+    void predictionWrite.simulateAndSend(
+      {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'submitPrediction',
         args: [tokenId, predictions],
-      })
-      toast.loading('Transaction pending...', { id: 'submit-prediction' })
-    } catch (error) {
-      console.error('Error submiting prediction:', error)
-
-      // Log completo del error
-      console.log('Full error object:', JSON.stringify(error, null, 2))
-
-      if (error && typeof error === 'object' && 'message' in error) {
-        toast.error(`Failed: ${error.message}`)
-      } else {
-        toast.error('Failed to submit prediction')
-      }
-    }
+      },
+      {
+        toastId: 'submit-prediction',
+        pendingMessage: 'Waiting for game prediction confirmation...',
+        successMessage: 'Predictions submitted successfully!',
+        revertedMessage: PREDICTION_REVERT_MESSAGE,
+        mapError: mapPredictionErrorToMessage,
+        onSuccess: async () => {
+          await Promise.all([refetchCartonUsedState(), refetchSubmittedGames()])
+        },
+        logLabel: 'Submit game predictions',
+      },
+    )
   }
 
-  const submitWinners = async() => {
+  const submitWinners = () => {
     if (!tokenId) return
-    try {
-      writeContractWinners({
+    if (winnersSubmitBlockedMessage) {
+      toast.error(winnersSubmitBlockedMessage, { id: 'submit-winners' })
+      return
+    }
+    void winnersWrite.simulateAndSend(
+      {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'predictWinners',
         args: [tokenId, winnerPrediction],
-      })
-      toast.loading('Transaction pending...', { id: 'submit-winners' })
-    } catch (error) {
-      console.error('Error submiting winners prediction:', error)
-
-      // Log completo del error
-      console.log('Full error object:', JSON.stringify(error, null, 2))
-
-      if (error && typeof error === 'object' && 'message' in error) {
-        toast.error(`Failed: ${error.message}`)
-      } else {
-        toast.error('Failed to submit winners prediction')
-      }
-    }
+      },
+      {
+        toastId: 'submit-winners',
+        pendingMessage: 'Waiting for winner prediction confirmation...',
+        successMessage: 'Predictions submitted successfully!',
+        revertedMessage: WINNERS_REVERT_MESSAGE,
+        mapError: mapWinnersErrorToMessage,
+        onSuccess: async () => {
+          await Promise.all([refetchCartonWinnersState(), refetchSubmittedWinners()])
+        },
+        logLabel: 'Submit winner predictions',
+      },
+    )
   }
-
-
-
-  // Toast notifications based on transaction status
-  useEffect(() => {
-    if (isSuccess) {
-      toast.success('Predictions submitted successfully!', { id: 'submit-prediction' })
-      refetchCartonUsedState()
-      refetchSubmittedGames()
-    }
-    if (isSuccessWinners) {
-      toast.success('Predictions submitted successfully!', { id: 'submit-winners' })
-      refetchCartonWinnersState()
-      refetchSubmittedWinners()
-    }
-  }, [isSuccess, isSuccessWinners, refetchCartonUsedState, refetchSubmittedGames, refetchCartonWinnersState, refetchSubmittedWinners])
-
-  useEffect(() => {
-    if (error) {
-      console.error('Wagmi error:', error)
-      console.log('Wagmi error details:', JSON.stringify(error, null, 2))
-      toast.error(`Transaction failed: ${error.message || 'Unknown error'}`, { id: 'submit-prediction' })
-    }
-  }, [error])
-
-  useEffect(() => {
-    if (errorWinners) {
-      console.error('Wagmi winners error:', errorWinners)
-      toast.error(`Transaction failed: ${errorWinners.message || 'Unknown error'}`, { id: 'submit-winners' })
-    }
-  }, [errorWinners])
-
 
   // Read submission deadline and keep a live countdown
   const { data: deadline } = useReadContract({
@@ -260,8 +256,24 @@ function PredictionsPage() {
     return () => clearInterval(id)
   }, [])
 
-  const remaining = useMemo(() => (deadline ? Number(deadline) - now : undefined), [deadline, now])
+  const deadlineValue = deadline !== undefined ? Number(deadline) : undefined
+  const hasDeadlineConfigured = deadlineValue !== undefined && deadlineValue > 0
+  const remaining = useMemo(
+    () => (hasDeadlineConfigured && deadlineValue !== undefined ? deadlineValue - now : undefined),
+    [deadlineValue, hasDeadlineConfigured, now],
+  )
   const isExpired = remaining !== undefined && remaining <= 0
+  const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired)
+
+  useEffect(() => {
+    if (tokenId !== undefined || !ownedCartons || ownedCartons.length !== 1) return
+
+    navigate({
+      to: '/predictions',
+      search: { carton: ownedCartons[0].toString() },
+      replace: true,
+    })
+  }, [navigate, ownedCartons, tokenId])
 
   // Verify off-chain teams config hash vs on-chain anchor
   const { data: onchainTeamsHash } = useReadContract({
@@ -286,8 +298,49 @@ function PredictionsPage() {
   }, [onchainTeamsHash])
 
   const totalGamesMismatch = totalGames !== undefined && Number(totalGames) !== games.length
-  const isTeamsHashValid = teamsHashStatus === 'match'
-  const canSubmitGames = !isExpired && !isPending && !isConfirming && isTeamsHashValid && !totalGamesMismatch
+  const predictionSubmitBlockedMessage = (() => {
+    if (!isConnected) return 'Connect your wallet to submit game predictions.'
+    if (!hasOwnedCartons) return 'Buy a carton before submitting game predictions.'
+    if (!tokenId) return 'Select a carton to submit game predictions.'
+    if (!selectedCartonIsOwned) return 'The selected carton is not owned by the connected wallet.'
+    if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
+    if (isExpired) return 'Predictions are already closed for this tournament.'
+    if (teamsHashStatus === 'unset') return 'Teams are not configured on-chain yet.'
+    if (teamsHashStatus === 'mismatch') return 'Teams configuration is out of sync. Ask the admin to update the teams hash.'
+    if (totalGamesMismatch) return 'Game configuration is out of sync. Ask the admin to review total games.'
+    if (cartonGroupsState) return 'Game predictions were already submitted for this carton.'
+    if (predictionWrite.isSimulating) return 'Checking game predictions against the contract.'
+    if (predictionWrite.isPending) return 'Confirm the game prediction transaction in your wallet.'
+    if (predictionWrite.isConfirming) return 'Game prediction transaction is being confirmed on-chain.'
+    return null
+  })()
+
+  const winnersSubmitBlockedMessage = (() => {
+    if (!isConnected) return 'Connect your wallet to submit winner predictions.'
+    if (!hasOwnedCartons) return 'Buy a carton before submitting winner predictions.'
+    if (!tokenId) return 'Select a carton to submit winner predictions.'
+    if (!selectedCartonIsOwned) return 'The selected carton is not owned by the connected wallet.'
+    if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
+    if (isExpired) return 'Predictions are already closed for this tournament.'
+    if (teamsHashStatus === 'unset') return 'Teams are not configured on-chain yet.'
+    if (teamsHashStatus === 'mismatch') return 'Teams configuration is out of sync. Ask the admin to update the teams hash.'
+    if (!hasValidWinners) return 'Choose 4 different teams before submitting winners.'
+    if (cartonWinnersState) return 'Winner predictions were already submitted for this carton.'
+    if (winnersWrite.isSimulating) return 'Checking winner predictions against the contract.'
+    if (winnersWrite.isPending) return 'Confirm the winner prediction transaction in your wallet.'
+    if (winnersWrite.isConfirming) return 'Winner prediction transaction is being confirmed on-chain.'
+    return null
+  })()
+
+  const canSubmitGames = predictionSubmitBlockedMessage === null
+  const canSubmitWinners = winnersSubmitBlockedMessage === null
+
+  const handleCartonChange = (value: string) => {
+    navigate({
+      to: '/predictions',
+      search: { carton: value },
+    })
+  }
 
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
@@ -340,25 +393,27 @@ function PredictionsPage() {
         {/* Deadline banner */}
         <div
           className={`mt-4 p-3 rounded-lg border text-sm ${
-            isExpired
+            !hasDeadlineConfigured
+              ? 'bg-orange-50 border-orange-200 text-orange-700'
+              : isExpired
               ? 'bg-red-50 border-red-200 text-red-700'
               : 'bg-yellow-50 border-yellow-200 text-yellow-700'
           }`}
           role="status"
           aria-live="polite"
         >
-          {deadline ? (
+          {hasDeadlineConfigured && deadlineValue !== undefined ? (
             isExpired ? (
               <span>
-                Submission closed • {new Date(Number(deadline) * 1000).toLocaleString()}
+                Submission closed • {new Date(deadlineValue * 1000).toLocaleString()}
               </span>
             ) : (
               <span>
-                Predictions close on {new Date(Number(deadline) * 1000).toLocaleString()} • {formatCountdown(remaining)}
+                Predictions close on {new Date(deadlineValue * 1000).toLocaleString()} • {formatCountdown(remaining)}
               </span>
             )
           ) : (
-            <span>Deadline: —</span>
+            <span>Submission deadline is not configured yet.</span>
           )}
         </div>
         {tokenId !== undefined && (
@@ -374,6 +429,42 @@ function PredictionsPage() {
           </div>
         )}
       </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Select Carton</CardTitle>
+          <CardDescription>
+            Choose which owned carton you want to use for predictions and claims.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!isConnected ? (
+            <p className="text-sm text-gray-500">Connect your wallet to load your cartones.</p>
+          ) : !hasOwnedCartons ? (
+            <p className="text-sm text-gray-500">This wallet does not own any cartones yet.</p>
+          ) : (
+            <>
+              <Select value={tokenId?.toString()} onValueChange={handleCartonChange}>
+                <SelectTrigger className="w-full sm:max-w-xs">
+                  <SelectValue placeholder="Select a carton" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ownedCartons?.map((ownedTokenId) => (
+                    <SelectItem key={ownedTokenId.toString()} value={ownedTokenId.toString()}>
+                      Carton #{ownedTokenId.toString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {tokenId !== undefined && !selectedCartonIsOwned && (
+                <p className="text-sm text-red-600">
+                  The selected carton does not belong to the connected wallet.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Game Predictions */}
       <div className="space-y-4">
@@ -395,7 +486,7 @@ function PredictionsPage() {
 
         <GroupsView
           groups={groups}
-          disabled={!!cartonGroupsState || isExpired}
+          disabled={!canEditSelectedCarton || !!cartonGroupsState}
           onScoreChange={updateGameScore}
         />
 
@@ -404,8 +495,17 @@ function PredictionsPage() {
           disabled={!canSubmitGames}
           onClick={submitPrediction}
         >
-          {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : 'Submit Game Predictions'}
+          {predictionWrite.isSimulating
+            ? 'Checking...'
+            : predictionWrite.isPending
+              ? 'Confirming...'
+              : predictionWrite.isConfirming
+                ? 'Processing...'
+                : 'Submit Game Predictions'}
         </Button>
+        {predictionSubmitBlockedMessage && (
+          <p className="text-sm text-muted-foreground">{predictionSubmitBlockedMessage}</p>
+        )}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-2 mt-8">
@@ -421,17 +521,26 @@ function PredictionsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <TeamWinnerSelector label="1st Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
-              <TeamWinnerSelector label="2nd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
-              <TeamWinnerSelector label="3rd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
-              <TeamWinnerSelector label="4th Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} isExpired={isExpired} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
+              <TeamWinnerSelector label="1st Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
+              <TeamWinnerSelector label="2nd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
+              <TeamWinnerSelector label="3rd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
+              <TeamWinnerSelector label="4th Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
               <Button
                 className="w-full"
-                disabled={isExpired || !hasValidWinners || isPendingWinners || isConfirmingWinners || !isTeamsHashValid}
+                disabled={!canSubmitWinners}
                 onClick={submitWinners}
               >
-                {isPendingWinners ? 'Confirming...' : isConfirmingWinners ? 'Processing...' : 'Submit Winner Predictions'}
+                {winnersWrite.isSimulating
+                  ? 'Checking...'
+                  : winnersWrite.isPending
+                    ? 'Confirming...'
+                    : winnersWrite.isConfirming
+                      ? 'Processing...'
+                      : 'Submit Winner Predictions'}
               </Button>
+              {winnersSubmitBlockedMessage && (
+                <p className="text-sm text-muted-foreground">{winnersSubmitBlockedMessage}</p>
+              )}
             </div>
           </CardContent>
         </Card>

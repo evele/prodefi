@@ -1,12 +1,16 @@
-import { useEffect, useMemo } from 'react'
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useMemo } from 'react'
+import { useReadContract } from 'wagmi'
 import { formatEther, formatUnits } from 'viem'
-import { toast } from 'sonner'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
+import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { mapClaimError } from '../lib/transaction-errors'
 
 export function ClaimSection({ tokenId }: { tokenId: bigint }) {
+  const ethClaimWrite = useSimulatedContractWrite()
+  const usdcClaimWrite = useSimulatedContractWrite()
+
   // Tournament context
   const { data: activeTournamentId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -84,68 +88,48 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     query: { enabled: tournamentId > 0n && Boolean(usdcClosed), refetchInterval: 10_000 },
   })
 
-  // Write: claim ETH
-  const {
-    writeContract: claimEth,
-    data: ethClaimHash,
-    isPending: isEthPending,
-    error: ethClaimError,
-  } = useWriteContract()
-
-  const { isLoading: isEthConfirming, isSuccess: isEthSuccess } = useWaitForTransactionReceipt({
-    hash: ethClaimHash,
-  })
-
-  // Write: claim USDC
-  const {
-    writeContract: claimUsdc,
-    data: usdcClaimHash,
-    isPending: isUsdcPending,
-    error: usdcClaimError,
-  } = useWriteContract()
-
-  const { isLoading: isUsdcConfirming, isSuccess: isUsdcSuccess } = useWaitForTransactionReceipt({
-    hash: usdcClaimHash,
-  })
-
-  useEffect(() => {
-    if (isEthSuccess && ethClaimHash) {
-      toast.success('ETH prize claimed!', { id: ethClaimHash })
-      refetchEthClaimed()
-    }
-  }, [isEthSuccess, ethClaimHash, refetchEthClaimed])
-
-  useEffect(() => {
-    if (isUsdcSuccess && usdcClaimHash) {
-      toast.success('USDC prize claimed!', { id: usdcClaimHash })
-      refetchUsdcClaimed()
-    }
-  }, [isUsdcSuccess, usdcClaimHash, refetchUsdcClaimed])
-
-  useEffect(() => {
-    if (ethClaimError) toast.error(`ETH claim failed: ${ethClaimError.message}`)
-  }, [ethClaimError])
-
-  useEffect(() => {
-    if (usdcClaimError) toast.error(`USDC claim failed: ${usdcClaimError.message}`)
-  }, [usdcClaimError])
-
   const handleClaimEth = () => {
-    claimEth({
-      address: CONTRACT_ADDRESSES.TREASURY,
-      abi: TREASURY_ABI,
-      functionName: 'claimPrize',
-      args: [tournamentId, tokenId, ZERO_ADDRESS],
-    })
+    void ethClaimWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.TREASURY,
+        abi: TREASURY_ABI,
+        functionName: 'claimPrize',
+        args: [tournamentId, tokenId, ZERO_ADDRESS],
+      },
+      {
+        toastId: `claim-eth-${tokenId.toString()}`,
+        pendingMessage: 'Waiting for ETH claim confirmation...',
+        successMessage: 'ETH prize claimed!',
+        revertedMessage: 'The ETH claim was rejected on-chain.',
+        mapError: (error) => mapClaimError(error, 'ETH'),
+        onSuccess: async () => {
+          await refetchEthClaimed()
+        },
+        logLabel: 'Claim ETH prize',
+      },
+    )
   }
 
   const handleClaimUsdc = () => {
-    claimUsdc({
-      address: CONTRACT_ADDRESSES.TREASURY,
-      abi: TREASURY_ABI,
-      functionName: 'claimPrize',
-      args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC],
-    })
+    void usdcClaimWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.TREASURY,
+        abi: TREASURY_ABI,
+        functionName: 'claimPrize',
+        args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC],
+      },
+      {
+        toastId: `claim-usdc-${tokenId.toString()}`,
+        pendingMessage: 'Waiting for USDC claim confirmation...',
+        successMessage: 'USDC prize claimed!',
+        revertedMessage: 'The USDC claim was rejected on-chain.',
+        mapError: (error) => mapClaimError(error, 'USDC'),
+        onSuccess: async () => {
+          await refetchUsdcClaimed()
+        },
+        logLabel: 'Claim USDC prize',
+      },
+    )
   }
 
   // Don't render anything until at least one asset pool is closed
@@ -160,7 +144,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
       closed: Boolean(ethClosed),
       prize: ethPrizeValue,
       claimed: Boolean(ethClaimed),
-      isPending: isEthPending || isEthConfirming,
+      isPending: ethClaimWrite.isBusy,
       hasPrize: ethPrizeValue > 0n,
       onClaim: handleClaimEth,
       format: (v: bigint) => `${Number(formatEther(v)).toFixed(4)} ETH`,
@@ -170,7 +154,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
       closed: Boolean(usdcClosed),
       prize: usdcPrizeValue,
       claimed: Boolean(usdcClaimed),
-      isPending: isUsdcPending || isUsdcConfirming,
+      isPending: usdcClaimWrite.isBusy,
       hasPrize: usdcPrizeValue > 0n,
       onClaim: handleClaimUsdc,
       format: (v: bigint) => `${Number(formatUnits(v, 6)).toFixed(2)} USDC`,
