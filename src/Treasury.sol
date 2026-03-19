@@ -12,6 +12,20 @@ import {Predictions} from "./Predictions.sol";
 contract Treasury is AccessControl {
     using SafeERC20 for IERC20;
 
+    error ZeroAmount();
+    error TournamentAlreadyClosed();
+    error UseDepositForETH();
+    error TournamentNotClosed();
+    error NotTokenOwner();
+    error AlreadyClaimed();
+    error InvalidPosition();
+    error NoPrizeAvailable();
+    error ETHTransferFailed();
+    error InvalidPercentage();
+    error InvalidPercentageSum();
+    error NoPrizePool();
+    error NoPrizeDistribution();
+
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
 
@@ -57,8 +71,8 @@ contract Treasury is AccessControl {
     /// @notice Deposits ETH from sales to tournament prize pool
     /// @param tournamentId Tournament ID
     function depositFromSales(uint256 tournamentId) external payable onlyRole(FUND_DEPOSITOR_ROLE) {
-        require(msg.value > 0, "Amount must be greater than 0");
-        require(!isClosedTournament[tournamentId][address(0)], "Tournament already closed");
+        if (msg.value == 0) revert ZeroAmount();
+        if (isClosedTournament[tournamentId][address(0)]) revert TournamentAlreadyClosed();
         prizePools[tournamentId][address(0)] += msg.value;
         emit DepositFromSale(tournamentId, address(0), msg.value);
     }
@@ -71,9 +85,9 @@ contract Treasury is AccessControl {
         external
         onlyRole(FUND_DEPOSITOR_ROLE)
     {
-        require(token != address(0), "Use depositFromSales for ETH");
-        require(amount > 0, "Amount must be greater than 0");
-        require(!isClosedTournament[tournamentId][token], "Tournament already closed");
+        if (token == address(0)) revert UseDepositForETH();
+        if (amount == 0) revert ZeroAmount();
+        if (isClosedTournament[tournamentId][token]) revert TournamentAlreadyClosed();
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         prizePools[tournamentId][token] += amount;
@@ -85,23 +99,25 @@ contract Treasury is AccessControl {
     /// @param tokenId Token ID to claim prize for
     /// @param token Token address (address(0) for ETH)
     function claimPrize(uint256 tournamentId, uint256 tokenId, address token) external {
-        require(isClosedTournament[tournamentId][token], "Tournament not closed");
-        require(cartonContract.balanceOf(msg.sender, tokenId) > 0, "Not token owner");
-        require(!claimed[tournamentId][tokenId][token], "Already claimed");
+        if (!isClosedTournament[tournamentId][token]) revert TournamentNotClosed();
+        if (cartonContract.balanceOf(msg.sender, tokenId) == 0) revert NotTokenOwner();
+        if (claimed[tournamentId][tokenId][token]) revert AlreadyClaimed();
 
         uint256 position = predictionsContract.getCartonPosition(tokenId);
-        require(position > 0 && position <= prizePoolDistributions[tournamentId][token].length, "Invalid position");
+        uint8[] storage distribution = prizePoolDistributions[tournamentId][token];
+        if (position == 0 || position > distribution.length) revert InvalidPosition();
 
-        uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
-        uint256 prize_amount = (closedPrizePools[tournamentId][token] * percentage_position) / 100;
-        require(prize_amount > 0, "No prize available");
+        uint256 closedPool = closedPrizePools[tournamentId][token];
+        uint8 percentage_position = distribution[position - 1];
+        uint256 prize_amount = (closedPool * percentage_position) / 100;
+        if (prize_amount == 0) revert NoPrizeAvailable();
 
         claimed[tournamentId][tokenId][token] = true;
 
         if (token == address(0)) {
             // ETH transfer
             (bool success,) = payable(msg.sender).call{value: prize_amount}("");
-            require(success, "ETH transfer failed");
+            if (!success) revert ETHTransferFailed();
         } else {
             // ERC20 transfer
             IERC20(token).safeTransfer(msg.sender, prize_amount);
@@ -121,10 +137,10 @@ contract Treasury is AccessControl {
         // Verify percentages sum between 90% and 100% (reserve for charity/development)
         uint256 sum_percentages = 0;
         for (uint256 i = 0; i < percentages.length; i++) {
-            require(percentages[i] <= 100, "Percentage must be between 0 and 100");
+            if (percentages[i] > 100) revert InvalidPercentage();
             sum_percentages += percentages[i];
         }
-        require(sum_percentages >= 90 && sum_percentages <= 100, "Percentage sum must be between 90 and 100");
+        if (sum_percentages < 90 || sum_percentages > 100) revert InvalidPercentageSum();
 
         delete prizePoolDistributions[tournamentId][token];
         for (uint256 i = 0; i < percentages.length; i++) {
@@ -150,7 +166,7 @@ contract Treasury is AccessControl {
         view
         returns (uint256)
     {
-        require(position > 0 && position <= prizePoolDistributions[tournamentId][token].length, "Invalid position");
+        if (position == 0 || position > prizePoolDistributions[tournamentId][token].length) revert InvalidPosition();
         uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
 
         // Use closed pool if tournament is closed, otherwise use current pool
@@ -169,42 +185,18 @@ contract Treasury is AccessControl {
         return claimed[tournamentId][tokenId][token];
     }
 
-    /// @notice Get all supported assets for a tournament
-    /// @param tournamentId Tournament ID
-    /// @dev Returns assets that have non-zero prize pools
-    function getSupportedAssets(uint256 tournamentId) external view returns (address[] memory) {
-        // Note: This is a simple implementation that requires off-chain tracking
-        // For a more robust solution, consider maintaining an assets array per tournament
-        address[] memory assets = new address[](2); // ETH + one ERC20 for example
-        uint256 count = 0;
-
-        if (prizePools[tournamentId][address(0)] > 0) {
-            assets[count] = address(0);
-            count++;
-        }
-
-        // Add logic here to check for specific ERC20 tokens
-        // This could be enhanced with a proper assets registry
-
-        // Resize array to actual count
-        address[] memory result = new address[](count);
-        for (uint256 i = 0; i < count; i++) {
-            result[i] = assets[i];
-        }
-        return result;
-    }
-
     /// @notice Closes tournament and snapshots prize pool for claims
     /// @param tournamentId Tournament ID
     /// @param token Token address (address(0) for ETH)
     function closeTournament(uint256 tournamentId, address token) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
-        require(!isClosedTournament[tournamentId][token], "Tournament already closed");
-        require(prizePools[tournamentId][token] > 0, "No prize pool");
-        require(prizePoolDistributions[tournamentId][token].length > 0, "No prize distribution");
+        if (isClosedTournament[tournamentId][token]) revert TournamentAlreadyClosed();
+        uint256 pool = prizePools[tournamentId][token];
+        if (pool == 0) revert NoPrizePool();
+        if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
 
-        closedPrizePools[tournamentId][token] = prizePools[tournamentId][token];
+        closedPrizePools[tournamentId][token] = pool;
         isClosedTournament[tournamentId][token] = true;
 
-        emit TournamentClosed(tournamentId, token, closedPrizePools[tournamentId][token]);
+        emit TournamentClosed(tournamentId, token, pool);
     }
 }

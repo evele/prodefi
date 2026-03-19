@@ -75,11 +75,9 @@ contract IntegrationTest is BaseTest {
         predictions.setPositions(ids, allPoints);
 
         // Verify final rankings
-        uint256[] memory finalRankings = predictions.getPositions();
-        assertEq(finalRankings.length, 3);
-        assertEq(finalRankings[0], TOKEN_ID_1); // 1st place
-        assertEq(finalRankings[1], TOKEN_ID_2); // 2nd place
-        assertEq(finalRankings[2], TOKEN_ID_3); // 3rd place
+        assertEq(predictions.getCartonPosition(TOKEN_ID_1), 1); // 1st place
+        assertEq(predictions.getCartonPosition(TOKEN_ID_2), 2); // 2nd place
+        assertEq(predictions.getCartonPosition(TOKEN_ID_3), 3); // 3rd place
 
         // ========== VERIFICATION OF COMPLETE SYSTEM STATE ==========
 
@@ -98,10 +96,10 @@ contract IntegrationTest is BaseTest {
 
         Predictions.Prediction[] memory preds = _createValidGamePrediction();
 
-        _expectRevertWithMessage("Prediction deadline passed");
+        vm.expectRevert(Predictions.DeadlinePassed.selector);
         _submitGamePrediction(user1, TOKEN_ID_1, preds);
 
-        _expectRevertWithMessage("Prediction deadline passed");
+        vm.expectRevert(Predictions.DeadlinePassed.selector);
         _submitWinnerPrediction(user1, TOKEN_ID_1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
     }
 

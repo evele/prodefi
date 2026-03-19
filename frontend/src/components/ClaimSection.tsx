@@ -39,20 +39,35 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
 
   const anyClosed = Boolean(ethClosed) || Boolean(usdcClosed)
 
-  // Ranked positions — only needed when tournament is closed
-  const { data: positions } = useReadContract({
+  const { data: positionsVersion } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
-    functionName: 'getPositions',
+    functionName: 'positionsVersion',
     query: { enabled: anyClosed, refetchInterval: 10_000 },
   })
 
-  // 1-indexed rank of this token, or null if not ranked
+  // 1-indexed rank from tokenPositions mapping (0 means unranked)
+  const { data: rawRank } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'tokenPositions',
+    args: anyClosed ? [tokenId] : undefined,
+    query: { enabled: anyClosed, refetchInterval: 10_000 },
+  })
+
+  const { data: rankVersion } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'tokenPositionsVersion',
+    args: anyClosed ? [tokenId] : undefined,
+    query: { enabled: anyClosed, refetchInterval: 10_000 },
+  })
+
   const rank = useMemo(() => {
-    if (!positions) return null
-    const idx = positions.findIndex((id) => id === tokenId)
-    return idx === -1 ? null : idx + 1
-  }, [positions, tokenId])
+    if (rawRank === undefined || rawRank === 0n) return null
+    if (positionsVersion === undefined || rankVersion !== positionsVersion) return null
+    return Number(rawRank)
+  }, [positionsVersion, rankVersion, rawRank])
 
   // Prize amounts per asset (only useful when ranked + closed)
   const { data: ethPrize } = useReadContract({

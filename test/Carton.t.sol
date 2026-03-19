@@ -190,7 +190,7 @@ contract CartonTest is BaseTest {
         USDT.approve(address(carton), 1_000_000);
 
         vm.prank(user1);
-        vm.expectRevert("Token not accepted");
+        vm.expectRevert(Carton.TokenNotAccepted.selector);
         carton.buyCartonWithToken(address(USDT));
     }
 
@@ -215,14 +215,14 @@ contract CartonTest is BaseTest {
 
         vm.deal(user, 0.05 ether);
         vm.prank(user);
-        vm.expectRevert("Insufficient payment");
+        vm.expectRevert(Carton.InsufficientPayment.selector);
         carton.buyCarton{value: 0.05 ether}();
     }
 
     function testBuyCartonPriceNotSet() public {
         vm.deal(user, 1 ether);
         vm.prank(user);
-        vm.expectRevert("Price not set");
+        vm.expectRevert(Carton.PriceNotSet.selector);
         carton.buyCarton{value: 0.1 ether}();
     }
 
@@ -274,7 +274,7 @@ contract CartonTest is BaseTest {
 
     function testWithdrawNoFunds() public {
         vm.prank(admin);
-        vm.expectRevert("No funds to withdraw");
+        vm.expectRevert(Carton.NoFundsToWithdraw.selector);
         carton.withdraw();
     }
 
@@ -328,7 +328,7 @@ contract CartonTest is BaseTest {
 
     function testSetTreasuryAddress_RevertZeroAddress() public {
         vm.prank(admin);
-        vm.expectRevert("Treasury address cannot be zero");
+        vm.expectRevert(Carton.ZeroTreasuryAddress.selector);
         carton.setTreasuryAddress(address(0));
     }
 
@@ -347,7 +347,7 @@ contract CartonTest is BaseTest {
 
     function testSetActiveTournament_RevertZero() public {
         vm.prank(admin);
-        vm.expectRevert("Tournament ID must be greater than 0");
+        vm.expectRevert(Carton.ZeroTournamentId.selector);
         carton.setActiveTournament(0);
     }
 

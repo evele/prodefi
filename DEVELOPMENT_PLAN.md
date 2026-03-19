@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: February 18, 2026*
+*Last updated: March 19, 2026*
 
 ---
 
@@ -55,6 +55,8 @@ All critical bugs fixed. All dead code cleaned up:
 - `useWatchContractEvent` for `CartonPurchased` is commented out (doesn't work on Anvil, polling used instead)
 - `TODO: fix rerenders` in `predictions.tsx` around `buildFixture`
 - No testnet/mainnet deployment config exists (everything targets Anvil localhost)
+- Leaderboard no longer depends on `getPositions()` storage array; frontend reconstructs rankings from `Carton.nextTokenId()` + `Predictions.tokenPositions(tokenId)` and filters stale entries with `positionsVersion` / `tokenPositionsVersion`
+- Alternative considered for future: use `PositionsUpdated` logs as the leaderboard source, optionally storing a `lastPositionsBlock` pointer to query a narrow block range instead of scanning long history
 
 ---
 

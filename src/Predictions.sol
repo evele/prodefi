@@ -6,6 +6,30 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
+    error TeamsHashAlreadyFrozen();
+    error DeadlineMustBeFuture();
+    error PredictionsAlreadyStarted();
+    error TotalGamesMustBePositive();
+    error NoPredictionsProvided();
+    error ArrayLengthMismatch();
+    error PointsNotOrdered();
+    error TokenNotInLeaderboard();
+    error NotCartonOwner();
+    error DeadlinePassed();
+    error PredictionAlreadySubmitted();
+    error WrongPredictionCount();
+    error InvalidGameId();
+    error DuplicateGameId();
+    error ResultsAlreadySet();
+    error ResultNotSet();
+    error WinnersAlreadyPredicted();
+    error DuplicateTeamId();
+    error InvalidTeamId();
+    error OfficialWinnersAlreadySet();
+    error OfficialWinnersNotSet();
+    error NoPredictionForToken();
+    error NoPredictionsSubmitted();
+
     IERC1155 public cartones;
     /// @notice Anchor for off-chain teams config (id + name + groupId)
     /// @dev Set via setTeamsHash(); frontend verifies local config against this before submitting predictions
@@ -17,11 +41,11 @@ contract Predictions is Ownable {
 
     // Number of games required in a prediction (configurable by owner before submissions start)
     uint8 public totalGames = 72;
-    uint8 immutable LOCAL = 0;
-    uint8 immutable EMPATE = 1;
-    uint8 immutable VISITANTE = 2;
-    uint8 immutable MAX_TEAM_ID = 48; // Maximum allowed team ID
-    uint8 immutable MAX_WINNERS = 4; // Maximum number of winner teams to predict
+    uint8 constant LOCAL = 0;
+    uint8 constant EMPATE = 1;
+    uint8 constant VISITANTE = 2;
+    uint8 constant MAX_TEAM_ID = 48; // Maximum allowed team ID
+    uint8 constant MAX_WINNERS = 4; // Maximum number of winner teams to predict
     uint8 constant POINTS_FIRST = 19; // Points for guessing first place
     uint8 constant POINTS_SECOND = 16; // Points for guessing second place
     uint8 constant POINTS_THIRD_FOURTH = 10; // Points for guessing third or fourth place
@@ -75,19 +99,13 @@ contract Predictions is Ownable {
 
     mapping(uint256 => Prediction[]) predictions; // token ID -> prediction (Prediction[])
 
-    // uint256[] public positions; // array of token IDs ordered from higher to lower
-
     mapping(uint256 => bool) public used;
-    uint256[] public positions; // array of token IDs ordered from highest to lowest
+    uint256 public positionsVersion;
     mapping(uint256 => uint256) public tokenPositions; // tokenId => position (1-indexed)
+    mapping(uint256 => uint256) public tokenPositionsVersion; // tokenId => leaderboard version
 
-    // Event for when positions are updated
+    // Event for when positions are updated (emits the ordered list from calldata for off-chain consumers)
     event PositionsUpdated(uint256[] positions);
-
-    // Getter function to obtain positions
-    function getPositions() public view returns (uint256[] memory) {
-        return positions;
-    }
 
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
@@ -96,20 +114,20 @@ contract Predictions is Ownable {
 
     // Allow owner to set teams metadata hash; can be frozen
     function setTeamsHash(bytes32 h) external onlyOwner {
-        require(!teamsHashFrozen, "teamsHash frozen");
+        if (teamsHashFrozen) revert TeamsHashAlreadyFrozen();
         emit TeamsHashUpdated(teamsHash, h);
         teamsHash = h;
     }
 
     function freezeTeamsHash() external onlyOwner {
-        require(!teamsHashFrozen, "already frozen");
+        if (teamsHashFrozen) revert TeamsHashAlreadyFrozen();
         teamsHashFrozen = true;
         emit TeamsHashFrozen();
     }
 
     // Function to set the time limit for predictions
     function setSubmissionDeadline(uint256 _deadline) external onlyOwner {
-        require(_deadline > block.timestamp, "Deadline must be in the future");
+        if (_deadline <= block.timestamp) revert DeadlineMustBeFuture();
         submissionDeadline = _deadline;
     }
     // Guard to prevent changing game count after any prediction was submitted
@@ -119,72 +137,73 @@ contract Predictions is Ownable {
     /// @dev Can only be set before any prediction is submitted to avoid inconsistencies
 
     function setTotalGames(uint8 _totalGames) external onlyOwner {
-        require(!predictionsStarted, "Predictions already started");
-        require(_totalGames > 0, "totalGames must be > 0");
+        if (predictionsStarted) revert PredictionsAlreadyStarted();
+        if (_totalGames == 0) revert TotalGamesMustBePositive();
         emit TotalGamesUpdated(totalGames, _totalGames);
         totalGames = _totalGames;
     }
 
     // Function for owner to set positions
-    function setPositions(uint256[] memory _predictionIds, uint256[] memory _predictionPoints)
+    function setPositions(uint256[] calldata _predictionIds, uint256[] calldata _predictionPoints)
         public
         onlyOwner
         returns (bool success)
     {
-        require(_predictionIds.length > 0, "No predictions provided");
-        require(_predictionIds.length == _predictionPoints.length, "Arrays must have same length");
+        if (_predictionIds.length == 0) revert NoPredictionsProvided();
+        if (_predictionIds.length != _predictionPoints.length) revert ArrayLengthMismatch();
 
+        uint256 newVersion = positionsVersion + 1;
+        positionsVersion = newVersion;
         uint256 maxPoints = type(uint256).max;
-        delete positions;
 
         for (uint256 i = 0; i < _predictionPoints.length; i++) {
-            require(maxPoints >= _predictionPoints[i], "Points must be ordered");
-            positions.push(_predictionIds[i]);
+            if (maxPoints < _predictionPoints[i]) revert PointsNotOrdered();
             tokenPositions[_predictionIds[i]] = i + 1;
+            tokenPositionsVersion[_predictionIds[i]] = newVersion;
             maxPoints = _predictionPoints[i];
         }
 
-        emit PositionsUpdated(positions);
+        emit PositionsUpdated(_predictionIds);
         return true;
     }
 
     function getCartonPosition(uint256 tokenId) public view returns (uint256) {
-        require(tokenPositions[tokenId] > 0, "Token not in leaderboard");
+        if (tokenPositionsVersion[tokenId] != positionsVersion || tokenPositions[tokenId] == 0) {
+            revert TokenNotInLeaderboard();
+        }
         return tokenPositions[tokenId];
     }
 
     modifier onlyCartonOwner(uint256 tokenId) {
-        require(cartones.balanceOf(msg.sender, tokenId) >= 1, "You aren't the owner of this carton");
+        if (cartones.balanceOf(msg.sender, tokenId) < 1) revert NotCartonOwner();
         _;
     }
 
     function submitPrediction(uint256 tokenId, Prediction[] calldata _prediction) external onlyCartonOwner(tokenId) {
-        require(block.timestamp < submissionDeadline, "Prediction deadline passed");
-        require(!used[tokenId], "Prediction already submitted");
-        require(_prediction.length == totalGames, "Must submit predictions for all games");
+        if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
+        if (used[tokenId]) revert PredictionAlreadySubmitted();
+        if (_prediction.length != totalGames) revert WrongPredictionCount();
 
         bool[] memory usedGameId = new bool[](totalGames + 1);
-
-        for (uint256 i = 0; i < _prediction.length; i++) {
-            require(_prediction[i].gameId > 0 && _prediction[i].gameId <= totalGames, "Invalid game ID");
-            require(!usedGameId[_prediction[i].gameId], "Duplicate game ID");
-            require(!games[_prediction[i].gameId].set, "Cannot predict after results are set");
-            usedGameId[_prediction[i].gameId] = true;
-        }
 
         used[tokenId] = true;
         if (!predictionsStarted) predictionsStarted = true;
 
         for (uint256 i = 0; i < _prediction.length; i++) {
-            predictions[tokenId].push(Prediction({gameId: _prediction[i].gameId, result: _prediction[i].result}));
+            uint8 gameId = _prediction[i].gameId;
+            if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
+            if (usedGameId[gameId]) revert DuplicateGameId();
+            if (games[gameId].set) revert ResultsAlreadySet();
+            usedGameId[gameId] = true;
+            predictions[tokenId].push(Prediction({gameId: gameId, result: _prediction[i].result}));
         }
 
         emit PredictionsSubmitted(msg.sender, tokenId);
     }
 
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
-        require(gameId > 0 && gameId <= totalGames, "Invalid game ID");
-        require(!games[gameId].set, "Results already set for this game");
+        if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
+        if (games[gameId].set) revert ResultsAlreadySet();
 
         games[gameId].result = [team1Goals, team2Goals];
         games[gameId].set = true;
@@ -197,33 +216,29 @@ contract Predictions is Ownable {
     }
 
     function getGameResults(uint8 gameId) external view returns (uint8[2] memory) {
-        require(gameId > 0 && gameId <= totalGames, "Invalid game ID");
+        if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
         return games[gameId].result;
     }
 
     // Funciones de cálculo de puntos
     function calculatePoints(uint256 tokenId, uint8 index) public view returns (uint8) {
-        require(games[predictions[tokenId][index].gameId].set, "Result not set for this game");
+        Prediction memory pred = predictions[tokenId][index];
+        Game storage game = games[pred.gameId];
+        if (!game.set) revert ResultNotSet();
 
         uint8 points = abs(
             int8(
                 7
                     - (
-                        calculateDifferencePoints(
-                            predictions[tokenId][index].result[0], games[predictions[tokenId][index].gameId].result[0]
-                        )
-                            + calculateDifferencePoints(
-                                predictions[tokenId][index].result[1], games[predictions[tokenId][index].gameId].result[1]
-                            )
+                        calculateDifferencePoints(pred.result[0], game.result[0])
+                            + calculateDifferencePoints(pred.result[1], game.result[1])
                     )
             )
         );
 
         if (
-            getLocalEmpateVisitante(predictions[tokenId][index].result[0], predictions[tokenId][index].result[1])
-                == getLocalEmpateVisitante(
-                    games[predictions[tokenId][index].gameId].result[0], games[predictions[tokenId][index].gameId].result[1]
-                )
+            getLocalEmpateVisitante(pred.result[0], pred.result[1])
+                == getLocalEmpateVisitante(game.result[0], game.result[1])
         ) {
             points += 2;
         }
@@ -245,14 +260,14 @@ contract Predictions is Ownable {
 
     // Functions for winner predictions
     function predictWinners(uint256 tokenId, uint8[4] calldata teams) external onlyCartonOwner(tokenId) {
-        require(block.timestamp < submissionDeadline, "Prediction deadline passed");
-        require(!winnersPredictions[tokenId].set, "Winners already predicted");
+        if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
+        if (winnersPredictions[tokenId].set) revert WinnersAlreadyPredicted();
 
-        require(all_different(teams), "Duplicate team ID");
+        if (!all_different(teams)) revert DuplicateTeamId();
 
         // Validate that team IDs are valid
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
-            require(teams[i] > 0 && teams[i] <= MAX_TEAM_ID, "Invalid team ID");
+            if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
         }
 
         winnersPredictions[tokenId] = WinnersPrediction({teams: teams, set: true});
@@ -260,7 +275,7 @@ contract Predictions is Ownable {
         emit WinnersPredicted(msg.sender, tokenId, teams);
     }
 
-    function all_different(uint8[4] memory teams) public pure returns (bool) {
+    function all_different(uint8[4] calldata teams) public pure returns (bool) {
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
             for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
                 if (teams[i] == teams[j]) {
@@ -278,13 +293,13 @@ contract Predictions is Ownable {
     // Function to set official winners (only for owner)
     function setOfficialWinners(uint8[4] calldata teams) external onlyOwner {
         // NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.
-        require(!officialWinners.set, "Official winners already set");
+        if (officialWinners.set) revert OfficialWinnersAlreadySet();
 
         // Validate that team IDs are valid and there are no duplicates
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
-            require(teams[i] > 0 && teams[i] <= MAX_TEAM_ID, "Invalid team ID");
+            if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
             for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
-                require(teams[i] != teams[j], "Duplicate team ID");
+                if (teams[i] == teams[j]) revert DuplicateTeamId();
             }
         }
 
@@ -295,8 +310,8 @@ contract Predictions is Ownable {
 
     // Function to calculate winner points
     function calculateWinnerPoints(uint256 tokenId) public view returns (uint256) {
-        require(officialWinners.set, "Official winners not set yet");
-        require(winnersPredictions[tokenId].set, "No winners prediction for this token");
+        if (!officialWinners.set) revert OfficialWinnersNotSet();
+        if (!winnersPredictions[tokenId].set) revert NoPredictionForToken();
 
         uint256 points = 0;
         uint8[4] memory predicted = winnersPredictions[tokenId].teams;
@@ -335,7 +350,7 @@ contract Predictions is Ownable {
 
     // Function to update total points of a carton
     function updateTotalPoints(uint256 tokenId) external {
-        require(used[tokenId], "No predictions submitted for this token");
+        if (!used[tokenId]) revert NoPredictionsSubmitted();
         uint256 newPoints = calculateTotalPoints(tokenId);
         totalPoints[tokenId] = newPoints;
         emit PointsUpdated(tokenId, newPoints);

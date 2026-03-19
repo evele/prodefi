@@ -81,7 +81,7 @@ contract PredictionsTest is Test {
         vm.warp(2 days);
         uint256 currentTime = block.timestamp; // == 2 days
         // 1) Try setting deadline in the past should revert
-        vm.expectRevert("Deadline must be in the future");
+        vm.expectRevert(Predictions.DeadlineMustBeFuture.selector);
         preds.setSubmissionDeadline(currentTime - 1 days); // now equals 1 day
 
         // 2) Set deadline for 1 day from now
@@ -94,7 +94,7 @@ contract PredictionsTest is Test {
 
         // 4) Try setting new deadline before current should revert
         vm.warp(currentTime + 1 hours);
-        vm.expectRevert("Deadline must be in the future");
+        vm.expectRevert(Predictions.DeadlineMustBeFuture.selector);
         preds.setSubmissionDeadline(currentTime);
     }
 
@@ -136,7 +136,7 @@ contract PredictionsTest is Test {
 
         // 4) Intentar enviar predicciones después del deadline debe revertir
         vm.prank(user);
-        vm.expectRevert("Prediction deadline passed");
+        vm.expectRevert(Predictions.DeadlinePassed.selector);
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
@@ -144,7 +144,7 @@ contract PredictionsTest is Test {
         // 1) Intentar enviar menos partidos que TOTAL_GAMES
         Predictions.Prediction[] memory arr3 = new Predictions.Prediction[](3);
         vm.prank(user);
-        vm.expectRevert("Must submit predictions for all games");
+        vm.expectRevert(Predictions.WrongPredictionCount.selector);
         preds.submitPrediction(TOKEN_ID, arr3);
 
         // 2) Intentar hacer predicción después de que se establezcan resultados
@@ -158,7 +158,7 @@ contract PredictionsTest is Test {
         arr5[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(0)]});
         arr5[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
         vm.prank(user);
-        vm.expectRevert("Cannot predict after results are set");
+        vm.expectRevert(Predictions.ResultsAlreadySet.selector);
         preds.submitPrediction(TOKEN_ID, arr5);
     }
 
@@ -172,7 +172,7 @@ contract PredictionsTest is Test {
         arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
 
         vm.prank(user);
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
@@ -184,7 +184,7 @@ contract PredictionsTest is Test {
         arr[3] = Predictions.Prediction({gameId: 5, result: [uint8(1), uint8(0)]});
 
         vm.prank(user);
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
@@ -196,7 +196,7 @@ contract PredictionsTest is Test {
         arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
 
         vm.prank(user);
-        vm.expectRevert("Duplicate game ID");
+        vm.expectRevert(Predictions.DuplicateGameId.selector);
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
@@ -234,14 +234,14 @@ contract PredictionsTest is Test {
     function testWinnerPrediction_InvalidTeam() public setup {
         // Intentar predecir equipo inválido (>= MAX_TEAM_ID)
         vm.prank(user);
-        vm.expectRevert("Invalid team ID");
+        vm.expectRevert(Predictions.InvalidTeamId.selector);
         preds.predictWinners(TOKEN_ID, [49, 2, 3, 4]);
     }
 
     function testWinnerPrediction_DuplicateTeams() public setup {
         // Intentar predecir equipos duplicados
         vm.prank(user);
-        vm.expectRevert("Duplicate team ID");
+        vm.expectRevert(Predictions.DuplicateTeamId.selector);
         preds.predictWinners(TOKEN_ID, [1, 2, 2, 4]);
     }
 
@@ -252,14 +252,12 @@ contract PredictionsTest is Test {
 
         // Intentar hacer otra predicción de ganadores
         vm.prank(user);
-        vm.expectRevert("Winners already predicted");
+        vm.expectRevert(Predictions.WinnersAlreadyPredicted.selector);
         preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
     }
 
     function testPointsCalculation() public {
         // Hacer predicción de partidos (1-based gameIds)
-        uint256[] memory pos;
-
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
         gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
         gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
@@ -306,9 +304,7 @@ contract PredictionsTest is Test {
         preds.setPositions(ids, points);
 
         // Verificar que las posiciones se establecieron correctamente
-        pos = preds.getPositions();
-        assertEq(pos.length, 1);
-        assertEq(pos[0], TOKEN_ID);
+        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
 
         // Actualizar puntos totales
         vm.prank(user);
@@ -317,15 +313,13 @@ contract PredictionsTest is Test {
     }
 
     function testSetPositions() public {
-        uint256[] memory pos;
-
         // 1) Intentar establecer posiciones con arrays de diferente longitud
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](2);
         ids[0] = TOKEN_ID;
         points[0] = 90;
         points[1] = 80;
-        vm.expectRevert("Arrays must have same length");
+        vm.expectRevert(Predictions.ArrayLengthMismatch.selector);
         preds.setPositions(ids, points);
 
         // 2) Intentar establecer posiciones con puntos desordenados
@@ -335,17 +329,26 @@ contract PredictionsTest is Test {
         ids[1] = TOKEN_ID + 1;
         points[0] = 80;
         points[1] = 90;
-        vm.expectRevert("Points must be ordered");
+        vm.expectRevert(Predictions.PointsNotOrdered.selector);
         preds.setPositions(ids, points);
 
         // 3) Establecer posiciones correctamente
         points[0] = 90;
         points[1] = 80;
         preds.setPositions(ids, points);
-        pos = preds.getPositions();
-        assertEq(pos.length, 2);
-        assertEq(pos[0], TOKEN_ID);
-        assertEq(pos[1], TOKEN_ID + 1);
+        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
+        assertEq(preds.getCartonPosition(TOKEN_ID + 1), 2);
+
+        // 4) Reemplazar el leaderboard con una sola entrada invalida posiciones viejas
+        uint256[] memory updatedIds = new uint256[](1);
+        uint256[] memory updatedPoints = new uint256[](1);
+        updatedIds[0] = TOKEN_ID + 1;
+        updatedPoints[0] = 95;
+        preds.setPositions(updatedIds, updatedPoints);
+
+        assertEq(preds.getCartonPosition(TOKEN_ID + 1), 1);
+        vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
+        preds.getCartonPosition(TOKEN_ID);
     }
 
     function testSetResults() public {
@@ -355,16 +358,16 @@ contract PredictionsTest is Test {
         preds.setResults(1, 2, 1);
 
         // gameId = 0 should revert (1-based)
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.setResults(0, 2, 1);
 
         // gameId out of range should revert
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.setResults(5, 2, 1);
 
         // Establecer resultados dos veces debe revertir
         preds.setResults(1, 2, 1);
-        vm.expectRevert("Results already set for this game");
+        vm.expectRevert(Predictions.ResultsAlreadySet.selector);
         preds.setResults(1, 2, 1);
 
         // Verificar que los resultados se establecieron correctamente
@@ -387,12 +390,12 @@ contract PredictionsTest is Test {
 
     function testWinnerPrediction_RevertTeamIdZero() public setup {
         vm.prank(user);
-        vm.expectRevert("Invalid team ID");
+        vm.expectRevert(Predictions.InvalidTeamId.selector);
         preds.predictWinners(TOKEN_ID, [0, 2, 3, 4]);
     }
 
     function testSetOfficialWinners_RevertTeamIdZero() public {
-        vm.expectRevert("Invalid team ID");
+        vm.expectRevert(Predictions.InvalidTeamId.selector);
         preds.setOfficialWinners([0, 2, 3, 4]);
     }
 
@@ -405,12 +408,12 @@ contract PredictionsTest is Test {
     }
 
     function testGetGameResults_GameIdZero() public {
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.getGameResults(0);
     }
 
     function testGetGameResults_GameIdOutOfRange() public {
-        vm.expectRevert("Invalid game ID");
+        vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.getGameResults(5);
     }
 }

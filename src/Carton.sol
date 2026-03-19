@@ -20,6 +20,18 @@ interface ITreasury {
 contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC1155Supply, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    error PriceNotSet();
+    error InsufficientPayment();
+    error RefundFailed();
+    error TokenNotAccepted();
+    error TokenPriceNotSet();
+    error PriceMustBePositive();
+    error NoFundsToWithdraw();
+    error WithdrawFailed();
+    error NoTokensToWithdraw();
+    error ZeroTreasuryAddress();
+    error ZeroTournamentId();
+
     bytes32 public constant URI_SETTER_ROLE = keccak256("URI_SETTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -34,6 +46,10 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     ITreasury public treasury;
     uint256 public activeTournamentId;
+
+    function nextTokenId() external view returns (uint256) {
+        return _nextTokenId;
+    }
 
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
     event CartonPurchasedWithToken(
@@ -79,8 +95,8 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function buyCarton() external payable whenNotPaused nonReentrant {
-        require(cartonPrice > 0, "Price not set");
-        require(msg.value >= cartonPrice, "Insufficient payment");
+        if (cartonPrice == 0) revert PriceNotSet();
+        if (msg.value < cartonPrice) revert InsufficientPayment();
 
         uint256 tokenId = _nextTokenId++;
         _mint(msg.sender, tokenId, 1, "");
@@ -89,23 +105,25 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         emit CartonPurchased(msg.sender, tokenId, cartonPrice);
 
         // Auto-deposit to Treasury if configured
-        if (address(treasury) != address(0) && activeTournamentId > 0) {
-            treasury.depositFromSales{value: cartonPrice}(activeTournamentId);
+        ITreasury _treasury = treasury;
+        uint256 _tournamentId = activeTournamentId;
+        if (address(_treasury) != address(0) && _tournamentId > 0) {
+            _treasury.depositFromSales{value: cartonPrice}(_tournamentId);
         }
 
         // Refund excess payment
         if (msg.value > cartonPrice) {
             uint256 refund = msg.value - cartonPrice;
             (bool ok,) = payable(msg.sender).call{value: refund}("");
-            require(ok, "Refund failed");
+            if (!ok) revert RefundFailed();
         }
     }
 
     function buyCartonWithToken(address token) external whenNotPaused nonReentrant {
-        require(acceptedTokens[token], "Token not accepted");
-        require(tokenPrices[token] > 0, "Token price not set");
+        if (!acceptedTokens[token]) revert TokenNotAccepted();
+        if (tokenPrices[token] == 0) revert TokenPriceNotSet();
         uint256 amount = tokenPrices[token];
-        require(IERC20(token).transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 tokenId = _nextTokenId++;
         _mint(msg.sender, tokenId, 1, "");
@@ -113,9 +131,11 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         emit CartonPurchasedWithToken(msg.sender, tokenId, token, amount);
 
         // Auto-deposit to Treasury if configured
-        if (address(treasury) != address(0) && activeTournamentId > 0) {
-            IERC20(token).approve(address(treasury), amount);
-            treasury.depositFromSalesERC20(activeTournamentId, token, amount);
+        ITreasury _treasury = treasury;
+        uint256 _tournamentId = activeTournamentId;
+        if (address(_treasury) != address(0) && _tournamentId > 0) {
+            IERC20(token).approve(address(_treasury), amount);
+            _treasury.depositFromSalesERC20(_tournamentId, token, amount);
         }
     }
 
@@ -124,7 +144,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function setTokenPrice(address token, uint256 price) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(price > 0, "Price must be greater than 0");
+        if (price == 0) revert PriceMustBePositive();
         tokenPrices[token] = price;
     }
 
@@ -136,24 +156,24 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
+        if (balance == 0) revert NoFundsToWithdraw();
         (bool ok,) = payable(msg.sender).call{value: balance}("");
-        require(ok, "Withdraw failed");
+        if (!ok) revert WithdrawFailed();
     }
 
     function withdrawToken(address token) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         uint256 balance = IERC20(token).balanceOf(address(this));
-        require(balance > 0, "No tokens to withdraw");
+        if (balance == 0) revert NoTokensToWithdraw();
         IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     function setTreasuryAddress(address treasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(treasuryAddress != address(0), "Treasury address cannot be zero");
+        if (treasuryAddress == address(0)) revert ZeroTreasuryAddress();
         treasury = ITreasury(treasuryAddress);
     }
 
     function setActiveTournament(uint256 tournamentId) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(tournamentId > 0, "Tournament ID must be greater than 0");
+        if (tournamentId == 0) revert ZeroTournamentId();
         activeTournamentId = tournamentId;
     }
 

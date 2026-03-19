@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
-import { CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
+import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
 import { toast } from 'sonner'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
@@ -234,13 +234,46 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
 
 function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
+  const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
 
-  const { data: currentPositions } = useReadContract({
+  const { data: nextTokenId } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'nextTokenId',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const candidateTokenIds = useMemo(() => {
+    const upperBound = Number(nextTokenId ?? 1n)
+    return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
+  }, [nextTokenId])
+
+  const { data: positionsVersion } = useReadContract({
     address: predictions,
     abi: PREDICTIONS_ABI,
-    functionName: 'getPositions',
+    functionName: 'positionsVersion',
     query: { refetchInterval: 10_000 },
+  })
+
+  const { data: positionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositions' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: positionVersionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositionsVersion' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
   const [csvInput, setCsvInput] = useState('')
@@ -292,7 +325,19 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
     )
   }
 
-  const positionsArray = currentPositions as bigint[] | undefined
+  const positionsArray = useMemo(
+    () =>
+      candidateTokenIds
+        .map((tokenId, i) => ({
+          tokenId,
+          rank: (positionData?.[i]?.result as bigint | undefined) ?? 0n,
+          version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
+        }))
+        .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
+        .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+        .map((entry) => entry.tokenId),
+    [candidateTokenIds, positionData, positionVersionData, positionsVersion],
+  )
 
   return (
     <Card>

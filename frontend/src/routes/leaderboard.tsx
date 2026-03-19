@@ -22,16 +22,62 @@ function LeaderboardPage() {
   })
   const tournamentId = activeTournamentId ?? 0n
 
-  // Step 2 — Ordered positions
-  const { data: positions } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'getPositions',
+  // Step 2 — Discover minted token ids
+  const { data: nextTokenId } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'nextTokenId',
     query: { refetchInterval: 10_000 },
   })
-  const positionsArray = positions ?? []
 
-  // Step 3 — Points per token (batch)
+  const candidateTokenIds = useMemo(() => {
+    const upperBound = Number(nextTokenId ?? 1n)
+    return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
+  }, [nextTokenId])
+
+  const { data: positionsVersion } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsVersion',
+    query: { refetchInterval: 10_000 },
+  })
+
+  // Step 3 — Rebuild ordered positions from tokenPositions mapping
+  const { data: positionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositions' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: positionVersionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositionsVersion' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const positionsArray = useMemo(
+    () =>
+      candidateTokenIds
+        .map((tokenId, i) => ({
+          tokenId,
+          rank: (positionData?.[i]?.result as bigint | undefined) ?? 0n,
+          version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
+        }))
+        .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
+        .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+        .map((entry) => entry.tokenId),
+    [candidateTokenIds, positionData, positionVersionData, positionsVersion],
+  )
+
+  // Step 4 — Points per token (batch)
   const pointsContracts = useMemo(
     () =>
       positionsArray.map((tokenId) => ({

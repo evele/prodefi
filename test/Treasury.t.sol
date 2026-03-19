@@ -221,7 +221,7 @@ contract TreasuryTest is BaseTest {
     function test_DepositFromSales_ZeroValue() public {
         _logTestInfo("DepositFromSales Zero Value");
 
-        vm.expectRevert("Amount must be greater than 0");
+        vm.expectRevert(Treasury.ZeroAmount.selector);
 
         vm.prank(fundDepositor);
         treasury.depositFromSales{value: 0}(TOURNAMENT_ID_1);
@@ -279,7 +279,7 @@ contract TreasuryTest is BaseTest {
         percentages[0] = 50;
         percentages[1] = 39;
 
-        _expectRevertWithMessage("Percentage sum must be between 90 and 100");
+        vm.expectRevert(Treasury.InvalidPercentageSum.selector);
 
         _setPrizeDistribution(TOURNAMENT_ID_1, percentages);
     }
@@ -291,7 +291,7 @@ contract TreasuryTest is BaseTest {
         percentages[0] = 60;
         percentages[1] = 41;
 
-        _expectRevertWithMessage("Percentage sum must be between 90 and 100");
+        vm.expectRevert(Treasury.InvalidPercentageSum.selector);
 
         _setPrizeDistribution(TOURNAMENT_ID_1, percentages);
     }
@@ -302,7 +302,7 @@ contract TreasuryTest is BaseTest {
         uint8[] memory percentages = new uint8[](1);
         percentages[0] = 101;
 
-        _expectRevertWithMessage("Percentage must be between 0 and 100");
+        vm.expectRevert(Treasury.InvalidPercentage.selector);
 
         _setPrizeDistribution(TOURNAMENT_ID_1, percentages);
     }
@@ -351,7 +351,7 @@ contract TreasuryTest is BaseTest {
 
         uint8[] memory empty = new uint8[](0);
 
-        _expectRevertWithMessage("Percentage sum must be between 90 and 100");
+        vm.expectRevert(Treasury.InvalidPercentageSum.selector);
 
         _setPrizeDistribution(TOURNAMENT_ID_1, empty);
     }
@@ -396,7 +396,7 @@ contract TreasuryTest is BaseTest {
 
         _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
 
-        _expectRevertWithMessage("Not token owner");
+        vm.expectRevert(Treasury.NotTokenOwner.selector);
 
         vm.prank(user2); // user2 trying to claim user1's token
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
@@ -412,7 +412,7 @@ contract TreasuryTest is BaseTest {
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
 
         // Second claim - should fail
-        _expectRevertWithMessage("Already claimed");
+        vm.expectRevert(Treasury.AlreadyClaimed.selector);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
@@ -454,7 +454,7 @@ contract TreasuryTest is BaseTest {
 
         // Try to claim with a token that's not in the leaderboard
         // This should fail with "Token not in leaderboard" from getCartonPosition()
-        vm.expectRevert("Token not in leaderboard");
+        vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
         vm.prank(user4);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_4, ETH_TOKEN);
     }
@@ -616,11 +616,11 @@ contract TreasuryTest is BaseTest {
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
 
         // Test position 0 (should revert)
-        vm.expectRevert("Invalid position");
+        vm.expectRevert(Treasury.InvalidPosition.selector);
         treasury.getUserPrizeAmount(TOURNAMENT_ID_1, ETH_TOKEN, 0);
 
         // Test position out of bounds (should revert)
-        vm.expectRevert("Invalid position");
+        vm.expectRevert(Treasury.InvalidPosition.selector);
         treasury.getUserPrizeAmount(TOURNAMENT_ID_1, ETH_TOKEN, 5);
     }
 
@@ -705,7 +705,7 @@ contract TreasuryTest is BaseTest {
     function test_DepositFromSalesERC20_RevertZeroAddress() public {
         _logTestInfo("DepositFromSalesERC20 Revert Zero Address");
 
-        vm.expectRevert("Use depositFromSales for ETH");
+        vm.expectRevert(Treasury.UseDepositForETH.selector);
 
         vm.prank(fundDepositor);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(0), 1000);
@@ -714,7 +714,7 @@ contract TreasuryTest is BaseTest {
     function test_DepositFromSalesERC20_RevertZeroAmount() public {
         _logTestInfo("DepositFromSalesERC20 Revert Zero Amount");
 
-        vm.expectRevert("Amount must be greater than 0");
+        vm.expectRevert(Treasury.ZeroAmount.selector);
 
         vm.prank(fundDepositor);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), 0);
@@ -793,7 +793,7 @@ contract TreasuryTest is BaseTest {
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
 
         // Second claim should fail
-        _expectRevertWithMessage("Already claimed");
+        vm.expectRevert(Treasury.AlreadyClaimed.selector);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
@@ -909,7 +909,7 @@ contract TreasuryTest is BaseTest {
         vm.startPrank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
 
-        _expectRevertWithMessage("Tournament already closed");
+        vm.expectRevert(Treasury.TournamentAlreadyClosed.selector);
         treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
         vm.stopPrank();
     }
@@ -919,7 +919,7 @@ contract TreasuryTest is BaseTest {
 
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
 
-        _expectRevertWithMessage("No prize pool");
+        vm.expectRevert(Treasury.NoPrizePool.selector);
 
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
@@ -930,7 +930,7 @@ contract TreasuryTest is BaseTest {
 
         _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
 
-        _expectRevertWithMessage("No prize distribution");
+        vm.expectRevert(Treasury.NoPrizeDistribution.selector);
 
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
@@ -962,7 +962,7 @@ contract TreasuryTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
 
-        _expectRevertWithMessage("Tournament already closed");
+        vm.expectRevert(Treasury.TournamentAlreadyClosed.selector);
 
         _depositFunds(TOURNAMENT_ID_1, SMALL_DEPOSIT);
     }
@@ -981,7 +981,7 @@ contract TreasuryTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_1, address(USDC));
 
-        _expectRevertWithMessage("Tournament already closed");
+        vm.expectRevert(Treasury.TournamentAlreadyClosed.selector);
 
         vm.prank(fundDepositor);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
@@ -993,7 +993,7 @@ contract TreasuryTest is BaseTest {
         _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
 
         // Try to claim before closing
-        _expectRevertWithMessage("Tournament not closed");
+        vm.expectRevert(Treasury.TournamentNotClosed.selector);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
@@ -1059,7 +1059,7 @@ contract TreasuryTest is BaseTest {
         vm.stopPrank();
 
         // Cannot claim USDC yet
-        vm.expectRevert("Tournament not closed");
+        vm.expectRevert(Treasury.TournamentNotClosed.selector);
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));
 
