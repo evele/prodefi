@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Test.sol";
 import "../src/Carton.sol";
 import "../src/Predictions.sol";
+import "../src/Treasury.sol";
 
 contract PredictionsTest is Test {
     Carton cart;
@@ -312,6 +313,38 @@ contract PredictionsTest is Test {
         assertEq(preds.totalPoints(TOKEN_ID), 90);
     }
 
+    function testPartialResultsCanBeRecalculated() public {
+        Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
+        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
+        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
+        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
+        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+
+        vm.prank(user);
+        preds.submitPrediction(TOKEN_ID, gamePreds);
+
+        preds.setResults(1, 2, 1); // 9 puntos
+        preds.setResults(2, 1, 1); // 9 puntos
+
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 18);
+
+        vm.prank(user);
+        preds.updateTotalPoints(TOKEN_ID);
+        assertEq(preds.totalPoints(TOKEN_ID), 18);
+
+        vm.expectRevert(Predictions.ResultNotSet.selector);
+        preds.calculatePoints(TOKEN_ID, 2);
+
+        preds.setResults(3, 0, 3); // 8 puntos
+        preds.setResults(4, 2, 2); // 9 puntos
+
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 35);
+
+        vm.prank(user);
+        preds.updateTotalPoints(TOKEN_ID);
+        assertEq(preds.totalPoints(TOKEN_ID), 35);
+    }
+
     function testSetPositions() public {
         // 1) Intentar establecer posiciones con arrays de diferente longitud
         uint256[] memory ids = new uint256[](1);
@@ -374,6 +407,63 @@ contract PredictionsTest is Test {
         uint8[2] memory result = preds.getGameResults(1);
         assertEq(result[0], 2, "Team1 goals should be 2");
         assertEq(result[1], 1, "Team2 goals should be 1");
+    }
+
+    function testUpdateResults() public {
+        vm.prank(address(0xDEAD));
+        vm.expectRevert();
+        preds.updateResults(1, 2, 1);
+
+        vm.expectRevert(Predictions.InvalidGameId.selector);
+        preds.updateResults(0, 2, 1);
+
+        vm.expectRevert(Predictions.InvalidGameId.selector);
+        preds.updateResults(5, 2, 1);
+
+        vm.expectRevert(Predictions.ResultNotSet.selector);
+        preds.updateResults(1, 2, 1);
+
+        preds.setResults(1, 2, 1);
+        preds.updateResults(1, 3, 2);
+
+        uint8[2] memory result = preds.getGameResults(1);
+        assertEq(result[0], 3, "Team1 goals should be updated to 3");
+        assertEq(result[1], 2, "Team2 goals should be updated to 2");
+    }
+
+    function testResultCorrectionChangesRecalculatedTotal() public {
+        Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
+        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
+        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
+        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
+        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+
+        vm.prank(user);
+        preds.submitPrediction(TOKEN_ID, gamePreds);
+
+        preds.setResults(1, 2, 1);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 9);
+
+        preds.updateResults(1, 0, 0);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 4);
+    }
+
+    function testUpdateResultsRevertsWhenTournamentClosed() public {
+        Treasury treasury = new Treasury(address(this), address(cart), address(preds));
+        cart.setTreasuryAddress(address(treasury));
+        cart.setActiveTournament(1);
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        treasury.setPrizeDistribution(1, address(0), percentages);
+        treasury.depositFromSales{value: 1 ether}(1);
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        treasury.closeTournament(1, address(0));
+
+        preds.setResults(1, 2, 1);
+
+        vm.expectRevert(Predictions.TournamentClosedForCorrections.selector);
+        preds.updateResults(1, 3, 2);
     }
 
     // ========== Team ID > 32 tests (array sizing fix) ==========

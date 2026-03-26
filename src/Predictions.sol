@@ -4,6 +4,15 @@ pragma solidity ^0.8.27;
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+interface ICartonTournamentContext {
+    function activeTournamentId() external view returns (uint256);
+    function treasury() external view returns (address);
+}
+
+interface ITreasuryTournamentStatus {
+    function isTournamentClosedAnyAsset(uint256 tournamentId) external view returns (bool);
+}
+
 /// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
     error TeamsHashAlreadyFrozen();
@@ -29,6 +38,7 @@ contract Predictions is Ownable {
     error OfficialWinnersNotSet();
     error NoPredictionForToken();
     error NoPredictionsSubmitted();
+    error TournamentClosedForCorrections();
 
     IERC1155 public cartones;
     /// @notice Anchor for off-chain teams config (id + name + groupId)
@@ -78,6 +88,9 @@ contract Predictions is Ownable {
 
     event PredictionsSubmitted(address indexed user, uint256 indexed tokenId);
     event ResultsSet(uint8 indexed gameId, uint8 team1Goals, uint8 team2Goals);
+    event ResultsUpdated(
+        uint8 indexed gameId, uint8 oldTeam1Goals, uint8 oldTeam2Goals, uint8 newTeam1Goals, uint8 newTeam2Goals
+    );
     event TotalGamesUpdated(uint8 oldValue, uint8 newValue);
 
     /// @notice Stores the official result for a game
@@ -211,6 +224,34 @@ contract Predictions is Ownable {
         emit ResultsSet(gameId, team1Goals, team2Goals);
     }
 
+    function updateResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
+        if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
+        _revertIfTournamentClosedForCorrections();
+
+        Game storage game = games[gameId];
+        if (!game.set) revert ResultNotSet();
+
+        uint8 oldTeam1Goals = game.result[0];
+        uint8 oldTeam2Goals = game.result[1];
+
+        game.result = [team1Goals, team2Goals];
+
+        emit ResultsUpdated(gameId, oldTeam1Goals, oldTeam2Goals, team1Goals, team2Goals);
+    }
+
+    function _revertIfTournamentClosedForCorrections() internal view {
+        ICartonTournamentContext carton = ICartonTournamentContext(address(cartones));
+        uint256 tournamentId = carton.activeTournamentId();
+        if (tournamentId == 0) return;
+
+        address treasury = carton.treasury();
+        if (treasury == address(0)) return;
+
+        if (ITreasuryTournamentStatus(treasury).isTournamentClosedAnyAsset(tournamentId)) {
+            revert TournamentClosedForCorrections();
+        }
+    }
+
     function getPrediction(uint256 tokenId) external view returns (Prediction[] memory) {
         return predictions[tokenId];
     }
@@ -337,6 +378,7 @@ contract Predictions is Ownable {
 
         // Calcular puntos de los partidos
         for (uint8 i = 0; i < totalGames; i++) {
+            if (!games[predictions[tokenId][i].gameId].set) continue;
             gamePoints += calculatePoints(tokenId, i);
         }
 

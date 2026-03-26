@@ -39,8 +39,49 @@ function useAdminWrite() {
 
 function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const treasury = CONTRACT_ADDRESSES.TREASURY
   const { execute, isBusy } = useAdminWrite()
   const { games } = useMemo(() => buildAllGroupGames(), [])
+
+  const { data: activeTournamentId } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'activeTournamentId',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: isTournamentClosedAnyAsset } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'isTournamentClosedAnyAsset',
+    args: activeTournamentId !== undefined ? [activeTournamentId] : undefined,
+    query: {
+      enabled: activeTournamentId !== undefined,
+      refetchInterval: 10_000,
+    },
+  })
+
+  const { data: gamesData, refetch: refetchGamesData } = useReadContracts({
+    contracts: games.map((game) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'games' as const,
+      args: [game.id] as const,
+    })),
+    query: { enabled: games.length > 0, refetchInterval: 10_000 },
+  })
+
+  const storedGamesById = useMemo(() => {
+    return new Map(
+      games.map((game, index) => {
+        const result = gamesData?.[index]?.result as
+          | { id: number; result: [number, number]; set: boolean }
+          | undefined
+        return [game.id, result]
+      }),
+    )
+  }, [games, gamesData])
 
   // Local state for goal inputs per game
   const [goals, setGoals] = useState<Record<number, [string, string]>>({})
@@ -57,6 +98,11 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   }
 
   const submitResult = (gameId: number) => {
+    if (isTournamentClosedAnyAsset) {
+      toast.error('This tournament is already closed. Results can no longer be corrected.')
+      return
+    }
+
     const [g1, g2] = getGoals(gameId)
     const t1 = Number(g1)
     const t2 = Number(g2)
@@ -64,19 +110,28 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
       toast.error('Enter valid goal numbers')
       return
     }
+
+    const existingGame = storedGamesById.get(gameId)
+    const hasStoredResult = Boolean(existingGame?.set)
+
     void execute(
       {
         address: predictions,
         abi: PREDICTIONS_ABI,
-        functionName: 'setResults',
+        functionName: hasStoredResult ? 'updateResults' : 'setResults',
         args: [gameId, t1, t2],
       },
       {
         toastId: `admin-set-results-${gameId}`,
         pendingMessage: 'Waiting for result update confirmation...',
-        successMessage: `Result saved for game #${gameId}.`,
+        successMessage: hasStoredResult
+          ? `Result corrected for game #${gameId}.`
+          : `Result saved for game #${gameId}.`,
         revertedMessage: 'Result update was rejected on-chain.',
-        logLabel: 'Admin set results',
+        logLabel: hasStoredResult ? 'Admin update results' : 'Admin set results',
+        onSuccess: async () => {
+          await refetchGamesData()
+        },
       },
     )
   }
@@ -85,9 +140,16 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
     <Card>
       <CardHeader>
         <CardTitle>Set Results</CardTitle>
-        <CardDescription>Set actual match results (one game at a time)</CardDescription>
+        <CardDescription>
+          Set actual match results or correct them before the tournament is closed.
+        </CardDescription>
       </CardHeader>
       <CardContent>
+        {isTournamentClosedAnyAsset && (
+          <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+            This tournament already has a closed prize pool. Result corrections are locked.
+          </div>
+        )}
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {games.map((game) => (
             <div key={game.id} className="flex items-center gap-2 text-sm">
@@ -111,12 +173,17 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
                 placeholder="-"
               />
               <span className="w-28 truncate">{teamsById[game.team2] ?? game.team2}</span>
+              <span className="w-28 text-xs text-gray-500">
+                {storedGamesById.get(game.id)?.set
+                  ? `${storedGamesById.get(game.id)?.result[0]}-${storedGamesById.get(game.id)?.result[1]}`
+                  : 'not set'}
+              </span>
               <Button
                 size="sm"
                 onClick={() => submitResult(game.id)}
-                disabled={!isOwner || isBusy}
+                disabled={!isOwner || isBusy || Boolean(isTournamentClosedAnyAsset)}
               >
-                Set
+                {storedGamesById.get(game.id)?.set ? 'Update' : 'Set'}
               </Button>
             </div>
           ))}

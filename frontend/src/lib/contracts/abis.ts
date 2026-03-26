@@ -233,6 +233,17 @@ export const PREDICTIONS_ABI = [
   },
   {
     type: 'function',
+    name: 'updateResults',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'gameId', type: 'uint8' },
+      { name: 'team1Goals', type: 'uint8' },
+      { name: 'team2Goals', type: 'uint8' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'setOfficialWinners',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'teams', type: 'uint8[4]' }],
@@ -339,6 +350,13 @@ export const TREASURY_ABI = [
       { name: '', type: 'uint256' },
       { name: '', type: 'address' },
     ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isTournamentClosedAnyAsset',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'uint256' }],
     outputs: [{ name: '', type: 'bool' }],
   },
   {

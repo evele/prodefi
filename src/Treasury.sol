@@ -44,6 +44,7 @@ contract Treasury is AccessControl {
 
     // Flag of closed tournament
     mapping(uint256 => mapping(address => bool)) public isClosedTournament;
+    mapping(uint256 => bool) public isTournamentClosedAnyAsset;
 
     Carton public cartonContract;
     Predictions public predictionsContract;
@@ -196,6 +197,7 @@ contract Treasury is AccessControl {
 
         closedPrizePools[tournamentId][token] = pool;
         isClosedTournament[tournamentId][token] = true;
+        isTournamentClosedAnyAsset[tournamentId] = true;
 
         emit TournamentClosed(tournamentId, token, pool);
     }

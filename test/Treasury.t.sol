@@ -900,6 +900,18 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.closedPrizePools(TOURNAMENT_ID_1, ETH_TOKEN), INITIAL_DEPOSIT);
     }
 
+    function test_CloseTournament_MarksTournamentClosedAcrossAssets() public {
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+
+        assertFalse(treasury.isTournamentClosedAnyAsset(TOURNAMENT_ID_1));
+
+        vm.prank(tournamentManager);
+        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        assertTrue(treasury.isTournamentClosedAnyAsset(TOURNAMENT_ID_1));
+    }
+
     function test_CloseTournament_RevertAlreadyClosed() public {
         _logTestInfo("CloseTournament Revert Already Closed");
 
