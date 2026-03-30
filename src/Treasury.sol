@@ -162,11 +162,7 @@ contract Treasury is AccessControl {
     /// @param tournamentId Tournament ID
     /// @param token Token address (address(0) for ETH)
     /// @param position Position in leaderboard (1-indexed)
-    function getUserPrizeAmount(uint256 tournamentId, address token, uint256 position)
-        external
-        view
-        returns (uint256)
-    {
+    function getUserPrizeAmount(uint256 tournamentId, address token, uint256 position) external view returns (uint256) {
         if (position == 0 || position > prizePoolDistributions[tournamentId][token].length) revert InvalidPosition();
         uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
 

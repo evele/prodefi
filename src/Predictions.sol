@@ -270,10 +270,8 @@ contract Predictions is Ownable {
         uint8 points = abs(
             int8(
                 7
-                    - (
-                        calculateDifferencePoints(pred.result[0], game.result[0])
-                            + calculateDifferencePoints(pred.result[1], game.result[1])
-                    )
+                    - (calculateDifferencePoints(pred.result[0], game.result[0])
+                        + calculateDifferencePoints(pred.result[1], game.result[1]))
             )
         );
 
