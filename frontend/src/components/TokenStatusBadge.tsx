@@ -1,44 +1,48 @@
 import type { PredictionStatus } from "../lib/types.ts"
 
-export function TokenStatusBadge({status}: {status: PredictionStatus}) {
+const STATUS_CONFIG: Record<PredictionStatus, { text: string; dotColor: string; textColor: string; bgColor: string }> = {
+  none: {
+    text: 'Sin enviar',
+    dotColor: 'var(--text-disabled)',
+    textColor: 'var(--text-disabled)',
+    bgColor: 'rgba(58, 71, 92, 0.2)',
+  },
+  partial: {
+    text: 'Parcial',
+    dotColor: 'var(--accent-gold)',
+    textColor: 'var(--accent-gold)',
+    bgColor: 'rgba(255, 214, 0, 0.1)',
+  },
+  complete: {
+    text: 'Enviado',
+    dotColor: 'var(--accent-green)',
+    textColor: 'var(--accent-green)',
+    bgColor: 'rgba(0, 230, 118, 0.1)',
+  },
+  expired: {
+    text: 'Vencido',
+    dotColor: 'var(--accent-red)',
+    textColor: 'var(--accent-red)',
+    bgColor: 'rgba(255, 77, 109, 0.1)',
+  },
+}
 
-    const statusConfig = {
-        'none': {
-          text: "Not set",
-          iconColor: "bg-gray-400",
-          className: "bg-gray-100 text-gray-700"
-        },
-        'partial': {
-          text: "Partial",
-          iconColor: "bg-yellow-500",
-          className: "bg-yellow-100 text-yellow-700"
-        },
-        'complete': {
-          text: "Submitted",
-          iconColor: "bg-green-500",
-          className: "bg-green-100 text-green-700"
-        },
-        'expired': {
-          text: "Expired",
-          iconColor: "bg-red-500",
-          className: "bg-red-100 text-red-700"
-        }
-      }[status] || {
-        text: "⏳ Loading...",
-        iconColor: "bg-gray-400",
-        className: "bg-gray-100 text-gray-700"    
-      }
+export function TokenStatusBadge({ status }: { status: PredictionStatus }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.none
 
-    return (
-        <span
-          className={`inline-flex items-center gap-2 px-2 py-1 text-xs rounded-full ${statusConfig.className}`}
-          role="status"
-          aria-label={`Prediction status: ${statusConfig.text}`}
-        >
-          { status && statusConfig && (
-            <span className={`w-3 h-3 rounded-full ${statusConfig.iconColor}`} aria-hidden="true" />
-          )}
-          {statusConfig.text}
-        </span>
-    )
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full"
+      style={{ background: cfg.bgColor, color: cfg.textColor }}
+      role="status"
+      aria-label={`Estado: ${cfg.text}`}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full"
+        style={{ background: cfg.dotColor }}
+        aria-hidden="true"
+      />
+      {cfg.text}
+    </span>
+  )
 }

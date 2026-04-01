@@ -318,6 +318,19 @@
   },
   {
     "type": "function",
+    "name": "positionsVersion",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "predictWinners",
     "inputs": [
       {
@@ -524,19 +537,6 @@
   },
   {
     "type": "function",
-    "name": "positionsVersion",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tokenPositions",
     "inputs": [
       {
@@ -613,6 +613,29 @@
         "name": "newOwner",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateResults",
+    "inputs": [
+      {
+        "name": "gameId",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "team1Goals",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "team2Goals",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "outputs": [],
@@ -779,6 +802,43 @@
   },
   {
     "type": "event",
+    "name": "ResultsUpdated",
+    "inputs": [
+      {
+        "name": "gameId",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "oldTeam1Goals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "oldTeam2Goals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "newTeam1Goals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "newTeam2Goals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TeamsHashFrozen",
     "inputs": [],
     "anonymous": false
@@ -848,6 +908,71 @@
   },
   {
     "type": "error",
+    "name": "ArrayLengthMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DeadlineMustBeFuture",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DeadlinePassed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DuplicateGameId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DuplicateTeamId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidGameId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTeamId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPredictionForToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPredictionsProvided",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPredictionsSubmitted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotCartonOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OfficialWinnersAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OfficialWinnersNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -867,5 +992,60 @@
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "PointsNotOrdered",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PredictionAlreadySubmitted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PredictionsAlreadyStarted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ResultNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ResultsAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TeamsHashAlreadyFrozen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TokenNotInLeaderboard",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TotalGamesMustBePositive",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentClosedForCorrections",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "WinnersAlreadyPredicted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "WrongPredictionCount",
+    "inputs": []
   }
 ]

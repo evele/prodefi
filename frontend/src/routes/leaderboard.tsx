@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
 import { formatEther, formatUnits } from 'viem'
@@ -13,7 +12,6 @@ function LeaderboardPage() {
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
 
-  // Step 1 — Tournament context
   const { data: activeTournamentId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
@@ -22,7 +20,6 @@ function LeaderboardPage() {
   })
   const tournamentId = activeTournamentId ?? 0n
 
-  // Step 2 — Discover minted token ids
   const { data: nextTokenId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
@@ -42,7 +39,6 @@ function LeaderboardPage() {
     query: { refetchInterval: 10_000 },
   })
 
-  // Step 3 — Rebuild ordered positions from tokenPositions mapping
   const { data: positionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -77,7 +73,6 @@ function LeaderboardPage() {
     [candidateTokenIds, positionData, positionVersionData, positionsVersion],
   )
 
-  // Step 4 — Points per token (batch)
   const pointsContracts = useMemo(
     () =>
       positionsArray.map((tokenId) => ({
@@ -95,7 +90,6 @@ function LeaderboardPage() {
     query: { enabled: pointsContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  // Step 4 — User's tokens
   const { data: userTokensRaw } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
@@ -112,7 +106,6 @@ function LeaderboardPage() {
     [userTokensRaw],
   )
 
-  // Step 5 — Tournament closed status
   const { data: ethClosed } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
@@ -129,7 +122,6 @@ function LeaderboardPage() {
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
-  // Step 6 — Prize pools
   const { data: ethPool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
@@ -146,7 +138,6 @@ function LeaderboardPage() {
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
-  // Step 7 — Prize per position (batch, only if closed)
   const ethPrizeContracts = useMemo(
     () =>
       positionsArray.map((_, i) => ({
@@ -173,21 +164,14 @@ function LeaderboardPage() {
 
   const { data: ethPrizesData } = useReadContracts({
     contracts: ethPrizeContracts,
-    query: {
-      enabled: Boolean(ethClosed) && ethPrizeContracts.length > 0,
-      refetchInterval: 10_000,
-    },
+    query: { enabled: Boolean(ethClosed) && ethPrizeContracts.length > 0, refetchInterval: 10_000 },
   })
 
   const { data: usdcPrizesData } = useReadContracts({
     contracts: usdcPrizeContracts,
-    query: {
-      enabled: Boolean(usdcClosed) && usdcPrizeContracts.length > 0,
-      refetchInterval: 10_000,
-    },
+    query: { enabled: Boolean(usdcClosed) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  // Assemble leaderboard rows
   const leaderboardRows = useMemo(
     () =>
       positionsArray.map((tokenId, i) => ({
@@ -202,23 +186,21 @@ function LeaderboardPage() {
     [positionsArray.join(','), pointsData, ethPrizesData, usdcPrizesData, userTokenSet, ethClosed, usdcClosed],
   )
 
-  // Your best rank
   const yourBestRank = useMemo(() => {
     const yourRows = leaderboardRows.filter((r) => r.isYours)
     if (yourRows.length === 0) return null
     return Math.min(...yourRows.map((r) => r.rank))
   }, [leaderboardRows])
 
-  const rankBadgeClass = (rank: number) => {
-    if (rank === 1) return 'bg-yellow-500 text-white'
-    if (rank === 2) return 'bg-gray-400 text-white'
-    if (rank === 3) return 'bg-amber-600 text-white'
-    if (rank === 4) return 'bg-blue-500 text-white'
-    return 'bg-gray-200 text-gray-600'
+  const rankIcon = (rank: number) => {
+    if (rank === 1) return '🥇'
+    if (rank === 2) return '🥈'
+    if (rank === 3) return '🥉'
+    return null
   }
 
   const formatPrize = (amount: bigint, decimals: number, symbol: string) => {
-    if (amount === 0n) return `-- ${symbol}`
+    if (amount === 0n) return '—'
     const formatted =
       decimals === 18
         ? Number(formatEther(amount)).toFixed(4)
@@ -226,147 +208,192 @@ function LeaderboardPage() {
     return `${formatted} ${symbol}`
   }
 
+  const statCards = [
+    {
+      label: 'Jugadores',
+      value: positionsArray.length > 0 ? String(positionsArray.length) : '—',
+    },
+    {
+      label: 'Pool ETH',
+      value: ethPool !== undefined ? `${Number(formatEther(ethPool)).toFixed(3)}` : '—',
+      unit: 'ETH',
+      sub: ethClosed ? 'Cerrado' : 'En vivo',
+    },
+    {
+      label: 'Pool USDC',
+      value: usdcPool !== undefined ? `${Number(formatUnits(usdcPool, 6)).toFixed(2)}` : '—',
+      unit: 'USDC',
+      sub: usdcClosed ? 'Cerrado' : 'En vivo',
+    },
+    {
+      label: 'Tu mejor puesto',
+      value: yourBestRank !== null ? `#${yourBestRank}` : '—',
+      sub: isConnected ? 'Entre tus cartones' : 'Conecta wallet',
+    },
+  ]
+
   return (
-    <>
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Leaderboard</h2>
-        <p className="text-gray-600 dark:text-gray-300">
-          See how players rank based on their prediction accuracy
+    <div className="max-w-2xl mx-auto space-y-6">
+
+      {/* ─── Page header ─── */}
+      <div>
+        <h1 className="font-display text-3xl font-black uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>
+          Clasificación
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          Ranking basado en precisión de predicciones
         </p>
       </div>
 
-      {/* Stats row */}
-      <div className="grid gap-8 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Players</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{positionsArray.length}</div>
-            <p className="text-xs text-muted-foreground">Active participants</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">ETH Prize Pool</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {ethPool !== undefined ? `${Number(formatEther(ethPool)).toFixed(4)} ETH` : '—'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {ethClosed ? 'Closed — prizes locked' : 'Live pool'}
+      {/* ─── Stats cards ─── */}
+      <div className="grid grid-cols-2 gap-3">
+        {statCards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-xl p-4"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+          >
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>
+              {card.label}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">USDC Prize Pool</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {usdcPool !== undefined
-                ? `${Number(formatUnits(usdcPool, 6)).toFixed(2)} USDC`
-                : '—'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {usdcClosed ? 'Closed — prizes locked' : 'Live pool'}
+            <p className="font-display text-3xl font-black leading-none" style={{ color: 'var(--text-primary)' }}>
+              {card.value}
+              {card.unit && (
+                <span className="text-base font-sans font-normal ml-1" style={{ color: 'var(--text-secondary)' }}>
+                  {card.unit}
+                </span>
+              )}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Your Best Rank</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{yourBestRank !== null ? `#${yourBestRank}` : '—'}</div>
-            <p className="text-xs text-muted-foreground">
-              {isConnected ? 'Among your cartones' : 'Connect wallet to see'}
-            </p>
-          </CardContent>
-        </Card>
+            {card.sub && (
+              <p className="text-xs mt-1" style={{ color: 'var(--text-disabled)' }}>
+                {card.sub}
+              </p>
+            )}
+          </div>
+        ))}
       </div>
 
-      {/* Main Leaderboard */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">Tournament Rankings</CardTitle>
-          <CardDescription>Rankings based on prediction accuracy and points earned</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {positionsArray.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg font-medium">Positions not set yet</p>
-              <p className="text-sm mt-1">
-                The tournament admin will set final rankings once all games are complete.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="hidden md:grid grid-cols-[3rem_1fr_auto_auto_auto_auto] gap-4 px-4 text-xs text-gray-500 font-medium uppercase tracking-wide">
-                <div>Rank</div>
-                <div>Token</div>
-                <div className="text-right">Points</div>
-                <div className="text-right">ETH Prize</div>
-                <div className="text-right">USDC Prize</div>
-                <div />
-              </div>
+      {/* ─── Leaderboard table ─── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: '1px solid var(--border-color)' }}
+      >
+        {/* Table header */}
+        <div
+          className="hidden md:grid grid-cols-[2.5rem_1fr_auto_auto_auto] gap-3 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}
+        >
+          <div>#</div>
+          <div>Cartón</div>
+          <div className="text-right">Puntos</div>
+          <div className="text-right">ETH</div>
+          <div className="text-right">USDC</div>
+        </div>
 
-              {leaderboardRows.map((row) => (
+        {positionsArray.length === 0 ? (
+          <div className="py-16 text-center" style={{ background: 'var(--bg-card)' }}>
+            <p className="font-display text-xl font-bold uppercase" style={{ color: 'var(--text-disabled)' }}>
+              Sin clasificación aún
+            </p>
+            <p className="text-sm mt-2" style={{ color: 'var(--text-disabled)' }}>
+              El admin publicará los resultados al finalizar el torneo.
+            </p>
+          </div>
+        ) : (
+          <div>
+            {leaderboardRows.map((row, idx) => {
+              const icon = rankIcon(row.rank)
+              const isTop3 = row.rank <= 3
+              return (
                 <div
                   key={row.tokenId.toString()}
-                  className={`grid grid-cols-[3rem_1fr] md:grid-cols-[3rem_1fr_auto_auto_auto_auto] gap-4 items-center p-4 rounded-lg border ${
-                    row.rank <= 4
-                      ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200 dark:from-yellow-950/30 dark:to-orange-950/30 dark:border-yellow-800'
-                      : 'bg-gray-50 dark:bg-gray-900/50'
-                  }`}
+                  className="grid grid-cols-[2.5rem_1fr] md:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-3 items-center px-4 py-3 transition-colors"
+                  style={{
+                    background: row.isYours ? 'rgba(0,230,118,0.05)' : idx % 2 === 0 ? 'var(--bg-card)' : 'rgba(11,16,32,0.5)',
+                    borderLeft: row.isYours ? '2px solid var(--accent-green)' : '2px solid transparent',
+                    borderBottom: idx < leaderboardRows.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                  }}
                 >
-                  {/* Rank badge */}
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${rankBadgeClass(row.rank)}`}
-                  >
-                    {row.rank}
+                  {/* Rank */}
+                  <div className="flex items-center justify-center">
+                    {icon ? (
+                      <span className="text-xl">{icon}</span>
+                    ) : (
+                      <span
+                        className="text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center"
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono-custom)',
+                        }}
+                      >
+                        {row.rank}
+                      </span>
+                    )}
                   </div>
 
                   {/* Token info */}
-                  <div>
-                    <div className="font-mono text-sm font-semibold">Token #{row.tokenId.toString()}</div>
-                    <div className="text-xs text-gray-500 md:hidden">{row.points.toString()} pts</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="text-sm font-semibold"
+                      style={{
+                        fontFamily: 'var(--font-mono-custom)',
+                        color: row.isYours ? 'var(--accent-green)' : isTop3 ? 'var(--accent-gold)' : 'var(--text-primary)',
+                      }}
+                    >
+                      #{row.tokenId.toString()}
+                    </span>
+                    {row.isYours && (
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                        style={{ background: 'rgba(0,230,118,0.12)', color: 'var(--accent-green)' }}
+                      >
+                        tú
+                      </span>
+                    )}
+                    <span className="text-xs md:hidden" style={{ color: 'var(--text-secondary)' }}>
+                      {row.points.toString()} pts
+                    </span>
                   </div>
 
                   {/* Points */}
-                  <div className="hidden md:block text-right font-semibold tabular-nums">
+                  <div
+                    className="hidden md:block text-right font-semibold tabular-nums"
+                    style={{
+                      fontFamily: 'var(--font-mono-custom)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
                     {row.points.toString()}
                   </div>
 
                   {/* ETH Prize */}
-                  <div className="hidden md:block text-right text-sm font-medium text-green-700 dark:text-green-400 tabular-nums">
+                  <div
+                    className="hidden md:block text-right text-sm tabular-nums"
+                    style={{
+                      fontFamily: 'var(--font-mono-custom)',
+                      color: row.ethPrize && row.ethPrize > 0n ? 'var(--accent-gold)' : 'var(--text-disabled)',
+                    }}
+                  >
                     {row.ethPrize !== undefined ? formatPrize(row.ethPrize, 18, 'ETH') : '—'}
                   </div>
 
                   {/* USDC Prize */}
-                  <div className="hidden md:block text-right text-sm font-medium text-blue-700 dark:text-blue-400 tabular-nums">
+                  <div
+                    className="hidden md:block text-right text-sm tabular-nums"
+                    style={{
+                      fontFamily: 'var(--font-mono-custom)',
+                      color: row.usdcPrize && row.usdcPrize > 0n ? 'var(--accent-blue)' : 'var(--text-disabled)',
+                    }}
+                  >
                     {row.usdcPrize !== undefined ? formatPrize(row.usdcPrize, 6, 'USDC') : '—'}
                   </div>
-
-                  {/* You badge */}
-                  <div className="flex justify-end">
-                    {row.isYours && (
-                      <span className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full font-medium">
-                        You
-                      </span>
-                    )}
-                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

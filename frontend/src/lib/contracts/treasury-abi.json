@@ -371,6 +371,25 @@
   },
   {
     "type": "function",
+    "name": "isTournamentClosedAnyAsset",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "predictionsContract",
     "inputs": [],
     "outputs": [
@@ -729,6 +748,51 @@
   },
   {
     "type": "error",
+    "name": "AlreadyClaimed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ETHTransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPercentage",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPercentageSum",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPosition",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPrizeAvailable",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPrizeDistribution",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPrizePool",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotTokenOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -737,5 +801,25 @@
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TournamentAlreadyClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentNotClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UseDepositForETH",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroAmount",
+    "inputs": []
   }
 ]
