@@ -8,6 +8,7 @@ import { CartonListItem } from '../components/CartonListItem'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
+import { Ticket } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -275,7 +276,7 @@ function HomePage() {
     <div className="max-w-lg mx-auto space-y-6">
 
       {/* ─── Deadline banner ─── */}
-      {deadline && (
+      {deadline !== undefined && deadline > 0n && (
         <div
           className="rounded-lg px-4 py-2.5 flex items-center gap-2 text-sm"
           style={{
@@ -305,7 +306,7 @@ function HomePage() {
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span
               className="font-display text-5xl font-black leading-none"
-              style={{ color: 'var(--accent-gold)' }}
+              style={{ color: 'var(--accent-gold)', textShadow: 'var(--glow-gold)' }}
             >
               {ethPoolDisplay}
             </span>
@@ -391,6 +392,7 @@ function HomePage() {
           className="w-full h-11 text-base font-semibold"
           disabled={!canBuy}
           onClick={handleBuyClick}
+          style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
         >
           {buyButtonText()}
         </Button>
@@ -421,9 +423,15 @@ function HomePage() {
             )}
           </div>
           {!cartonsUser || cartonsUser.length === 0 ? (
-            <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>
-              Sin cartones. Compra el primero arriba.
-            </p>
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <Ticket className="w-8 h-8 opacity-30" style={{ color: 'var(--text-disabled)' }} />
+              <p className="text-sm font-medium" style={{ color: 'var(--text-disabled)' }}>
+                Sin cartones todavía
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
+                Comprá el primero para empezar a predecir
+              </p>
+            </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {cartonsUser.map((tokenId) => (

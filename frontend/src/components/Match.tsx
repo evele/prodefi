@@ -1,6 +1,6 @@
 import { Input } from './ui/input'
 import type { Game } from '../lib/types'
-import { teamsById } from '../lib/teams'
+import { teamsSiglaById, teamsById } from '../lib/teams'
 
 type MatchProps = {
   game: Game
@@ -16,11 +16,11 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
     >
       {/* Team 1 */}
       <div
-        className="flex-1 text-right text-sm truncate"
-        style={{ color: 'var(--text-primary)', fontWeight: 500 }}
+        className="flex-1 text-right text-sm font-mono font-semibold tracking-wide"
+        style={{ color: 'var(--text-primary)' }}
         title={teamsById[game.team1] ?? `#${game.team1}`}
       >
-        {teamsById[game.team1] ?? `#${game.team1}`}
+        {teamsSiglaById[game.team1] ?? teamsById[game.team1] ?? `#${game.team1}`}
       </div>
 
       {/* Score inputs */}
@@ -57,11 +57,11 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
 
       {/* Team 2 */}
       <div
-        className="flex-1 text-left text-sm truncate"
-        style={{ color: 'var(--text-primary)', fontWeight: 500 }}
+        className="flex-1 text-left text-sm font-mono font-semibold tracking-wide"
+        style={{ color: 'var(--text-primary)' }}
         title={teamsById[game.team2] ?? `#${game.team2}`}
       >
-        {teamsById[game.team2] ?? `#${game.team2}`}
+        {teamsSiglaById[game.team2] ?? teamsById[game.team2] ?? `#${game.team2}`}
       </div>
     </div>
   )

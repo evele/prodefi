@@ -1,5 +1,5 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/router-devtools'
+/* import { TanStsackRouterDevtools } from '@tanstack/router-devtools' */
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useUserBalance } from '../hooks/useBalance'
 import { Home, Target, Trophy, Settings } from 'lucide-react'
@@ -134,7 +134,7 @@ function RootLayout() {
         )}
       </nav>
 
-      <TanStackRouterDevtools />
+      {/*<TanStackRouterDevtools />*/} 
     </div>
   )
 }

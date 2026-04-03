@@ -448,9 +448,10 @@ function PredictionsPage() {
 
         {/* Group tabs */}
         <div
-          className="px-3 py-2 flex gap-1.5 overflow-x-auto scrollbar-hide"
+          className="px-3 py-2 overflow-x-auto scrollbar-hide"
           style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
         >
+        <div className="flex gap-1.5 rounded-lg p-1" style={{ background: 'var(--bg-card)' }}>
           {groups.map((group) => (
             <button
               key={group.groupLabel}
@@ -465,6 +466,7 @@ function PredictionsPage() {
               {group.groupLabel}
             </button>
           ))}
+        </div>
         </div>
 
         {/* Group matches */}
