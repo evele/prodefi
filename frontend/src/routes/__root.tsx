@@ -2,7 +2,7 @@ import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 /* import { TanStsackRouterDevtools } from '@tanstack/router-devtools' */
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useUserBalance } from '../hooks/useBalance'
-import { Home, Target, Trophy, Settings } from 'lucide-react'
+import { Home, Target, Trophy, Settings, Calendar } from 'lucide-react'
 
 function RootLayout() {
   const { isConnected, eth, usdc } = useUserBalance()
@@ -49,6 +49,9 @@ function RootLayout() {
             <nav className="flex gap-1" style={{ color: 'var(--text-secondary)' }}>
               <Link to="/" className={navLinkClass}>
                 Inicio
+              </Link>
+              <Link to="/fixtures" className={navLinkClass}>
+                Fixtures
               </Link>
               <Link
                 to="/predictions"
@@ -101,6 +104,15 @@ function RootLayout() {
         >
           <Home size={20} strokeWidth={1.75} />
           <span>Inicio</span>
+        </Link>
+        <Link
+          to="/fixtures"
+          className="flex-1 flex flex-col items-center justify-center py-3 gap-0.5 text-[10px] font-medium transition-colors"
+          style={{ color: 'var(--text-secondary)' }}
+          activeProps={{ style: { color: 'var(--accent-green)' } }}
+        >
+          <Calendar size={20} strokeWidth={1.75} />
+          <span>Fixtures</span>
         </Link>
         <Link
           to="/predictions"

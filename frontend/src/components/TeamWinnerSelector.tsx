@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import type { Team } from "../lib/types"
+import { teamsFlagById } from "../lib/teams"
 
 const POSITION_ICONS = ['🥇', '🥈', '🥉', '4°'] as const
 
@@ -40,6 +41,7 @@ export function TeamWinnerSelector({
           <SelectItem value="0">— Sin seleccionar —</SelectItem>
           {availableTeams.map((team) => (
             <SelectItem key={team.id} value={team.id.toString()}>
+              <span className={`fi fi-${teamsFlagById[team.id]} mr-2`} />
               {team.name}
             </SelectItem>
           ))}

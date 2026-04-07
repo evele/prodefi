@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import './index.css'
+import 'flag-icons/css/flag-icons.min.css'    
 import { Providers } from './components/providers'
 
 // Import the generated route tree

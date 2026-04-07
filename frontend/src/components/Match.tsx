@@ -1,6 +1,6 @@
 import { Input } from './ui/input'
 import type { Game } from '../lib/types'
-import { teamsSiglaById, teamsById } from '../lib/teams'
+import { teamsSiglaById, teamsById, teamsFlagById } from '../lib/teams'
 
 type MatchProps = {
   game: Game
@@ -16,10 +16,11 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
     >
       {/* Team 1 */}
       <div
-        className="flex-1 text-right text-sm font-mono font-semibold tracking-wide"
+        className="flex-1 flex items-center justify-end gap-2 text-sm font-mono font-semibold tracking-wide"
         style={{ color: 'var(--text-primary)' }}
         title={teamsById[game.team1] ?? `#${game.team1}`}
       >
+        <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
         {teamsSiglaById[game.team1] ?? teamsById[game.team1] ?? `#${game.team1}`}
       </div>
 
@@ -57,11 +58,12 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
 
       {/* Team 2 */}
       <div
-        className="flex-1 text-left text-sm font-mono font-semibold tracking-wide"
+        className="flex-1 flex items-center gap-2 text-sm font-mono font-semibold tracking-wide"
         style={{ color: 'var(--text-primary)' }}
         title={teamsById[game.team2] ?? `#${game.team2}`}
       >
         {teamsSiglaById[game.team2] ?? teamsById[game.team2] ?? `#${game.team2}`}
+        <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
       </div>
     </div>
   )

@@ -34,6 +34,11 @@ export const teamsSiglaById: Record<number, string> = teams2026Config.reduce((ac
   return acc
 }, {} as Record<number, string>)
 
+export const teamsFlagById: Record<number, string> = teams2026Config.reduce((acc, team) => {
+  acc[team.id] = team.flag
+  return acc
+}, {} as Record<number, string>)
+
 export function indexTeamsById(list: Team[]): Record<number, string> {
   return list.reduce((acc, team) => {
     acc[team.id] = team.name
