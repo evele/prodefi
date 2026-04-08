@@ -4,8 +4,9 @@ import { Button } from '../components/ui/button'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
 import { ClaimSection } from '../components/ClaimSection'
+import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { toast } from 'sonner'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
@@ -13,6 +14,7 @@ import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
 import type { Game } from '../lib/types'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapPredictionErrorToMessage, mapWinnersErrorToMessage } from '../lib/transaction-errors'
 
 function normalizeCartonParam(value: unknown): string | undefined {
@@ -118,17 +120,11 @@ function PredictionsPage() {
     functionName: 'getWinnersPrediction',
     args: [tokenId ?? 0n],
     query: {
-      enabled: tokenId !== undefined && !!cartonWinnersState,
+      enabled: tokenId !== undefined && hasWinnersPrediction(cartonWinnersState),
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
     },
   })
-
-  const cartonStatus = () => {
-    if (cartonGroupsState && cartonWinnersState) return 'complete'
-    if (cartonGroupsState || cartonWinnersState) return 'partial'
-    return 'none'
-  }
 
   const updateGameScore = (gameId: number, team: 0 | 1, score: number) => {
     setGameState((prev) => {
@@ -232,12 +228,74 @@ function PredictionsPage() {
     [deadlineValue, hasDeadlineConfigured, now],
   )
   const isExpired = remaining !== undefined && remaining <= 0
+  const selectedCartonGamesSubmitted = Boolean(cartonGroupsState)
+  const selectedCartonWinnersSubmitted = hasWinnersPrediction(cartonWinnersState)
+  const selectedCartonStatus = getPredictionStatus({
+    gamesSubmitted: selectedCartonGamesSubmitted,
+    winnersSubmitted: selectedCartonWinnersSubmitted,
+    deadline: deadlineValue,
+    now,
+  })
   const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired)
 
+  const ownedCartonStatusContracts = useMemo(() => {
+    if (!ownedCartons?.length) return []
+
+    return ownedCartons.flatMap((ownedTokenId) => [
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'used',
+        args: [ownedTokenId],
+      } as const,
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'winnersPredictions',
+        args: [ownedTokenId],
+      } as const,
+    ])
+  }, [ownedCartons])
+
+  const { data: ownedCartonStatusResults } = useReadContracts({
+    contracts: ownedCartonStatusContracts,
+    query: {
+      enabled: ownedCartonStatusContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const ownedCartonEntries = useMemo(() => {
+    if (!ownedCartons?.length) return []
+
+    return ownedCartons.map((ownedTokenId, index) => {
+      const gamesSubmitted = Boolean(ownedCartonStatusResults?.[index * 2]?.result)
+      const winnersSubmitted = hasWinnersPrediction(ownedCartonStatusResults?.[index * 2 + 1]?.result)
+      const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue, now })
+
+      return { tokenId: ownedTokenId, status, gamesSubmitted, winnersSubmitted }
+    })
+  }, [deadlineValue, now, ownedCartons, ownedCartonStatusResults])
+
+  const orderedOwnedCartons = useMemo(() => {
+    return [...ownedCartonEntries].sort((a, b) => {
+      const priorityDiff = getPredictionStatusPriority(a.status) - getPredictionStatusPriority(b.status)
+      if (priorityDiff !== 0) return priorityDiff
+      if (a.tokenId === b.tokenId) return 0
+      return a.tokenId > b.tokenId ? -1 : 1
+    })
+  }, [ownedCartonEntries])
+
+  const selectedCartonEntry = useMemo(
+    () => orderedOwnedCartons.find((entry) => entry.tokenId === tokenId),
+    [orderedOwnedCartons, tokenId],
+  )
+
   useEffect(() => {
-    if (tokenId !== undefined || !ownedCartons || ownedCartons.length !== 1) return
-    navigate({ to: '/predictions', search: { carton: ownedCartons[0].toString() }, replace: true })
-  }, [navigate, ownedCartons, tokenId])
+    if (tokenId !== undefined || orderedOwnedCartons.length === 0) return
+    navigate({ to: '/predictions', search: { carton: orderedOwnedCartons[0].tokenId.toString() }, replace: true })
+  }, [navigate, orderedOwnedCartons, tokenId])
 
   const { data: onchainTeamsHash } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -270,7 +328,7 @@ function PredictionsPage() {
     if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
     if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
     if (totalGamesMismatch) return `Desincronización de partidos — cadena espera ${String(totalGames)}, UI tiene ${games.length}.`
-    if (cartonGroupsState) return 'Las predicciones de partidos ya fueron enviadas para este cartón.'
+    if (selectedCartonGamesSubmitted) return 'Las predicciones de partidos ya fueron enviadas para este cartón.'
     if (predictionWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
     if (predictionWrite.isPending) return 'Confirma la transacción en tu wallet.'
     if (predictionWrite.isConfirming) return 'Confirmando en cadena…'
@@ -287,7 +345,7 @@ function PredictionsPage() {
     if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
     if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
     if (!hasValidWinners) return 'Elige 4 equipos distintos antes de enviar.'
-    if (cartonWinnersState) return 'Las predicciones de ganadores ya fueron enviadas para este cartón.'
+    if (selectedCartonWinnersSubmitted) return 'Las predicciones de ganadores ya fueron enviadas para este cartón.'
     if (winnersWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
     if (winnersWrite.isPending) return 'Confirma la transacción en tu wallet.'
     if (winnersWrite.isConfirming) return 'Confirmando en cadena…'
@@ -387,9 +445,9 @@ function PredictionsPage() {
                 <SelectValue placeholder="Selecciona un cartón" />
               </SelectTrigger>
               <SelectContent>
-                {ownedCartons?.map((ownedTokenId) => (
-                  <SelectItem key={ownedTokenId.toString()} value={ownedTokenId.toString()}>
-                    Cartón #{ownedTokenId.toString()}
+                {orderedOwnedCartons.map((entry) => (
+                  <SelectItem key={entry.tokenId.toString()} value={entry.tokenId.toString()}>
+                    Carton #{entry.tokenId.toString()} · {entry.status === 'partial' ? 'pendiente' : entry.status === 'none' ? 'sin empezar' : entry.status === 'complete' ? 'completo' : 'vencido'}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -399,14 +457,17 @@ function PredictionsPage() {
                 Este cartón no pertenece a la wallet conectada.
               </p>
             )}
-            {tokenId !== undefined && selectedCartonIsOwned && (
-              <div className="flex items-center gap-2 text-sm">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: cartonGroupsState && cartonWinnersState ? 'var(--accent-green)' : cartonGroupsState || cartonWinnersState ? 'var(--accent-gold)' : 'var(--text-disabled)' }}
-                />
+            {tokenId !== undefined && selectedCartonIsOwned && selectedCartonEntry && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <TokenStatusBadge status={selectedCartonStatus} />
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  {cartonStatus() === 'complete' ? 'Predicciones enviadas' : cartonStatus() === 'partial' ? 'Parcialmente enviado' : 'Sin predicciones aún'}
+                  {!selectedCartonEntry.gamesSubmitted
+                    ? 'Siguiente paso: enviar los partidos.'
+                    : !selectedCartonEntry.winnersSubmitted
+                      ? 'Siguiente paso: elegir los 4 ganadores.'
+                      : selectedCartonStatus === 'expired'
+                        ? 'Este carton quedo incompleto al cerrar el plazo.'
+                        : 'Este carton ya esta completo.'}
                 </span>
               </div>
             )}
@@ -433,13 +494,13 @@ function PredictionsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {cartonGroupsState && (
+            {selectedCartonGamesSubmitted && (
               <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(0,230,118,0.1)', color: 'var(--accent-green)' }}>
                 ✓ Enviado
               </span>
             )}
             {import.meta.env.DEV && (
-              <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={!!cartonGroupsState || isExpired}>
+              <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={selectedCartonGamesSubmitted || isExpired}>
                 Aleatorio
               </Button>
             )}
@@ -473,7 +534,7 @@ function PredictionsPage() {
         <div className="p-3">
           <GroupsView
             groups={groups}
-            disabled={!canEditSelectedCarton || !!cartonGroupsState}
+            disabled={!canEditSelectedCarton || selectedCartonGamesSubmitted}
             onScoreChange={updateGameScore}
             selectedGroup={selectedGroup}
           />
@@ -516,7 +577,7 @@ function PredictionsPage() {
               Predice los 4 finalistas
             </p>
           </div>
-          {cartonWinnersState && (
+          {selectedCartonWinnersSubmitted && (
             <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(0,230,118,0.1)', color: 'var(--accent-green)' }}>
               ✓ Enviado
             </span>
@@ -524,10 +585,10 @@ function PredictionsPage() {
         </div>
 
         <div className="p-4 space-y-3">
-          <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(1, teamId)} />
-          <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(2, teamId)} />
-          <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(3, teamId)} />
-          <TeamWinnerSelector label="4to Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(4, teamId)} />
+          <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(1, teamId)} />
+          <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(2, teamId)} />
+          <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(3, teamId)} />
+          <TeamWinnerSelector label="4to Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(4, teamId)} />
         </div>
 
         <div
@@ -553,7 +614,7 @@ function PredictionsPage() {
       {tokenId !== undefined && <ClaimSection tokenId={tokenId} />}
 
       {/* ─── Submitted predictions display ─── */}
-      {tokenId !== undefined && cartonStatus() !== 'none' && (
+      {tokenId !== undefined && selectedCartonStatus !== 'none' && (
         <div
           className="rounded-xl overflow-hidden"
           style={{ border: '1px solid var(--border-color)' }}

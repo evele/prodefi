@@ -1,71 +1,70 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useReadContract } from 'wagmi'
-import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
+import { ArrowRight } from 'lucide-react'
+import type { PredictionStatus } from '../lib/types'
+import { TokenStatusBadge } from './TokenStatusBadge'
 
-const STATUS_DOT: Record<string, string> = {
-  none: 'var(--text-disabled)',
-  partial: 'var(--accent-gold)',
-  complete: 'var(--accent-green)',
-  expired: 'var(--accent-red)',
+const CTA_LABEL: Record<PredictionStatus, string> = {
+  none: 'Empezar',
+  partial: 'Continuar',
+  complete: 'Ver',
+  expired: 'Ver',
 }
 
-const STATUS_BG: Record<string, string> = {
-  none: 'rgba(21, 30, 53, 0.6)',
-  partial: 'rgba(255, 214, 0, 0.08)',
-  complete: 'rgba(0, 230, 118, 0.08)',
-  expired: 'rgba(255, 77, 109, 0.08)',
+const STATUS_COPY: Record<PredictionStatus, string> = {
+  none: 'Todavia no enviaste ninguna prediccion.',
+  partial: 'Este carton sigue abierto y le faltan pasos.',
+  complete: 'Ya tiene partidos y ganadores enviados.',
+  expired: 'El cierre paso antes de completarlo.',
 }
 
-const STATUS_BORDER: Record<string, string> = {
-  none: 'rgba(255,255,255,0.07)',
-  partial: 'rgba(255, 214, 0, 0.2)',
-  complete: 'rgba(0, 230, 118, 0.2)',
-  expired: 'rgba(255, 77, 109, 0.2)',
-}
-
-export function CartonListItem({ tokenId, deadline }: { tokenId: bigint; deadline?: number }) {
+export function CartonListItem({
+  tokenId,
+  status,
+  highlighted = false,
+}: {
+  tokenId: bigint
+  status: PredictionStatus
+  highlighted?: boolean
+}) {
   const navigate = useNavigate()
-
-  const { data: cartonGroupsState } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'used',
-    args: [tokenId],
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
-  })
-
-  const { data: cartonWinnersState } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'winnersPredictions',
-    args: [tokenId],
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
-  })
-
-  const status = (() => {
-    const now = Math.floor(Date.now() / 1000)
-    const expired = typeof deadline === 'number' && now >= deadline
-    if (cartonGroupsState && cartonWinnersState) return 'complete'
-    if (expired && !cartonGroupsState) return 'expired'
-    if (cartonGroupsState || cartonWinnersState) return 'partial'
-    return 'none'
-  })()
 
   return (
     <button
       onClick={() => navigate({ to: '/predictions', search: { carton: tokenId.toString() } })}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer"
+      className="w-full rounded-xl px-4 py-3 text-left transition-all hover:scale-[1.01] active:scale-[0.99]"
       style={{
-        background: STATUS_BG[status],
-        border: `1px solid ${STATUS_BORDER[status]}`,
-        color: 'var(--text-primary)',
+        background: highlighted ? 'rgba(0, 230, 118, 0.08)' : 'var(--bg-card)',
+        border: `1px solid ${highlighted ? 'rgba(0, 230, 118, 0.25)' : 'var(--border-color)'}`,
+        boxShadow: highlighted ? 'var(--glow-green)' : undefined,
       }}
     >
-      <span
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ background: STATUS_DOT[status] }}
-      />
-      #{tokenId.toString()}
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Carton #{tokenId.toString()}
+            </span>
+            {highlighted && (
+              <span
+                className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(0, 230, 118, 0.12)', color: 'var(--accent-green)' }}
+              >
+                Siguiente
+              </span>
+            )}
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {STATUS_COPY[status]}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <TokenStatusBadge status={status} />
+          <span className="text-xs font-medium hidden sm:inline" style={{ color: 'var(--text-secondary)' }}>
+            {CTA_LABEL[status]}
+          </span>
+          <ArrowRight className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+        </div>
+      </div>
     </button>
   )
 }

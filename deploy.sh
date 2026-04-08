@@ -57,8 +57,8 @@ echo "🧩 Exporting fresh ABIs to frontend..."
 forge inspect Carton abi --format-json > frontend/src/lib/contracts/carton-abi.json
 forge inspect Predictions abi --format-json > frontend/src/lib/contracts/predictions-abi.json
 forge inspect Treasury abi --format-json > frontend/src/lib/contracts/treasury-abi.json
-# Extract MockERC20 ABI from compiled output
-jq '.abi' out/MockERC20.sol/MockERC20.json > frontend/src/lib/contracts/usdc-abi.json
+# Export MockERC20 ABI directly with forge to avoid jq dependency
+forge inspect src/mocks/MockERC20.sol:MockERC20 abi --format-json > frontend/src/lib/contracts/usdc-abi.json
 
 if [ $? -eq 0 ]; then
   echo "✅ ABIs exported successfully."

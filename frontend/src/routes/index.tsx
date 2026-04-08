@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI, ZERO_ADDRESS } from '../lib/contracts'
 import { formatEther, formatUnits } from 'viem'
@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 import { Ticket } from 'lucide-react'
 
@@ -22,6 +23,7 @@ const POSITION_META = [
 ] as const
 
 function HomePage() {
+  const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
@@ -187,7 +189,17 @@ function HomePage() {
         successMessage: '¡Cartón comprado con ETH!',
         revertedMessage: 'La compra con ETH fue rechazada en cadena.',
         mapError: (error) => mapBuyCartonError(error, 'ETH'),
-        onSuccess: async () => { await Promise.all([refetchCartonsUser(), refetchAllowance()]) },
+        onSuccess: async () => {
+          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
+          const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
+            if (latest === undefined || current > latest) return current
+            return latest
+          }, undefined)
+
+          if (latestTokenId !== undefined) {
+            navigateToCarton(latestTokenId)
+          }
+        },
         logLabel: 'Buy carton with ETH',
       },
     )
@@ -203,7 +215,17 @@ function HomePage() {
         successMessage: '¡Cartón comprado con USDC!',
         revertedMessage: 'La compra con USDC fue rechazada en cadena.',
         mapError: (error) => mapBuyCartonError(error, 'USDC'),
-        onSuccess: async () => { await Promise.all([refetchCartonsUser(), refetchAllowance()]) },
+        onSuccess: async () => {
+          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
+          const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
+            if (latest === undefined || current > latest) return current
+            return latest
+          }, undefined)
+
+          if (latestTokenId !== undefined) {
+            navigateToCarton(latestTokenId)
+          }
+        },
         logLabel: 'Buy carton with USDC',
       },
     )
@@ -271,6 +293,89 @@ function HomePage() {
   const usdcPoolDisplay = usdcPrizePool !== undefined
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
     : '—'
+
+  const cartonStatusContracts = useMemo(() => {
+    if (!cartonsUser?.length) return []
+
+    return cartonsUser.flatMap((tokenId) => [
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'used',
+        args: [tokenId],
+      } as const,
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'winnersPredictions',
+        args: [tokenId],
+      } as const,
+    ])
+  }, [cartonsUser])
+
+  const { data: cartonStatusResults } = useReadContracts({
+    contracts: cartonStatusContracts,
+    query: {
+      enabled: cartonStatusContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const cartonEntries = useMemo(() => {
+    if (!cartonsUser?.length) return []
+
+    const deadlineValue = deadline ? Number(deadline) : undefined
+
+    return cartonsUser.map((tokenId, index) => {
+      const gamesSubmitted = Boolean(cartonStatusResults?.[index * 2]?.result)
+      const winnersSubmitted = hasWinnersPrediction(cartonStatusResults?.[index * 2 + 1]?.result)
+      const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue })
+
+      return { tokenId, status, gamesSubmitted, winnersSubmitted }
+    })
+  }, [cartonsUser, cartonStatusResults, deadline])
+
+  const orderedCartonEntries = useMemo(() => {
+    return [...cartonEntries].sort((a, b) => {
+      const priorityDiff = getPredictionStatusPriority(a.status) - getPredictionStatusPriority(b.status)
+      if (priorityDiff !== 0) return priorityDiff
+      if (a.tokenId === b.tokenId) return 0
+      return a.tokenId > b.tokenId ? -1 : 1
+    })
+  }, [cartonEntries])
+
+  const nextActionableCarton = useMemo(
+    () => orderedCartonEntries.find((entry) => entry.status === 'partial' || entry.status === 'none'),
+    [orderedCartonEntries],
+  )
+
+  const allCartonsComplete = cartonEntries.length > 0 && cartonEntries.every((entry) => entry.status === 'complete')
+
+  const nextActionableCopy = (() => {
+    if (!nextActionableCarton) return null
+    if (!nextActionableCarton.gamesSubmitted) {
+      return {
+        title: `Carton #${nextActionableCarton.tokenId.toString()} esperando tus partidos`,
+        description: 'Ya tienes un carton listo para arrancar. Empieza por cargar los resultados de grupos.',
+        cta: 'Empezar prediccion',
+      }
+    }
+
+    if (!nextActionableCarton.winnersSubmitted) {
+      return {
+        title: `Carton #${nextActionableCarton.tokenId.toString()} casi listo`,
+        description: 'Ya enviaste los partidos. Solo falta elegir los 4 ganadores del torneo.',
+        cta: 'Continuar prediccion',
+      }
+    }
+
+    return null
+  })()
+
+  const navigateToCarton = (targetTokenId: bigint) => {
+    navigate({ to: '/predictions', search: { carton: targetTokenId.toString() } })
+  }
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -422,6 +527,40 @@ function HomePage() {
               </span>
             )}
           </div>
+          {nextActionableCarton && nextActionableCopy && (
+            <div
+              className="rounded-xl p-4 space-y-3"
+              style={{ background: 'rgba(0, 230, 118, 0.08)', border: '1px solid rgba(0, 230, 118, 0.2)' }}
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--accent-green)' }}>
+                  Tu siguiente paso
+                </p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {nextActionableCopy.title}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {nextActionableCopy.description}
+                </p>
+              </div>
+              <Button className="w-full sm:w-auto" onClick={() => navigateToCarton(nextActionableCarton.tokenId)}>
+                {nextActionableCopy.cta}
+              </Button>
+            </div>
+          )}
+          {!nextActionableCarton && allCartonsComplete && (
+            <div
+              className="rounded-xl p-4 space-y-1"
+              style={{ background: 'rgba(0, 230, 118, 0.05)', border: '1px solid rgba(0, 230, 118, 0.14)' }}
+            >
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Tienes todos tus cartones al dia.
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Si compras otro, te llevamos directo a completar sus predicciones.
+              </p>
+            </div>
+          )}
           {!cartonsUser || cartonsUser.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <Ticket className="w-8 h-8 opacity-30" style={{ color: 'var(--text-disabled)' }} />
@@ -433,12 +572,13 @@ function HomePage() {
               </p>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {cartonsUser.map((tokenId) => (
+            <div className="space-y-2">
+              {orderedCartonEntries.map(({ tokenId, status }) => (
                 <CartonListItem
                   key={tokenId.toString()}
                   tokenId={tokenId}
-                  deadline={deadline ? Number(deadline) : undefined}
+                  status={status}
+                  highlighted={nextActionableCarton?.tokenId === tokenId}
                 />
               ))}
             </div>

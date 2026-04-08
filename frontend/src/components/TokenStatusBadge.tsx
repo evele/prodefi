@@ -1,20 +1,20 @@
-import type { PredictionStatus } from "../lib/types.ts"
+import type { PredictionStatus } from '../lib/types'
 
 const STATUS_CONFIG: Record<PredictionStatus, { text: string; dotColor: string; textColor: string; bgColor: string }> = {
   none: {
-    text: 'Sin enviar',
+    text: 'Sin empezar',
     dotColor: 'var(--text-disabled)',
     textColor: 'var(--text-disabled)',
     bgColor: 'rgba(58, 71, 92, 0.2)',
   },
   partial: {
-    text: 'Parcial',
+    text: 'Pendiente',
     dotColor: 'var(--accent-gold)',
     textColor: 'var(--accent-gold)',
     bgColor: 'rgba(255, 214, 0, 0.1)',
   },
   complete: {
-    text: 'Enviado',
+    text: 'Completo',
     dotColor: 'var(--accent-green)',
     textColor: 'var(--accent-green)',
     bgColor: 'rgba(0, 230, 118, 0.1)',
