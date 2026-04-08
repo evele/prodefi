@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: March 19, 2026*
+*Last updated: April 8, 2026*
 
 ---
 
@@ -110,6 +110,72 @@ The complete tournament flow is:
 
 ### Pre-MVP: Validation & Traction (Pending Decision)
 
+### Frontend UX Focus (Apr 2026)
+
+Context: the MVP flow is functionally complete, so the next highest-leverage work is reducing friction in the core loop `buy carton -> submit predictions -> claim prize`.
+
+#### Recently shipped
+
+- Home now prioritizes the next actionable carton instead of treating all owned cartons equally
+- After a successful purchase, the user is redirected directly into `/predictions?carton=<newTokenId>`
+- The home screen surfaces a clear "Tu siguiente paso" CTA for the best carton to continue
+- The predictions screen auto-selects the most actionable owned carton when opened without a query param
+- Carton status handling was normalized (`none` / `partial` / `complete` / `expired`) and winner-prediction detection was made consistent in the frontend
+
+#### Next UX sprint recommendation (Priority Order)
+
+1. Guided prediction flow (`/predictions`)
+   - Add an explicit step model:
+     - Step 1: select carton
+     - Step 2: fill group match scores
+     - Step 3: choose top-4 winners
+     - Step 4: review / submit
+   - Keep it in the same route first; avoid a multi-route wizard unless truly needed
+   - Goal: reduce cognitive load on the longest, densest screen in the product
+
+2. Better blocked/empty/success states
+   - Improve copy + primary CTA for:
+     - wallet disconnected
+     - no cartons owned
+     - deadline expired
+     - teams hash unset / mismatch
+     - tournament not fully configured
+   - After successful submit, show a stronger "what next" cue instead of only a toast
+   - Goal: users should always know the next action, even when blocked
+
+3. Claim visibility upgrade
+   - Surface claimable state earlier from `/` and `/leaderboard`, not only inside `/predictions`
+   - Consider a lightweight home card like "You have prizes ready to claim"
+   - Goal: make rewards more visible and emotionally sticky
+
+4. Mobile polish on dense screens
+   - Revisit `/predictions`, `/leaderboard`, and fixtures on smaller screens
+   - Focus on hierarchy, spacing, sticky context, and readability over visual ornament
+   - Goal: reduce the feeling of "too much info at once"
+
+#### Product ideas worth evaluating after the UX sprint
+
+- Personal dashboard card on home:
+  - active cartons
+  - predictions pending
+  - best current rank
+  - claimable prizes
+- Tournament readiness panel for users:
+  - deadline set
+  - teams synced
+  - results phase / claim phase
+- Smarter onboarding logic:
+  - if connected user has unfinished cartons, bias the app toward prediction continuation rather than purchase
+
+#### Suggested execution order
+
+1. Finish guided prediction flow
+2. Add stronger blocked/success states
+3. Expose claimable prizes earlier
+4. Do mobile cleanup pass
+
+This keeps work tightly focused on conversion through the main loop before branching into broader product experiments.
+
 Antes de seguir avanzando con el frontend, evaluar si conviene lanzar una landing + waitlist para validar tracción. Decisiones pendientes:
 
 - **Target audience**: ¿Cripto-nativos con wallet o público general? Cambia completamente el mensaje y onboarding
@@ -214,6 +280,7 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 - **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
+- **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
 
 ## Related Documents
 
