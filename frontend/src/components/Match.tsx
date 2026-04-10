@@ -5,66 +5,106 @@ import { teamsSiglaById, teamsById, teamsFlagById } from '../lib/teams'
 type MatchProps = {
   game: Game
   disabled: boolean
-  onScoreChange: (gameId: number, team: 0 | 1, score: number) => void
+  onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
 }
 
 export function Match({ game, disabled, onScoreChange }: MatchProps) {
+  const team1Score = game.result[0]
+  const team2Score = game.result[1]
+  // TODO: Revisar este criterio con producto. Hoy el warning aparece cuando
+  // un equipo llega a 10+ goles; tal vez deba evaluarse por goles totales.
+  const team1Improbable = team1Score !== null && team1Score >= 10
+  const team2Improbable = team2Score !== null && team2Score >= 10
+  const hasImprobableScore = team1Improbable || team2Improbable
+
   return (
-    <div
-      className="flex items-center gap-2 py-2"
-      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-    >
-      {/* Team 1 */}
+    <div className="space-y-1 py-2">
       <div
-        className="flex-1 flex items-center justify-end gap-2 text-sm font-mono font-semibold tracking-wide"
-        style={{ color: 'var(--text-primary)' }}
-        title={teamsById[game.team1] ?? `#${game.team1}`}
+        className="flex items-center gap-2"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
       >
-        <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
-        {teamsSiglaById[game.team1] ?? teamsById[game.team1] ?? `#${game.team1}`}
-      </div>
-
-      {/* Score inputs */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <Input
-          type="number"
-          className="w-11 h-9 text-center px-1 font-mono text-base font-semibold"
-          style={{ fontFamily: 'var(--font-mono-custom)' }}
-          placeholder="0"
-          min={0}
-          max={255}
-          disabled={disabled}
-          value={game.result[0]}
-          onChange={(e) => onScoreChange(game.id, 0, Number(e.target.value))}
-        />
-        <span
-          className="text-base font-bold select-none"
-          style={{ color: 'var(--text-disabled)' }}
+        {/* Team 1 */}
+        <div
+          className="flex-1 flex items-center justify-end gap-2 text-sm font-mono font-semibold tracking-wide"
+          style={{ color: 'var(--text-primary)' }}
+          title={teamsById[game.team1] ?? `#${game.team1}`}
         >
-          ·
-        </span>
-        <Input
-          type="number"
-          className="w-11 h-9 text-center px-1 font-mono text-base font-semibold"
-          style={{ fontFamily: 'var(--font-mono-custom)' }}
-          placeholder="0"
-          min={0}
-          max={255}
-          disabled={disabled}
-          value={game.result[1]}
-          onChange={(e) => onScoreChange(game.id, 1, Number(e.target.value))}
-        />
+          <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
+          {teamsSiglaById[game.team1] ?? teamsById[game.team1] ?? `#${game.team1}`}
+        </div>
+
+        {/* Score inputs */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Input
+            type="number"
+            className="w-14 h-10 text-center px-1 font-mono text-lg font-semibold"
+            style={{ 
+              fontFamily: 'var(--font-mono-custom)',
+              borderColor: team1Improbable ? 'rgba(255, 214, 0, 0.45)' : undefined,
+              background: team1Improbable ? 'rgba(255, 214, 0, 0.08)' : undefined,
+            }}
+            placeholder="0"
+            min={0}
+            max={255}
+            disabled={disabled}
+            value={team1Score ?? ''}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === '' || val === '-') {
+                onScoreChange(game.id, 0, null)
+              } else {
+                const num = Number(val)
+                if (!Number.isNaN(num) && num >= 0) onScoreChange(game.id, 0, num)
+              }
+            }}
+          />
+          <span
+            className="text-base font-bold select-none"
+            style={{ color: 'var(--text-disabled)' }}
+          >
+            ·
+          </span>
+          <Input
+            type="number"
+            className="w-14 h-10 text-center px-1 font-mono text-lg font-semibold"
+            style={{ 
+              fontFamily: 'var(--font-mono-custom)',
+              borderColor: team2Improbable ? 'rgba(255, 214, 0, 0.45)' : undefined,
+              background: team2Improbable ? 'rgba(255, 214, 0, 0.08)' : undefined,
+            }}
+            placeholder="0"
+            min={0}
+            max={255}
+            disabled={disabled}
+            value={team2Score ?? ''}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === '' || val === '-') {
+                onScoreChange(game.id, 1, null)
+              } else {
+                const num = Number(val)
+                if (!Number.isNaN(num) && num >= 0) onScoreChange(game.id, 1, num)
+              }
+            }}
+          />
+        </div>
+
+        {/* Team 2 */}
+        <div
+          className="flex-1 flex items-center gap-2 text-sm font-mono font-semibold tracking-wide"
+          style={{ color: 'var(--text-primary)' }}
+          title={teamsById[game.team2] ?? `#${game.team2}`}
+        >
+          {teamsSiglaById[game.team2] ?? teamsById[game.team2] ?? `#${game.team2}`}
+          <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
+        </div>
       </div>
 
-      {/* Team 2 */}
-      <div
-        className="flex-1 flex items-center gap-2 text-sm font-mono font-semibold tracking-wide"
-        style={{ color: 'var(--text-primary)' }}
-        title={teamsById[game.team2] ?? `#${game.team2}`}
-      >
-        {teamsSiglaById[game.team2] ?? teamsById[game.team2] ?? `#${game.team2}`}
-        <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
-      </div>
+      {hasImprobableScore && (
+        <p className="text-xs text-center" style={{ color: 'var(--accent-gold)' }}>
+          Marcador poco habitual. Un equipo llego a 10 o mas goles; revisa si era intencional.
+        </p>
+      )}
     </div>
   )
 }

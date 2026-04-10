@@ -6,7 +6,7 @@ export type { GroupData }
 type GroupsViewProps = {
   groups: GroupData[]
   disabled: boolean
-  onScoreChange: (gameId: number, team: 0 | 1, score: number) => void
+  onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
   selectedGroup?: string | null
 }
 

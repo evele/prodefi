@@ -5,7 +5,7 @@ type GroupMatchesProps = {
   groupLabel: string
   games: Game[]
   disabled: boolean
-  onScoreChange: (gameId: number, team: 0 | 1, score: number) => void
+  onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
 }
 
 export function GroupMatches({ groupLabel, games, disabled, onScoreChange }: GroupMatchesProps) {

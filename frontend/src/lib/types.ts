@@ -11,7 +11,7 @@ export type Game = {
   id: number
   team1: number
   team2: number
-  result: [number, number]
+  result: [number | null, number | null]
   set: boolean
 }
 

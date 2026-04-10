@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { ConfirmModal } from '../components/ui/modal'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
 import { ClaimSection } from '../components/ClaimSection'
@@ -34,6 +36,10 @@ const DEADLINE_NOT_SET_MESSAGE =
   'El deadline de envío no está configurado. Pide al admin que lo configure en /admin/dev.'
 const PREDICTION_REVERT_MESSAGE = 'Las predicciones de partidos fueron rechazadas en cadena.'
 const WINNERS_REVERT_MESSAGE = 'Las predicciones de ganadores fueron rechazadas en cadena.'
+// TODO: Revisar este criterio con producto. Hoy se marca como "poco habitual"
+// cuando un equipo llega a 10+ goles, pero tal vez deba basarse en goles
+// totales del partido (por ejemplo, 6-5).
+const IMPROBABLE_SCORE_THRESHOLD = 10
 
 function PredictionsPage() {
   const navigate = useNavigate()
@@ -44,12 +50,13 @@ function PredictionsPage() {
 
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [isImprobableScoresModalOpen, setIsImprobableScoresModalOpen] = useState(false)
 
   useEffect(() => {
     if (groups.length > 0 && selectedGroup === null) {
       setSelectedGroup(groups[0].groupLabel)
     }
-  }, [groups.length, selectedGroup])
+  }, [groups, selectedGroup])
 
   const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0, 0, 0, 0])
 
@@ -126,7 +133,7 @@ function PredictionsPage() {
     },
   })
 
-  const updateGameScore = (gameId: number, team: 0 | 1, score: number) => {
+  const updateGameScore = (gameId: number, team: 0 | 1, score: number | null) => {
     setGameState((prev) => {
       const updatedGames = prev.games.map((g) =>
         g.id === gameId
@@ -180,6 +187,26 @@ function PredictionsPage() {
         logLabel: 'Submit game predictions',
       },
     )
+  }
+
+  const improbableScoreSummaries = useMemo(() => {
+    return games
+      .filter((game) => game.result.some((score) => score !== null && score >= IMPROBABLE_SCORE_THRESHOLD))
+      .map((game) => `${teamsById[game.team1]} ${game.result[0] ?? '?'}-${game.result[1] ?? '?'} ${teamsById[game.team2]}`)
+  }, [games])
+
+  const handleSubmitPredictionClick = () => {
+    if (predictionSubmitBlockedMessage) {
+      toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
+      return
+    }
+
+    if (improbableScoreSummaries.length > 0) {
+      setIsImprobableScoresModalOpen(true)
+      return
+    }
+
+    submitPrediction()
   }
 
   const submitWinners = () => {
@@ -508,26 +535,12 @@ function PredictionsPage() {
         </div>
 
         {/* Group tabs */}
-        <div
-          className="px-3 py-2 overflow-x-auto scrollbar-hide"
-          style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
-        >
-        <div className="flex gap-1.5 rounded-lg p-1" style={{ background: 'var(--bg-card)' }}>
-          {groups.map((group) => (
-            <button
-              key={group.groupLabel}
-              onClick={() => setSelectedGroup(group.groupLabel)}
-              className="flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-all"
-              style={{
-                background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent',
-                color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)',
-                border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
-              }}
-            >
-              {group.groupLabel}
-            </button>
-          ))}
-        </div>
+        <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
+          <button onClick={() => { const idx = groups.findIndex(g => g.groupLabel === selectedGroup); if (idx > 0) setSelectedGroup(groups[idx - 1].groupLabel) }} disabled={!selectedGroup || groups.findIndex(g => g.groupLabel === selectedGroup) <= 0} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
+          <div className="flex gap-1.5 rounded-lg p-1 flex-1" style={{ background: 'var(--bg-card)' }}>
+            {groups.map((group) => (<button key={group.groupLabel} onClick={() => setSelectedGroup(group.groupLabel)} className="flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-all" style={{ background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent', color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)', border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}` }}>{group.groupLabel}</button>))}
+          </div>
+          <button onClick={() => { const idx = groups.findIndex(g => g.groupLabel === selectedGroup); if (idx < groups.length - 1) setSelectedGroup(groups[idx + 1].groupLabel) }} disabled={!selectedGroup || groups.findIndex(g => g.groupLabel === selectedGroup) >= groups.length - 1} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
         </div>
 
         {/* Group matches */}
@@ -548,7 +561,7 @@ function PredictionsPage() {
           <Button
             className="w-full h-11 text-base font-semibold"
             disabled={!canSubmitGames}
-            onClick={submitPrediction}
+            onClick={handleSubmitPredictionClick}
           >
             {predictionWrite.isSimulating ? 'Verificando…' : predictionWrite.isPending ? 'Confirmando…' : predictionWrite.isConfirming ? 'Procesando…' : 'Enviar Predicciones de Partidos'}
           </Button>
@@ -559,6 +572,16 @@ function PredictionsPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isImprobableScoresModalOpen}
+        onClose={() => setIsImprobableScoresModalOpen(false)}
+        title="Confirmar marcadores poco habituales"
+        message={`Hay ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} donde un equipo anota 10 o más goles: ${improbableScoreSummaries.join(', ')}. ¿Seguro que querés enviar estas predicciones?`}
+        confirmLabel="Sí, enviar"
+        variant="warning"
+        onConfirm={submitPrediction}
+      />
 
       {/* ─── Winner Predictions ─── */}
       <div
