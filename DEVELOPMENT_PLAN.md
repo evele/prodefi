@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: April 8, 2026*
+*Last updated: April 10, 2026*
 
 ---
 
@@ -57,6 +57,92 @@ All critical bugs fixed. All dead code cleaned up:
 - No testnet/mainnet deployment config exists (everything targets Anvil localhost)
 - Leaderboard no longer depends on `getPositions()` storage array; frontend reconstructs rankings from `Carton.nextTokenId()` + `Predictions.tokenPositions(tokenId)` and filters stale entries with `positionsVersion` / `tokenPositionsVersion`
 - Alternative considered for future: use `PositionsUpdated` logs as the leaderboard source, optionally storing a `lastPositionsBlock` pointer to query a narrow block range instead of scanning long history
+
+### Next Session Plan: USDC-Only Cleanup (Apr 10, 2026)
+
+Decision for next implementation pass:
+
+- Remove ETH as a business/payment asset before production
+- Keep USDC as the only purchase currency and prize currency
+- Do not tackle smart accounts / gas sponsorship in this pass
+- ETH/native asset remains relevant only as gas for now, not as purchase/prize UX
+
+Why this refactor is worth doing:
+
+- Simpler pricing, prize-pool messaging, and user explanation
+- Less frontend duplication and fewer support edge cases
+- Avoid mixed-asset accounting before launch
+- Better fit for the intended future direction (`USDC-only` product flow)
+
+Implementation scope for the next session:
+
+1. Smart contracts
+   - `src/Carton.sol`
+   - Disable ETH purchase onchain
+   - Keep `buyCartonWithToken()` as the active purchase path
+   - Prefer a minimal diff: make `buyCarton()` unusable rather than redesigning unrelated storage unless that becomes awkward in tests
+
+2. Treasury / prize logic
+   - `src/Treasury.sol`
+   - Do not do a large single-asset rewrite yet
+   - Leave multi-asset internals in place if that keeps the diff small and testable
+   - Stop configuring/using ETH for normal product flows
+
+3. Deployment / setup
+   - `script/Deploy.s.sol`
+   - Remove ETH price setup
+   - Remove ETH prize distribution setup
+   - Keep only USDC token acceptance, USDC price, and USDC prize distribution
+
+4. Frontend buy flow
+   - `frontend/src/routes/index.tsx`
+   - Remove ETH/USDC purchase toggle
+   - Remove ETH price reads and ETH buy flow
+   - Keep only approve + buy with USDC
+   - Simplify pool and prize copy to USDC-only
+
+5. Frontend prize views
+   - `frontend/src/routes/leaderboard.tsx`
+   - `frontend/src/components/ClaimSection.tsx`
+   - Remove ETH pool/prize/claim UI
+   - Show only USDC amounts in product-facing screens
+
+6. Frontend supporting cleanup
+   - `frontend/src/lib/transaction-errors.ts`
+   - Simplify buy/claim error mapping away from ETH-vs-USDC branching where possible
+   - `frontend/src/routes/admin.dev.tsx`
+   - Simplify close-tournament asset selection to USDC-only if admin UX should match product direction
+   - `frontend/src/routes/__root.tsx`
+   - Consider keeping native balance visible for gas awareness even if ETH is no longer a product asset
+   - `frontend/src/hooks/useBalance.ts`
+   - Revisit whether both balances are still needed in the header once the main flow is cleaned up
+
+7. Tests
+   - `test/Carton.t.sol`
+   - `test/ERC20Integration.t.sol`
+   - `test/Predictions.t.sol` if needed by prize configuration changes
+   - Remove or update tests that rely on ETH purchase / ETH prize setup in the main flow
+   - Keep broader Treasury multi-asset tests unless they become noise or block the refactor unnecessarily
+
+Execution order for next session:
+
+1. Update contracts + deploy script
+2. Fix and run Foundry tests
+3. Clean frontend buy flow
+4. Clean frontend prize/claim screens
+5. Run `npm run lint` and `npm run build` in `frontend/`
+
+Verification checklist for the refactor:
+
+- `forge build`
+- `forge test`
+- `cd frontend && npm run lint`
+- `cd frontend && npm run build`
+
+Open product note:
+
+- Because smart accounts are out of scope for this pass, users will still need native gas even in a `USDC-only` product flow.
+- That means the app can remove ETH as a payment/prize concept now, but should not accidentally hide all signals related to native gas readiness.
 
 ---
 
