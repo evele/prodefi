@@ -1,40 +1,34 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
-import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI, ZERO_ADDRESS } from '../lib/contracts'
-import { formatEther, formatUnits } from 'viem'
+import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../lib/contracts'
+import { formatUnits } from 'viem'
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
-
+import { Ticket } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
 })
 
 const POSITION_META = [
-  { label: '1st Place (50%)', position: 1 },
-  { label: '2nd Place (30%)', position: 2 },
-  { label: '3rd Place (15%)', position: 3 },
-  { label: '4th Place (5%)', position: 4 },
+  { label: '1° Lugar', icon: '🥇', position: 1 },
+  { label: '2° Lugar', icon: '🥈', position: 2 },
+  { label: '3° Lugar', icon: '🥉', position: 3 },
+  { label: '4° Lugar', icon: '4°',  position: 4 },
 ] as const
 
 function HomePage() {
+  const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
-  const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
-  const { eth: ethBalance, usdc: usdcBalance } = useUserBalance()
+  const { usdc: usdcBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
   const approveWrite = useSimulatedContractWrite()
-
-  const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'cartonPrice',
-  })
 
   const { data: activeTournamentId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -63,56 +57,41 @@ function HomePage() {
 
   const usdcPriceValue = usdcPrice ?? 0n
   const usdcAllowanceValue = usdcAllowance ?? 0n
-  const needsApproval = currency === 'USDC' && usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
+  const needsApproval = usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
   const isBuying = purchaseWrite.isBusy
   const isApproving = approveWrite.isBusy
 
   const priceDisplay =
-    currency === 'ETH'
-      ? priceLoading
-        ? 'Loading...'
-        : cartonPrice
-          ? `${formatEther(cartonPrice)} ETH`
-          : 'Price not set'
-      : usdcPriceLoading
-        ? 'Loading...'
-        : usdcPriceValue > 0n
-          ? `${formatUnits(usdcPriceValue, 6)} USDC`
-          : 'Price not set'
+    usdcPriceLoading
+      ? '…'
+      : usdcPriceValue > 0n
+        ? `${formatUnits(usdcPriceValue, 6)} USDC`
+        : '—'
 
   const buyButtonText = () => {
-    if (!isConnected) return 'Connect Wallet to Buy'
-    if (currency === 'ETH') {
-      return isBuying ? 'Buying...' : 'Buy with ETH'
-    }
-    return isBuying ? 'Buying...' : 'Buy with USDC'
+    if (!isConnected) return 'Conecta tu wallet para comprar'
+    return isBuying ? 'Comprando…' : 'Comprar con USDC'
   }
 
   const approvalBlockedMessage = (() => {
     if (!needsApproval) return null
-    if (!isConnected) return 'Connect your wallet to approve USDC.'
-    if (usdcPriceLoading) return 'Loading USDC price...'
-    if (usdcPriceValue === 0n) return 'USDC price is not configured yet.'
-    if (approveWrite.isSimulating) return 'Checking the approval transaction...'
-    if (approveWrite.isPending) return 'Confirm the approval transaction in your wallet.'
-    if (approveWrite.isConfirming) return 'Approval transaction is being confirmed on-chain.'
+    if (!isConnected) return 'Conecta tu wallet para aprobar USDC.'
+    if (usdcPriceLoading) return 'Cargando precio USDC…'
+    if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
+    if (approveWrite.isSimulating) return 'Verificando la transacción de aprobación…'
+    if (approveWrite.isPending) return 'Confirma la aprobación en tu wallet.'
+    if (approveWrite.isConfirming) return 'Confirmando aprobación en cadena…'
     return null
   })()
 
   const buyBlockedMessage = (() => {
-    if (!isConnected) return 'Connect your wallet to buy a carton.'
-    if (currency === 'ETH') {
-      if (priceLoading) return 'Loading ETH price...'
-      if (!cartonPrice) return 'ETH price is not configured yet.'
-    } else {
-      if (usdcPriceLoading) return 'Loading USDC price...'
-      if (usdcPriceValue === 0n) return 'USDC price is not configured yet.'
-      if (needsApproval) return 'Approve USDC before buying with USDC.'
-    }
-
-    if (purchaseWrite.isSimulating) return 'Checking the purchase transaction...'
-    if (purchaseWrite.isPending) return 'Confirm the purchase transaction in your wallet.'
-    if (purchaseWrite.isConfirming) return 'Purchase transaction is being confirmed on-chain.'
+    if (!isConnected) return 'Conecta tu wallet para comprar un cartón.'
+    if (usdcPriceLoading) return 'Cargando precio USDC…'
+    if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
+    if (needsApproval) return 'Aprueba USDC antes de comprar.'
+    if (purchaseWrite.isSimulating) return 'Verificando la compra…'
+    if (purchaseWrite.isPending) return 'Confirma la compra en tu wallet.'
+    if (purchaseWrite.isConfirming) return 'Confirmando compra en cadena…'
     return null
   })()
 
@@ -120,19 +99,8 @@ function HomePage() {
 
   const balanceDisplay = () => {
     if (!isConnected) return null
-    if (currency === 'ETH') {
-      return ethBalance.isLoading ? 'Loading balance...' : `${ethBalance.amount} ${ethBalance.symbol}`
-    }
-    return usdcBalance.isLoading ? 'Loading balance...' : `${usdcBalance.amount} ${usdcBalance.symbol}`
+    return usdcBalance.isLoading ? '…' : `${usdcBalance.amount} ${usdcBalance.symbol}`
   }
-
-  const { data: ethPrizePool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: tournamentId > 0n ? [tournamentId, ZERO_ADDRESS] : undefined,
-    query: { enabled: tournamentId > 0n },
-  })
 
   const { data: usdcPrizePool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
@@ -144,20 +112,12 @@ function HomePage() {
 
   const prizeContracts = useMemo(() => {
     if (tournamentId === 0n) return []
-    return POSITION_META.flatMap((meta) => [
-      {
-        address: CONTRACT_ADDRESSES.TREASURY,
-        abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount',
-        args: [tournamentId, ZERO_ADDRESS, BigInt(meta.position)],
-      } as const,
-      {
-        address: CONTRACT_ADDRESSES.TREASURY,
-        abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount',
-        args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
-      } as const,
-    ])
+    return POSITION_META.map((meta) => ({
+      address: CONTRACT_ADDRESSES.TREASURY,
+      abi: TREASURY_ABI,
+      functionName: 'getUserPrizeAmount',
+      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
+    }) as const)
   }, [tournamentId])
 
   const { data: prizeAmounts } = useReadContracts({
@@ -165,69 +125,36 @@ function HomePage() {
     query: { enabled: prizeContracts.length > 0 },
   })
 
-  const ethPositionAmounts = POSITION_META.map((_, index) => {
-    const entry = prizeAmounts?.[index * 2]
-    return (entry?.result as bigint | undefined) ?? 0n
-  })
-
   const usdcPositionAmounts = POSITION_META.map((_, index) => {
-    const entry = prizeAmounts?.[index * 2 + 1]
+    const entry = prizeAmounts?.[index]
     return (entry?.result as bigint | undefined) ?? 0n
   })
 
-  const formatAssetValue = (amount: bigint, asset: 'ETH' | 'USDC') => {
-    if (amount === 0n) return `-- ${asset}`
-    return asset === 'ETH'
-      ? `${Number(formatEther(amount)).toFixed(3)} ${asset}`
-      : `${Number(formatUnits(amount, 6)).toFixed(2)} ${asset}`
-  }
-
-  const prizeSections = [
-    { asset: 'ETH' as const, total: ethPrizePool ?? 0n, values: ethPositionAmounts },
-    { asset: 'USDC' as const, total: usdcPrizePool ?? 0n, values: usdcPositionAmounts },
-  ]
-
-  const buyCartonWithEth = () => {
-    if (!cartonPrice) return
-    void purchaseWrite.simulateAndSend(
-      {
-        address: CONTRACT_ADDRESSES.CARTON,
-        abi: CARTON_ABI,
-        functionName: 'buyCarton',
-        args: [],
-        value: cartonPrice,
-      },
-      {
-        toastId: 'buy-carton-eth',
-        pendingMessage: 'Waiting for purchase confirmation...',
-        successMessage: 'Carton purchased with ETH!',
-        revertedMessage: 'The ETH purchase was rejected on-chain.',
-        mapError: (error) => mapBuyCartonError(error, 'ETH'),
-        onSuccess: async () => {
-          await Promise.all([refetchCartonsUser(), refetchAllowance()])
-        },
-        logLabel: 'Buy carton with ETH',
-      },
-    )
+  const formatAssetValue = (amount: bigint) => {
+    if (amount === 0n) return `—`
+    return `${Number(formatUnits(amount, 6)).toFixed(2)} USDC`
   }
 
   const buyCartonWithUsdc = () => {
     if (!usdcPriceValue) return
     void purchaseWrite.simulateAndSend(
-      {
-        address: CONTRACT_ADDRESSES.CARTON,
-        abi: CARTON_ABI,
-        functionName: 'buyCartonWithToken',
-        args: [CONTRACT_ADDRESSES.USDC],
-      },
+      { address: CONTRACT_ADDRESSES.CARTON, abi: CARTON_ABI, functionName: 'buyCartonWithToken', args: [CONTRACT_ADDRESSES.USDC] },
       {
         toastId: 'buy-carton-usdc',
-        pendingMessage: 'Waiting for purchase confirmation...',
-        successMessage: 'Carton purchased with USDC!',
-        revertedMessage: 'The USDC purchase was rejected on-chain.',
-        mapError: (error) => mapBuyCartonError(error, 'USDC'),
+        pendingMessage: 'Esperando confirmación de compra…',
+        successMessage: '¡Cartón comprado con USDC!',
+        revertedMessage: 'La compra con USDC fue rechazada en cadena.',
+        mapError: mapBuyCartonError,
         onSuccess: async () => {
-          await Promise.all([refetchCartonsUser(), refetchAllowance()])
+          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
+          const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
+            if (latest === undefined || current > latest) return current
+            return latest
+          }, undefined)
+
+          if (latestTokenId !== undefined) {
+            navigateToCarton(latestTokenId)
+          }
         },
         logLabel: 'Buy carton with USDC',
       },
@@ -237,35 +164,24 @@ function HomePage() {
   const approveUsdc = () => {
     if (!usdcPriceValue) return
     void approveWrite.simulateAndSend(
-      {
-        address: CONTRACT_ADDRESSES.USDC,
-        abi: USDC_ABI,
-        functionName: 'approve',
-        args: [CONTRACT_ADDRESSES.CARTON, usdcPriceValue],
-      },
+      { address: CONTRACT_ADDRESSES.USDC, abi: USDC_ABI, functionName: 'approve', args: [CONTRACT_ADDRESSES.CARTON, usdcPriceValue] },
       {
         toastId: 'approve-usdc',
-        pendingMessage: 'Waiting for approval confirmation...',
-        successMessage: 'USDC approval confirmed. You can now buy with USDC.',
-        revertedMessage: 'USDC approval was rejected on-chain.',
+        pendingMessage: 'Esperando confirmación de aprobación…',
+        successMessage: 'USDC aprobado. Ya puedes comprar.',
+        revertedMessage: 'La aprobación USDC fue rechazada en cadena.',
         mapError: mapApproveUsdcError,
-        onSuccess: async () => {
-          await refetchAllowance()
-        },
+        onSuccess: async () => { await refetchAllowance() },
         logLabel: 'Approve USDC',
       },
     )
   }
 
   const handleBuyClick = () => {
-    if (currency === 'ETH') {
-      buyCartonWithEth()
-    } else {
-      buyCartonWithUsdc()
-    }
+    buyCartonWithUsdc()
   }
 
-  const {data: cartonsUser, refetch: refetchCartonsUser} = useReadContract({
+  const { data: cartonsUser, refetch: refetchCartonsUser } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'getUserTokens',
@@ -274,10 +190,9 @@ function HomePage() {
       enabled: Boolean(normalizedAddress) && isConnected,
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
-    }
+    },
   })
 
-  // Read submission deadline and show a small countdown banner
   const { data: deadline } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -298,239 +213,325 @@ function HomePage() {
     const m = Math.floor((s % 3600) / 60)
     const ss = s % 60
     const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${pad(h)}:${pad(m)}:${pad(ss)}`
+    return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
   }
 
-  // Watch for CartonPurchased events to update user's cartones in real-time
-  /* NOTE: this one is not working on anvil but shoudl be able to testing on testnet and then on mainet
-  useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    eventName: 'CartonPurchased',
-    onLogs: (logs) => {
-      // console.log('🎫 CartonPurchased event detected:', logs)
-      const userPurchased = logs.some(log => log.args.buyer === userAddress)
-      // console.log('👤 Is for current user?', userPurchased, 'User:', userAddress)
-      if (userPurchased) {
-        console.log('🔄 Refetching user cartones...')
-        refetchCartonsUser()
-      }
-    },
-    onError: (error) => {
-      // console.error('❌ Event listener error:', error)
-    }
-  }) */
+  const usdcPoolDisplay = usdcPrizePool !== undefined
+    ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
+    : '—'
 
-  const getUserCartonsInfo = () => {
-    if (!cartonsUser || cartonsUser.length === 0) {
-      return { count: 0, text: "No Cartons Owned" }
+  const cartonStatusContracts = useMemo(() => {
+    if (!cartonsUser?.length) return []
+
+    return cartonsUser.flatMap((tokenId) => [
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'used',
+        args: [tokenId],
+      } as const,
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'winnersPredictions',
+        args: [tokenId],
+      } as const,
+    ])
+  }, [cartonsUser])
+
+  const { data: cartonStatusResults } = useReadContracts({
+    contracts: cartonStatusContracts,
+    query: {
+      enabled: cartonStatusContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const cartonEntries = useMemo(() => {
+    if (!cartonsUser?.length) return []
+
+    const deadlineValue = deadline ? Number(deadline) : undefined
+
+    return cartonsUser.map((tokenId, index) => {
+      const gamesSubmitted = Boolean(cartonStatusResults?.[index * 2]?.result)
+      const winnersSubmitted = hasWinnersPrediction(cartonStatusResults?.[index * 2 + 1]?.result)
+      const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue })
+
+      return { tokenId, status, gamesSubmitted, winnersSubmitted }
+    })
+  }, [cartonsUser, cartonStatusResults, deadline])
+
+  const orderedCartonEntries = useMemo(() => {
+    return [...cartonEntries].sort((a, b) => {
+      const priorityDiff = getPredictionStatusPriority(a.status) - getPredictionStatusPriority(b.status)
+      if (priorityDiff !== 0) return priorityDiff
+      if (a.tokenId === b.tokenId) return 0
+      return a.tokenId > b.tokenId ? -1 : 1
+    })
+  }, [cartonEntries])
+
+  const nextActionableCarton = useMemo(
+    () => orderedCartonEntries.find((entry) => entry.status === 'partial' || entry.status === 'none'),
+    [orderedCartonEntries],
+  )
+
+  const allCartonsComplete = cartonEntries.length > 0 && cartonEntries.every((entry) => entry.status === 'complete')
+
+  const nextActionableCopy = (() => {
+    if (!nextActionableCarton) return null
+    if (!nextActionableCarton.gamesSubmitted) {
+      return {
+        title: `Carton #${nextActionableCarton.tokenId.toString()} esperando tus partidos`,
+        description: 'Ya tienes un carton listo para arrancar. Empieza por cargar los resultados de grupos.',
+        cta: 'Empezar prediccion',
+      }
     }
-    return {
-      count: cartonsUser.length,
-      text: `${cartonsUser.length} Carton${cartonsUser.length > 1 ? 'es' : ''} Owned`
+
+    if (!nextActionableCarton.winnersSubmitted) {
+      return {
+        title: `Carton #${nextActionableCarton.tokenId.toString()} casi listo`,
+        description: 'Ya enviaste los partidos. Solo falta elegir los 4 ganadores del torneo.',
+        cta: 'Continuar prediccion',
+      }
     }
-  } 
+
+    return null
+  })()
+
+  const navigateToCarton = (targetTokenId: bigint) => {
+    navigate({ to: '/predictions', search: { carton: targetTokenId.toString() } })
+  }
 
   return (
-    <>
-      {/* Main Content */}
-      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {/* Buy Carton Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🎫 Buy Prediction Card
-            </CardTitle>
-            <CardDescription>
-              Purchase an NFT prediction card to participate in the tournament
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <Button
-                  variant={currency === 'ETH' ? 'default' : 'outline'}
-                  onClick={() => setCurrency('ETH')}
-                  className="flex-1"
-                >
-                  Pay in ETH
-                </Button>
-                <Button
-                  variant={currency === 'USDC' ? 'default' : 'outline'}
-                  onClick={() => setCurrency('USDC')}
-                  className="flex-1"
-                >
-                  Pay in USDC
-                </Button>
-              </div>
-              <div className="text-2xl font-bold text-green-600">{priceDisplay}</div>
-              {isConnected && (
-                <div className="text-xs text-gray-600">Balance: {balanceDisplay()}</div>
-              )}
-              <div className="text-xs text-gray-500">
-                Dev pricing only: ETH and USDC are fixed and not pegged to USD.
-              </div>
-              {currency === 'USDC' && needsApproval && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={approvalBlockedMessage !== null}
-                  onClick={approveUsdc}
-                >
-                  {isApproving ? 'Approving...' : 'Approve USDC'}
-                </Button>
-              )}
-              {currency === 'USDC' && needsApproval && approvalBlockedMessage && (
-                <p className="text-xs text-muted-foreground">{approvalBlockedMessage}</p>
-              )}
-              <Button
-                className="w-full"
-                disabled={!canBuy}
-                onClick={handleBuyClick}
-              >
-                {buyButtonText()}
-              </Button>
-              {buyBlockedMessage && (
-                <p className="text-xs text-muted-foreground">{buyBlockedMessage}</p>
-              )}
-              {currency === 'USDC' && needsApproval && (
-                <p className="text-xs text-gray-500">
-                  Approval required only once per token. After approving you can buy instantly.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+    <div className="max-w-lg mx-auto space-y-6">
 
-        {/* Make Predictions Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🔮 Make Predictions
-            </CardTitle>
-            <CardDescription>
-              Predict game results and tournament winners
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Deadline summary */}
-              <div className={`p-2 rounded border text-xs ${isExpired ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
-                {deadline ? (
-                  isExpired ? (
-                    <span>
-                      Submissions closed • {new Date(Number(deadline) * 1000).toLocaleString()}
-                    </span>
-                  ) : (
-                    <span>
-                      Deadline: {new Date(Number(deadline) * 1000).toLocaleString()} • {formatCountdown(remaining)}
-                    </span>
-                  )
-                ) : (
-                  <span>Deadline: —</span>
-                )}
-              </div>
-              <div className="text-sm text-gray-600">
-                • 4 Game Predictions
-                • Top 4 Teams Prediction
-                • Earn points for accuracy
-              </div>
-              
-              {/* Cartones List */}
-              {getUserCartonsInfo().count === 0 ? (
-                <div className="text-center py-4 text-gray-500 text-sm">
-                  No cartones owned. Buy a carton first!
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="text-sm font-medium text-gray-700">
-                    Your Cartones ({getUserCartonsInfo().count}):
-                  </div>
-                  {cartonsUser?.map((tokenId) => (
-                    <CartonListItem
-                      key={tokenId.toString()}
-                      tokenId={tokenId}
-                      deadline={deadline ? Number(deadline) : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* ─── Deadline banner ─── */}
+      {deadline !== undefined && deadline > 0n && (
+        <div
+          className="rounded-lg px-4 py-2.5 flex items-center gap-2 text-sm"
+          style={{
+            background: isExpired ? 'rgba(255,77,109,0.1)' : 'rgba(255,214,0,0.08)',
+            border: `1px solid ${isExpired ? 'rgba(255,77,109,0.25)' : 'rgba(255,214,0,0.2)'}`,
+            color: isExpired ? 'var(--accent-red)' : 'var(--accent-gold)',
+          }}
+        >
+          <span>{isExpired ? '🔒' : '⏱'}</span>
+          <span>
+            {isExpired
+              ? `Predicciones cerradas · ${new Date(Number(deadline) * 1000).toLocaleDateString()}`
+              : `Cierra en ${formatCountdown(remaining)}`}
+          </span>
+        </div>
+      )}
 
-        {/* Prize Pool Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🏆 Prize Pool
-            </CardTitle>
-            <CardDescription>
-              Current tournament prize distribution
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {tournamentId === 0n ? (
-              <p className="text-sm text-gray-500">
-                Configure an active tournament in the Carton contract to see live prize pools.
+      {/* ─── Prize Pool Hero ─── */}
+      {tournamentId > 0n && (
+        <section className="space-y-1">
+          <p
+            className="text-xs font-medium uppercase tracking-widest"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Prize Pool
+          </p>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span
+              className="font-display text-5xl font-black leading-none"
+              style={{ color: 'var(--accent-gold)', textShadow: 'var(--glow-gold)' }}
+            >
+              {usdcPoolDisplay}
+            </span>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Buy Carton ─── */}
+      <div
+        className="rounded-xl p-5 space-y-4"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+      >
+        <div className="flex items-center justify-between">
+          <h2
+            className="font-display text-xl font-bold uppercase tracking-wide"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Comprar Cartón
+          </h2>
+          <span className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+            USDC only
+          </span>
+        </div>
+
+        {/* Price */}
+        <div className="flex items-baseline gap-3">
+          <span
+            className="text-3xl font-bold"
+            style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono-custom)' }}
+          >
+            {priceDisplay}
+          </span>
+          {isConnected && balanceDisplay() && (
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Saldo: {balanceDisplay()}
+            </span>
+          )}
+        </div>
+
+        {/* Approve USDC */}
+        {needsApproval && (
+          <>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={approvalBlockedMessage !== null}
+              onClick={approveUsdc}
+            >
+              {isApproving ? 'Aprobando…' : 'Aprobar USDC'}
+            </Button>
+            {approvalBlockedMessage && (
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {approvalBlockedMessage}
               </p>
-            ) : (
-              <div className="space-y-6">
-                {prizeSections.map((section) => (
-                  <div key={section.asset} className="space-y-2">
-                    <div className="flex justify-between text-sm text-gray-500">
-                      <span>{section.asset} Pool</span>
-                      <span className="font-semibold text-gray-800">
-                        {formatAssetValue(section.total, section.asset)}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {POSITION_META.map((meta, idx) => (
-                        <div className="flex justify-between" key={`${section.asset}-${meta.position}`}>
-                          <span>{meta.label}</span>
-                          <span className="font-bold">{formatAssetValue(section.values[idx], section.asset)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      Live amounts update with each purchase and lock in once the tournament is closed.
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
-          </CardContent>
-        </Card>
+          </>
+        )}
+
+        {/* Buy button */}
+        <Button
+          className="w-full h-11 text-base font-semibold"
+          disabled={!canBuy}
+          onClick={handleBuyClick}
+          style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
+        >
+          {buyButtonText()}
+        </Button>
+        {buyBlockedMessage && (
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {buyBlockedMessage}
+          </p>
+        )}
       </div>
 
-      {/* Status Section */}
-      <div className="mt-12">
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Network:</span>
-                <span className="font-mono">Anvil (localhost:8545)</span>
+      {/* ─── Mis Cartones ─── */}
+      {isConnected && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <p
+              className="text-xs font-medium uppercase tracking-widest"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Mis Cartones
+            </p>
+            {cartonsUser && cartonsUser.length > 0 && (
+              <span
+                className="text-xs font-mono px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(0,230,118,0.12)', color: 'var(--accent-green)' }}
+              >
+                {cartonsUser.length}
+              </span>
+            )}
+          </div>
+          {nextActionableCarton && nextActionableCopy && (
+            <div
+              className="rounded-xl p-4 space-y-3"
+              style={{ background: 'rgba(0, 230, 118, 0.08)', border: '1px solid rgba(0, 230, 118, 0.2)' }}
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--accent-green)' }}>
+                  Tu siguiente paso
+                </p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {nextActionableCopy.title}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {nextActionableCopy.description}
+                </p>
               </div>
-              <div className="flex justify-between">
-                <span>Contracts:</span>
-                <span className="text-green-700 font-mono">Configured</span>
-              </div>
-              <div className="text-xs text-gray-500 mt-4 space-y-1">
-                <div className="font-semibold">Addresses (from frontend/.env):</div>
-                <div className="font-mono break-all">Carton: {CONTRACT_ADDRESSES.CARTON}</div>
-                <div className="font-mono break-all">Predictions: {CONTRACT_ADDRESSES.PREDICTIONS}</div>
-                <div className="font-mono break-all">Treasury: {CONTRACT_ADDRESSES.TREASURY}</div>
-                <div className="font-mono break-all">USDC: {CONTRACT_ADDRESSES.USDC}</div>
-                <div>Run `anvil` on 127.0.0.1:8545 to interact with these deployments.</div>
-              </div>
+              <Button className="w-full sm:w-auto" onClick={() => navigateToCarton(nextActionableCarton.tokenId)}>
+                {nextActionableCopy.cta}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </>
+          )}
+          {!nextActionableCarton && allCartonsComplete && (
+            <div
+              className="rounded-xl p-4 space-y-1"
+              style={{ background: 'rgba(0, 230, 118, 0.05)', border: '1px solid rgba(0, 230, 118, 0.14)' }}
+            >
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Tienes todos tus cartones al dia.
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Si compras otro, te llevamos directo a completar sus predicciones.
+              </p>
+            </div>
+          )}
+          {!cartonsUser || cartonsUser.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <Ticket className="w-8 h-8 opacity-30" style={{ color: 'var(--text-disabled)' }} />
+              <p className="text-sm font-medium" style={{ color: 'var(--text-disabled)' }}>
+                Sin cartones todavía
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
+                Comprá el primero para empezar a predecir
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {orderedCartonEntries.map(({ tokenId, status }) => (
+                <CartonListItem
+                  key={tokenId.toString()}
+                  tokenId={tokenId}
+                  status={status}
+                  highlighted={nextActionableCarton?.tokenId === tokenId}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Prize distribution ─── */}
+      {tournamentId > 0n && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ border: '1px solid var(--border-color)' }}
+        >
+          {usdcPrizePool !== undefined && usdcPrizePool > 0n && (
+            <div>
+              <div
+                className="px-4 py-2.5 flex justify-between text-xs font-medium"
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+              >
+                <span className="uppercase tracking-wider">Pool USDC</span>
+                <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
+                  {usdcPoolDisplay}
+                </span>
+              </div>
+              {POSITION_META.map((meta, idx) => (
+                <div
+                  key={`usdc-${meta.position}`}
+                  className="px-4 py-2.5 flex items-center justify-between text-sm"
+                  style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>{meta.icon}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{meta.label}</span>
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono-custom)',
+                      fontWeight: 600,
+                      color: meta.position === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
+                    }}
+                  >
+                    {formatAssetValue(usdcPositionAmounts[idx])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

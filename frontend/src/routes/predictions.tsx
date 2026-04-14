@@ -1,12 +1,14 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { ConfirmModal } from '../components/ui/modal'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
 import { ClaimSection } from '../components/ClaimSection'
+import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { toast } from 'sonner'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
@@ -14,11 +16,11 @@ import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
 import type { Game } from '../lib/types'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapPredictionErrorToMessage, mapWinnersErrorToMessage } from '../lib/transaction-errors'
 
 function normalizeCartonParam(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
-
   const trimmed = value.trim()
   return /^\d+$/.test(trimmed) ? trimmed : undefined
 }
@@ -30,39 +32,48 @@ export const Route = createFileRoute('/predictions')({
   }),
 })
 
-const DEADLINE_NOT_SET_MESSAGE = 'Submission deadline is not configured yet. Ask the admin to set it in /admin/dev.'
-const PREDICTION_REVERT_MESSAGE = 'Game predictions were rejected on-chain. Review the form and try again.'
-const WINNERS_REVERT_MESSAGE = 'Winner predictions were rejected on-chain. Review the form and try again.'
+const DEADLINE_NOT_SET_MESSAGE =
+  'El deadline de envío no está configurado. Pide al admin que lo configure en /admin/dev.'
+const PREDICTION_REVERT_MESSAGE = 'Las predicciones de partidos fueron rechazadas en cadena.'
+const WINNERS_REVERT_MESSAGE = 'Las predicciones de ganadores fueron rechazadas en cadena.'
+// TODO: Revisar este criterio con producto. Hoy se marca como "poco habitual"
+// cuando un equipo llega a 10+ goles, pero tal vez deba basarse en goles
+// totales del partido (por ejemplo, 6-5).
+const IMPROBABLE_SCORE_THRESHOLD = 10
 
 function PredictionsPage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const { carton } = useSearch({ from: '/predictions' })
   const normalizedAddress = userAddress as `0x${string}` | undefined
-  // Normalize tokenId once as bigint for on-chain reads
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
 
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [isImprobableScoresModalOpen, setIsImprobableScoresModalOpen] = useState(false)
 
-  const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0,0,0,0])
+  useEffect(() => {
+    if (groups.length > 0 && selectedGroup === null) {
+      setSelectedGroup(groups[0].groupLabel)
+    }
+  }, [groups, selectedGroup])
 
-  const updateWinnerPrediction = (position: 1|2|3|4, teamId: number) => {
+  const [winnerPrediction, setWinnerPrediction] = useState<[number, number, number, number]>([0, 0, 0, 0])
+
+  const updateWinnerPrediction = (position: 1 | 2 | 3 | 4, teamId: number) => {
     setWinnerPrediction((prev) => {
       const updated = [...prev] as [number, number, number, number]
-      updated[position-1] = teamId
+      updated[position - 1] = teamId
       return updated
     })
   }
 
-  const hasValidWinners = useMemo(()=>{
+  const hasValidWinners = useMemo(() => {
     const nonZero = winnerPrediction.filter((teamId) => teamId !== 0)
     return new Set(nonZero).size === winnerPrediction.length && nonZero.length === 4
   }, [winnerPrediction])
 
-  // Lookup for current game state (used by submitted predictions display)
-  const gamesById = useMemo(() => {
-    return new Map(games.map(g => [g.id, g]))
-  }, [games])
+  const gamesById = useMemo(() => new Map(games.map((g) => [g.id, g])), [games])
 
   const { data: ownedCartons } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -77,36 +88,27 @@ function PredictionsPage() {
   })
 
   const selectedCartonIsOwned = useMemo(
-    () => tokenId !== undefined && (ownedCartons?.some((ownedTokenId) => ownedTokenId === tokenId) ?? false),
+    () => tokenId !== undefined && (ownedCartons?.some((id) => id === tokenId) ?? false),
     [ownedCartons, tokenId],
   )
   const hasOwnedCartons = (ownedCartons?.length ?? 0) > 0
 
-  const {data: cartonGroupsState, refetch: refetchCartonUsedState} = useReadContract({
+  const { data: cartonGroupsState, refetch: refetchCartonUsedState } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'used',
     args: [tokenId ?? 0n],
-    query: {
-    enabled: tokenId !== undefined,
-    refetchInterval: 10000,
-    refetchOnWindowFocus: true,
-    }
+    query: { enabled: tokenId !== undefined, refetchInterval: 10000, refetchOnWindowFocus: true },
   })
 
-  const {data: cartonWinnersState, refetch: refetchCartonWinnersState} = useReadContract({
-        address: CONTRACT_ADDRESSES.PREDICTIONS,
-        abi: PREDICTIONS_ABI,
-        functionName: 'winnersPredictions',
-        args: [tokenId ?? 0n],
-        query: {
-        enabled: tokenId !== undefined,
-        refetchInterval: 10000,
-        refetchOnWindowFocus: true,
-        }
-    })
+  const { data: cartonWinnersState, refetch: refetchCartonWinnersState } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'winnersPredictions',
+    args: [tokenId ?? 0n],
+    query: { enabled: tokenId !== undefined, refetchInterval: 10000, refetchOnWindowFocus: true },
+  })
 
-  // Read submitted predictions from contract
   const { data: submittedGames, refetch: refetchSubmittedGames } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -125,26 +127,13 @@ function PredictionsPage() {
     functionName: 'getWinnersPrediction',
     args: [tokenId ?? 0n],
     query: {
-      enabled: tokenId !== undefined && !!cartonWinnersState,
+      enabled: tokenId !== undefined && hasWinnersPrediction(cartonWinnersState),
       refetchInterval: 10000,
       refetchOnWindowFocus: true,
     },
   })
 
-    const cartonStatus = () => {
-        if (cartonGroupsState && cartonWinnersState) {
-            return 'complete'
-        }
-        if (cartonGroupsState) {
-            return 'partial'
-        }
-        if (cartonWinnersState) {
-            return 'partial'
-        }
-        return 'none'
-    }
-  
-  const updateGameScore = (gameId: number, team: 0 | 1, score: number) => {
+  const updateGameScore = (gameId: number, team: 0 | 1, score: number | null) => {
     setGameState((prev) => {
       const updatedGames = prev.games.map((g) =>
         g.id === gameId
@@ -185,28 +174,39 @@ function PredictionsPage() {
       toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
       return
     }
-
-    // Map local Game state to lightweight Prediction struct for the contract
-    const predictions = games.map(g => ({ gameId: g.id, result: g.result }))
+    const predictions = games.map((g) => ({ gameId: g.id, result: g.result }))
     void predictionWrite.simulateAndSend(
-      {
-        address: CONTRACT_ADDRESSES.PREDICTIONS,
-        abi: PREDICTIONS_ABI,
-        functionName: 'submitPrediction',
-        args: [tokenId, predictions],
-      },
+      { address: CONTRACT_ADDRESSES.PREDICTIONS, abi: PREDICTIONS_ABI, functionName: 'submitPrediction', args: [tokenId, predictions] },
       {
         toastId: 'submit-prediction',
-        pendingMessage: 'Waiting for game prediction confirmation...',
-        successMessage: 'Predictions submitted successfully!',
+        pendingMessage: 'Esperando confirmación…',
+        successMessage: '¡Predicciones de partidos enviadas!',
         revertedMessage: PREDICTION_REVERT_MESSAGE,
         mapError: mapPredictionErrorToMessage,
-        onSuccess: async () => {
-          await Promise.all([refetchCartonUsedState(), refetchSubmittedGames()])
-        },
+        onSuccess: async () => { await Promise.all([refetchCartonUsedState(), refetchSubmittedGames()]) },
         logLabel: 'Submit game predictions',
       },
     )
+  }
+
+  const improbableScoreSummaries = useMemo(() => {
+    return games
+      .filter((game) => game.result.some((score) => score !== null && score >= IMPROBABLE_SCORE_THRESHOLD))
+      .map((game) => `${teamsById[game.team1]} ${game.result[0] ?? '?'}-${game.result[1] ?? '?'} ${teamsById[game.team2]}`)
+  }, [games])
+
+  const handleSubmitPredictionClick = () => {
+    if (predictionSubmitBlockedMessage) {
+      toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
+      return
+    }
+
+    if (improbableScoreSummaries.length > 0) {
+      setIsImprobableScoresModalOpen(true)
+      return
+    }
+
+    submitPrediction()
   }
 
   const submitWinners = () => {
@@ -216,27 +216,19 @@ function PredictionsPage() {
       return
     }
     void winnersWrite.simulateAndSend(
-      {
-        address: CONTRACT_ADDRESSES.PREDICTIONS,
-        abi: PREDICTIONS_ABI,
-        functionName: 'predictWinners',
-        args: [tokenId, winnerPrediction],
-      },
+      { address: CONTRACT_ADDRESSES.PREDICTIONS, abi: PREDICTIONS_ABI, functionName: 'predictWinners', args: [tokenId, winnerPrediction] },
       {
         toastId: 'submit-winners',
-        pendingMessage: 'Waiting for winner prediction confirmation...',
-        successMessage: 'Predictions submitted successfully!',
+        pendingMessage: 'Esperando confirmación…',
+        successMessage: '¡Predicciones de ganadores enviadas!',
         revertedMessage: WINNERS_REVERT_MESSAGE,
         mapError: mapWinnersErrorToMessage,
-        onSuccess: async () => {
-          await Promise.all([refetchCartonWinnersState(), refetchSubmittedWinners()])
-        },
+        onSuccess: async () => { await Promise.all([refetchCartonWinnersState(), refetchSubmittedWinners()]) },
         logLabel: 'Submit winner predictions',
       },
     )
   }
 
-  // Read submission deadline and keep a live countdown
   const { data: deadline } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -263,19 +255,75 @@ function PredictionsPage() {
     [deadlineValue, hasDeadlineConfigured, now],
   )
   const isExpired = remaining !== undefined && remaining <= 0
+  const selectedCartonGamesSubmitted = Boolean(cartonGroupsState)
+  const selectedCartonWinnersSubmitted = hasWinnersPrediction(cartonWinnersState)
+  const selectedCartonStatus = getPredictionStatus({
+    gamesSubmitted: selectedCartonGamesSubmitted,
+    winnersSubmitted: selectedCartonWinnersSubmitted,
+    deadline: deadlineValue,
+    now,
+  })
   const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired)
 
-  useEffect(() => {
-    if (tokenId !== undefined || !ownedCartons || ownedCartons.length !== 1) return
+  const ownedCartonStatusContracts = useMemo(() => {
+    if (!ownedCartons?.length) return []
 
-    navigate({
-      to: '/predictions',
-      search: { carton: ownedCartons[0].toString() },
-      replace: true,
+    return ownedCartons.flatMap((ownedTokenId) => [
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'used',
+        args: [ownedTokenId],
+      } as const,
+      {
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'winnersPredictions',
+        args: [ownedTokenId],
+      } as const,
+    ])
+  }, [ownedCartons])
+
+  const { data: ownedCartonStatusResults } = useReadContracts({
+    contracts: ownedCartonStatusContracts,
+    query: {
+      enabled: ownedCartonStatusContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const ownedCartonEntries = useMemo(() => {
+    if (!ownedCartons?.length) return []
+
+    return ownedCartons.map((ownedTokenId, index) => {
+      const gamesSubmitted = Boolean(ownedCartonStatusResults?.[index * 2]?.result)
+      const winnersSubmitted = hasWinnersPrediction(ownedCartonStatusResults?.[index * 2 + 1]?.result)
+      const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue, now })
+
+      return { tokenId: ownedTokenId, status, gamesSubmitted, winnersSubmitted }
     })
-  }, [navigate, ownedCartons, tokenId])
+  }, [deadlineValue, now, ownedCartons, ownedCartonStatusResults])
 
-  // Verify off-chain teams config hash vs on-chain anchor
+  const orderedOwnedCartons = useMemo(() => {
+    return [...ownedCartonEntries].sort((a, b) => {
+      const priorityDiff = getPredictionStatusPriority(a.status) - getPredictionStatusPriority(b.status)
+      if (priorityDiff !== 0) return priorityDiff
+      if (a.tokenId === b.tokenId) return 0
+      return a.tokenId > b.tokenId ? -1 : 1
+    })
+  }, [ownedCartonEntries])
+
+  const selectedCartonEntry = useMemo(
+    () => orderedOwnedCartons.find((entry) => entry.tokenId === tokenId),
+    [orderedOwnedCartons, tokenId],
+  )
+
+  useEffect(() => {
+    if (tokenId !== undefined || orderedOwnedCartons.length === 0) return
+    navigate({ to: '/predictions', search: { carton: orderedOwnedCartons[0].tokenId.toString() }, replace: true })
+  }, [navigate, orderedOwnedCartons, tokenId])
+
   const { data: onchainTeamsHash } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -290,45 +338,44 @@ function PredictionsPage() {
         if (!teams2026Config.length) { setTeamsHashStatus('unknown'); return }
         const local = await computeTeamsHash(teams2026Config)
         setTeamsHashStatus(local.toLowerCase() === (onchainTeamsHash as string).toLowerCase() ? 'match' : 'mismatch')
-      } catch {
-        setTeamsHashStatus('unknown')
-      }
+      } catch { setTeamsHashStatus('unknown') }
     }
     run()
   }, [onchainTeamsHash])
 
   const totalGamesMismatch = totalGames !== undefined && Number(totalGames) !== games.length
+
   const predictionSubmitBlockedMessage = (() => {
-    if (!isConnected) return 'Connect your wallet to submit game predictions.'
-    if (!hasOwnedCartons) return 'Buy a carton before submitting game predictions.'
-    if (!tokenId) return 'Select a carton to submit game predictions.'
-    if (!selectedCartonIsOwned) return 'The selected carton is not owned by the connected wallet.'
+    if (!isConnected) return 'Conecta tu wallet para enviar predicciones de partidos.'
+    if (!hasOwnedCartons) return 'Compra un cartón antes de enviar predicciones.'
+    if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
+    if (!selectedCartonIsOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
     if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
-    if (isExpired) return 'Predictions are already closed for this tournament.'
-    if (teamsHashStatus === 'unset') return 'Teams are not configured on-chain yet.'
-    if (teamsHashStatus === 'mismatch') return 'Teams configuration is out of sync. Ask the admin to update the teams hash.'
-    if (totalGamesMismatch) return 'Game configuration is out of sync. Ask the admin to review total games.'
-    if (cartonGroupsState) return 'Game predictions were already submitted for this carton.'
-    if (predictionWrite.isSimulating) return 'Checking game predictions against the contract.'
-    if (predictionWrite.isPending) return 'Confirm the game prediction transaction in your wallet.'
-    if (predictionWrite.isConfirming) return 'Game prediction transaction is being confirmed on-chain.'
+    if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
+    if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
+    if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
+    if (totalGamesMismatch) return `Desincronización de partidos — cadena espera ${String(totalGames)}, UI tiene ${games.length}.`
+    if (selectedCartonGamesSubmitted) return 'Las predicciones de partidos ya fueron enviadas para este cartón.'
+    if (predictionWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
+    if (predictionWrite.isPending) return 'Confirma la transacción en tu wallet.'
+    if (predictionWrite.isConfirming) return 'Confirmando en cadena…'
     return null
   })()
 
   const winnersSubmitBlockedMessage = (() => {
-    if (!isConnected) return 'Connect your wallet to submit winner predictions.'
-    if (!hasOwnedCartons) return 'Buy a carton before submitting winner predictions.'
-    if (!tokenId) return 'Select a carton to submit winner predictions.'
-    if (!selectedCartonIsOwned) return 'The selected carton is not owned by the connected wallet.'
+    if (!isConnected) return 'Conecta tu wallet para enviar predicciones de ganadores.'
+    if (!hasOwnedCartons) return 'Compra un cartón antes de enviar predicciones.'
+    if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
+    if (!selectedCartonIsOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
     if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
-    if (isExpired) return 'Predictions are already closed for this tournament.'
-    if (teamsHashStatus === 'unset') return 'Teams are not configured on-chain yet.'
-    if (teamsHashStatus === 'mismatch') return 'Teams configuration is out of sync. Ask the admin to update the teams hash.'
-    if (!hasValidWinners) return 'Choose 4 different teams before submitting winners.'
-    if (cartonWinnersState) return 'Winner predictions were already submitted for this carton.'
-    if (winnersWrite.isSimulating) return 'Checking winner predictions against the contract.'
-    if (winnersWrite.isPending) return 'Confirm the winner prediction transaction in your wallet.'
-    if (winnersWrite.isConfirming) return 'Winner prediction transaction is being confirmed on-chain.'
+    if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
+    if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
+    if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
+    if (!hasValidWinners) return 'Elige 4 equipos distintos antes de enviar.'
+    if (selectedCartonWinnersSubmitted) return 'Las predicciones de ganadores ya fueron enviadas para este cartón.'
+    if (winnersWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
+    if (winnersWrite.isPending) return 'Confirma la transacción en tu wallet.'
+    if (winnersWrite.isConfirming) return 'Confirmando en cadena…'
     return null
   })()
 
@@ -336,10 +383,7 @@ function PredictionsPage() {
   const canSubmitWinners = winnersSubmitBlockedMessage === null
 
   const handleCartonChange = (value: string) => {
-    navigate({
-      to: '/predictions',
-      search: { carton: value },
-    })
+    navigate({ to: '/predictions', search: { carton: value } })
   }
 
   const formatCountdown = (secs?: number) => {
@@ -349,271 +393,326 @@ function PredictionsPage() {
     const m = Math.floor((s % 3600) / 60)
     const ss = s % 60
     const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${pad(h)}:${pad(m)}:${pad(ss)}`
+    return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
   }
 
-  /*
-  console.log('RENDER TRIGGERED', {
-    cartonGroupsState,
-    cartonWinnersState,
-    deadline,
-    now,
-    games: games.length
-  }) */
-
-
   return (
-    <>
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">
-          Make Predictions
-        </h2>
-        <p className="text-gray-600 dark:text-gray-300">
-          Predict game results and tournament winners to earn points
+    <div className="max-w-2xl mx-auto space-y-5">
+
+      {/* ─── Page header ─── */}
+      <div>
+        <h1 className="font-display text-3xl font-black uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>
+          Predicciones
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          Predice resultados y ganadores del torneo
         </p>
-        {/* Teams hash verification banner */}
-        {teamsHashStatus !== 'unknown' && (
-          <div className={`mt-3 p-2 rounded text-xs border ${
-            teamsHashStatus === 'match'
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : teamsHashStatus === 'mismatch'
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-          }`}>
-            {teamsHashStatus === 'match' && 'Teams config verified (id + name + group)'}
-            {teamsHashStatus === 'mismatch' && 'Teams config mismatch — check your list'}
-            {teamsHashStatus === 'unset' && 'On-chain teams hash not set'}
-          </div>
-        )}
-        {totalGamesMismatch && (
-          <div className="mt-2 p-2 rounded text-xs border bg-red-50 border-red-200 text-red-700">
-            Total games mismatch — on-chain expects {String(totalGames)}, UI has {games.length}.
-          </div>
-        )}
-        {/* Deadline banner */}
-        <div
-          className={`mt-4 p-3 rounded-lg border text-sm ${
-            !hasDeadlineConfigured
-              ? 'bg-orange-50 border-orange-200 text-orange-700'
-              : isExpired
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-          }`}
-          role="status"
-          aria-live="polite"
-        >
-          {hasDeadlineConfigured && deadlineValue !== undefined ? (
-            isExpired ? (
-              <span>
-                Submission closed • {new Date(deadlineValue * 1000).toLocaleString()}
-              </span>
-            ) : (
-              <span>
-                Predictions close on {new Date(deadlineValue * 1000).toLocaleString()} • {formatCountdown(remaining)}
-              </span>
-            )
-          ) : (
-            <span>Submission deadline is not configured yet.</span>
-          )}
+      </div>
+
+      {/* ─── Status banners ─── */}
+      {teamsHashStatus === 'mismatch' && (
+        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.25)', color: 'var(--accent-red)' }}>
+          ⚠ Configuración de equipos desincronizada — revisa la lista
         </div>
-        {tokenId !== undefined && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-600">
-                #{tokenId.toString()}
-              </div>
-              <span className="text-sm font-medium text-blue-800">
-                Selected Carton #{tokenId.toString()}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Select Carton</CardTitle>
-          <CardDescription>
-            Choose which owned carton you want to use for predictions and claims.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!isConnected ? (
-            <p className="text-sm text-gray-500">Connect your wallet to load your cartones.</p>
-          ) : !hasOwnedCartons ? (
-            <p className="text-sm text-gray-500">This wallet does not own any cartones yet.</p>
-          ) : (
-            <>
-              <Select value={tokenId?.toString()} onValueChange={handleCartonChange}>
-                <SelectTrigger className="w-full sm:max-w-xs">
-                  <SelectValue placeholder="Select a carton" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ownedCartons?.map((ownedTokenId) => (
-                    <SelectItem key={ownedTokenId.toString()} value={ownedTokenId.toString()}>
-                      Carton #{ownedTokenId.toString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {tokenId !== undefined && !selectedCartonIsOwned && (
-                <p className="text-sm text-red-600">
-                  The selected carton does not belong to the connected wallet.
-                </p>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Game Predictions */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-semibold">Game Predictions</h3>
-            <p className="text-sm text-muted-foreground">
-              Predict the scores for {games.length} group-stage games
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {import.meta.env.DEV && (
-              <Button variant="outline" size="sm" onClick={fillRandomScores} disabled={!!cartonGroupsState || isExpired}>
-                Fill Random
-              </Button>
-            )}
-          </div>
+      )}
+      {teamsHashStatus === 'unset' && (
+        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: 'rgba(255,214,0,0.08)', border: '1px solid rgba(255,214,0,0.2)', color: 'var(--accent-gold)' }}>
+          ⚠ Hash de equipos no configurado en cadena
         </div>
-
-        <GroupsView
-          groups={groups}
-          disabled={!canEditSelectedCarton || !!cartonGroupsState}
-          onScoreChange={updateGameScore}
-        />
-
-        <Button
-          className="w-full"
-          disabled={!canSubmitGames}
-          onClick={submitPrediction}
-        >
-          {predictionWrite.isSimulating
-            ? 'Checking...'
-            : predictionWrite.isPending
-              ? 'Confirming...'
-              : predictionWrite.isConfirming
-                ? 'Processing...'
-                : 'Submit Game Predictions'}
-        </Button>
-        {predictionSubmitBlockedMessage && (
-          <p className="text-sm text-muted-foreground">{predictionSubmitBlockedMessage}</p>
-        )}
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-2 mt-8">
-        {/* Winner Predictions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🏆 Winner Predictions
-            </CardTitle>
-            <CardDescription>
-              Predict the top 4 teams in the tournament
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <TeamWinnerSelector label="1st Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(1, teamId)}/>
-              <TeamWinnerSelector label="2nd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(2, teamId)}/>
-              <TeamWinnerSelector label="3rd Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(3, teamId)}/>
-              <TeamWinnerSelector label="4th Place" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || !!cartonWinnersState} onChange={(teamId) => updateWinnerPrediction(4, teamId)}/>
-              <Button
-                className="w-full"
-                disabled={!canSubmitWinners}
-                onClick={submitWinners}
-              >
-                {winnersWrite.isSimulating
-                  ? 'Checking...'
-                  : winnersWrite.isPending
-                    ? 'Confirming...'
-                    : winnersWrite.isConfirming
-                      ? 'Processing...'
-                      : 'Submit Winner Predictions'}
-              </Button>
-              {winnersSubmitBlockedMessage && (
-                <p className="text-sm text-muted-foreground">{winnersSubmitBlockedMessage}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Prize Claims */}
-      {tokenId !== undefined && (
-        <div className="mt-8">
-          <ClaimSection tokenId={tokenId} />
+      )}
+      {totalGamesMismatch && (
+        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.25)', color: 'var(--accent-red)' }}>
+          ⚠ Desincronización de partidos — cadena: {String(totalGames)}, UI: {games.length}
         </div>
       )}
 
-      {/* Your Predictions */}
-      <div className="mt-12">
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Current Predictions</CardTitle>
-            <CardDescription>
-              View and track your submitted predictions
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!tokenId ? (
-              <div className="text-center py-8 text-gray-500">
-                Select a carton to view predictions.
-              </div>
-            ) : cartonStatus() === 'none' ? (
-              <div className="text-center py-8 text-gray-500">
-                No predictions submitted yet for Carton #{tokenId.toString()}.
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Submitted Game Predictions */}
-                {submittedGames && (submittedGames as unknown as { gameId: number; result: [number, number] }[]).length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-3">Game Predictions</h4>
-                    <div className="grid gap-2">
-                      {(submittedGames as unknown as { gameId: number; result: [number, number] }[]).map((pred) => {
-                        const game = gamesById.get(pred.gameId)
-                        return (
-                          <div key={pred.gameId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
-                            <span className="flex-1 text-right">{game ? teamsById[game.team1] : `Team ?`}</span>
-                            <span className="mx-3 font-mono font-bold">{Number(pred.result[0])} - {Number(pred.result[1])}</span>
-                            <span className="flex-1 text-left">{game ? teamsById[game.team2] : `Team ?`}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+      {/* ─── Deadline banner ─── */}
+      <div
+        className="rounded-lg px-4 py-2.5 flex items-center justify-between text-sm"
+        role="status"
+        aria-live="polite"
+        style={{
+          background: !hasDeadlineConfigured ? 'rgba(255,214,0,0.08)' : isExpired ? 'rgba(255,77,109,0.1)' : 'rgba(255,214,0,0.08)',
+          border: `1px solid ${!hasDeadlineConfigured ? 'rgba(255,214,0,0.2)' : isExpired ? 'rgba(255,77,109,0.25)' : 'rgba(255,214,0,0.2)'}`,
+          color: isExpired ? 'var(--accent-red)' : 'var(--accent-gold)',
+        }}
+      >
+        <span>
+          {hasDeadlineConfigured && deadlineValue !== undefined ? (
+            isExpired
+              ? `🔒 Cerrado · ${new Date(deadlineValue * 1000).toLocaleDateString()}`
+              : `⏱ Cierra el ${new Date(deadlineValue * 1000).toLocaleDateString()}`
+          ) : (
+            '⚠ Deadline no configurado'
+          )}
+        </span>
+        {!isExpired && remaining !== undefined && (
+          <span style={{ fontFamily: 'var(--font-mono-custom)', fontWeight: 600 }}>
+            {formatCountdown(remaining)}
+          </span>
+        )}
+      </div>
 
-                {/* Submitted Winner Predictions */}
-                {submittedWinners && (submittedWinners as unknown as number[]).some((id) => Number(id) !== 0) && (
-                  <div>
-                    <h4 className="font-semibold mb-3">Winner Predictions</h4>
-                    <div className="grid gap-2">
-                      {(['1st', '2nd', '3rd', '4th'] as const).map((label, i) => {
-                        const teamId = Number((submittedWinners as unknown as number[])[i])
-                        return (
-                          <div key={label} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
-                            <span className="font-medium w-8">{label}</span>
-                            <span>{teamId > 0 ? teamsById[teamId] ?? `Team #${teamId}` : '—'}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+      {/* ─── Carton selector ─── */}
+      <div
+        className="rounded-xl p-4 space-y-3"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+      >
+        <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+          Seleccionar Cartón
+        </p>
+        {!isConnected ? (
+          <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>Conecta tu wallet para ver tus cartones.</p>
+        ) : !hasOwnedCartons ? (
+          <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>Esta wallet no tiene cartones aún.</p>
+        ) : (
+          <>
+            <Select value={tokenId?.toString()} onValueChange={handleCartonChange}>
+              <SelectTrigger className="w-full sm:max-w-xs">
+                <SelectValue placeholder="Selecciona un cartón" />
+              </SelectTrigger>
+              <SelectContent>
+                {orderedOwnedCartons.map((entry) => (
+                  <SelectItem key={entry.tokenId.toString()} value={entry.tokenId.toString()}>
+                    Carton #{entry.tokenId.toString()} · {entry.status === 'partial' ? 'pendiente' : entry.status === 'none' ? 'sin empezar' : entry.status === 'complete' ? 'completo' : 'vencido'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {tokenId !== undefined && !selectedCartonIsOwned && (
+              <p className="text-sm" style={{ color: 'var(--accent-red)' }}>
+                Este cartón no pertenece a la wallet conectada.
+              </p>
+            )}
+            {tokenId !== undefined && selectedCartonIsOwned && selectedCartonEntry && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <TokenStatusBadge status={selectedCartonStatus} />
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {!selectedCartonEntry.gamesSubmitted
+                    ? 'Siguiente paso: enviar los partidos.'
+                    : !selectedCartonEntry.winnersSubmitted
+                      ? 'Siguiente paso: elegir los 4 ganadores.'
+                      : selectedCartonStatus === 'expired'
+                        ? 'Este carton quedo incompleto al cerrar el plazo.'
+                        : 'Este carton ya esta completo.'}
+                </span>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </>
+        )}
       </div>
-    </>
+
+      {/* ─── Game Predictions ─── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: '1px solid var(--border-color)' }}
+      >
+        {/* Section header */}
+        <div
+          className="px-4 py-3 flex items-center justify-between"
+          style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
+        >
+          <div>
+            <p className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+              Partidos
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              {games.length} partidos de fase de grupos
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedCartonGamesSubmitted && (
+              <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(0,230,118,0.1)', color: 'var(--accent-green)' }}>
+                ✓ Enviado
+              </span>
+            )}
+            {import.meta.env.DEV && (
+              <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={selectedCartonGamesSubmitted || isExpired}>
+                Aleatorio
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Group tabs */}
+        <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
+          <button onClick={() => { const idx = groups.findIndex(g => g.groupLabel === selectedGroup); if (idx > 0) setSelectedGroup(groups[idx - 1].groupLabel) }} disabled={!selectedGroup || groups.findIndex(g => g.groupLabel === selectedGroup) <= 0} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
+          <div className="flex gap-1.5 rounded-lg p-1 flex-1" style={{ background: 'var(--bg-card)' }}>
+            {groups.map((group) => (<button key={group.groupLabel} onClick={() => setSelectedGroup(group.groupLabel)} className="flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-all" style={{ background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent', color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)', border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}` }}>{group.groupLabel}</button>))}
+          </div>
+          <button onClick={() => { const idx = groups.findIndex(g => g.groupLabel === selectedGroup); if (idx < groups.length - 1) setSelectedGroup(groups[idx + 1].groupLabel) }} disabled={!selectedGroup || groups.findIndex(g => g.groupLabel === selectedGroup) >= groups.length - 1} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
+        </div>
+
+        {/* Group matches */}
+        <div className="p-3">
+          <GroupsView
+            groups={groups}
+            disabled={!canEditSelectedCarton || selectedCartonGamesSubmitted}
+            onScoreChange={updateGameScore}
+            selectedGroup={selectedGroup}
+          />
+        </div>
+
+        {/* Submit games */}
+        <div
+          className="px-4 py-3 space-y-2"
+          style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-color)' }}
+        >
+          <Button
+            className="w-full h-11 text-base font-semibold"
+            disabled={!canSubmitGames}
+            onClick={handleSubmitPredictionClick}
+          >
+            {predictionWrite.isSimulating ? 'Verificando…' : predictionWrite.isPending ? 'Confirmando…' : predictionWrite.isConfirming ? 'Procesando…' : 'Enviar Predicciones de Partidos'}
+          </Button>
+          {predictionSubmitBlockedMessage && (
+            <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+              {predictionSubmitBlockedMessage}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <ConfirmModal
+        isOpen={isImprobableScoresModalOpen}
+        onClose={() => setIsImprobableScoresModalOpen(false)}
+        title="Confirmar marcadores poco habituales"
+        message={`Hay ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} donde un equipo anota 10 o más goles: ${improbableScoreSummaries.join(', ')}. ¿Seguro que querés enviar estas predicciones?`}
+        confirmLabel="Sí, enviar"
+        variant="warning"
+        onConfirm={submitPrediction}
+      />
+
+      {/* ─── Winner Predictions ─── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: '1px solid var(--border-color)' }}
+      >
+        <div
+          className="px-4 py-3 flex items-center justify-between"
+          style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
+        >
+          <div>
+            <p className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+              Ganadores del Torneo
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Predice los 4 finalistas
+            </p>
+          </div>
+          {selectedCartonWinnersSubmitted && (
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(0,230,118,0.1)', color: 'var(--accent-green)' }}>
+              ✓ Enviado
+            </span>
+          )}
+        </div>
+
+        <div className="p-4 space-y-3">
+          <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(1, teamId)} />
+          <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(2, teamId)} />
+          <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(3, teamId)} />
+          <TeamWinnerSelector label="4to Lugar" teams={teams2026} selectedTeams={winnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(4, teamId)} />
+        </div>
+
+        <div
+          className="px-4 py-3 space-y-2"
+          style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-color)' }}
+        >
+          <Button
+            className="w-full h-11 text-base font-semibold"
+            disabled={!canSubmitWinners}
+            onClick={submitWinners}
+          >
+            {winnersWrite.isSimulating ? 'Verificando…' : winnersWrite.isPending ? 'Confirmando…' : winnersWrite.isConfirming ? 'Procesando…' : 'Enviar Predicciones de Ganadores'}
+          </Button>
+          {winnersSubmitBlockedMessage && (
+            <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+              {winnersSubmitBlockedMessage}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Prize Claims ─── */}
+      {tokenId !== undefined && <ClaimSection tokenId={tokenId} />}
+
+      {/* ─── Submitted predictions display ─── */}
+      {tokenId !== undefined && selectedCartonStatus !== 'none' && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ border: '1px solid var(--border-color)' }}
+        >
+          <div
+            className="px-4 py-3"
+            style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
+          >
+            <p className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+              Tus Predicciones
+            </p>
+          </div>
+          <div className="p-4 space-y-5" style={{ background: 'var(--bg-card)' }}>
+            {/* Submitted game predictions */}
+            {submittedGames && (submittedGames as unknown as { gameId: number; result: [number, number] }[]).length > 0 && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>
+                  Partidos
+                </p>
+                <div className="space-y-1">
+                  {(submittedGames as unknown as { gameId: number; result: [number, number] }[]).map((pred) => {
+                    const game = gamesById.get(pred.gameId)
+                    return (
+                      <div
+                        key={pred.gameId}
+                        className="flex items-center text-sm py-1.5 px-3 rounded-lg"
+                        style={{ background: 'var(--bg-elevated)' }}
+                      >
+                        <span className="flex-1 text-right truncate" style={{ color: 'var(--text-primary)' }}>
+                          {game ? teamsById[game.team1] : '?'}
+                        </span>
+                        <span
+                          className="mx-4 font-bold text-base"
+                          style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--accent-green)', minWidth: '3rem', textAlign: 'center' }}
+                        >
+                          {Number(pred.result[0])} · {Number(pred.result[1])}
+                        </span>
+                        <span className="flex-1 text-left truncate" style={{ color: 'var(--text-primary)' }}>
+                          {game ? teamsById[game.team2] : '?'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Submitted winner predictions */}
+            {submittedWinners && (submittedWinners as unknown as number[]).some((id) => Number(id) !== 0) && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>
+                  Ganadores
+                </p>
+                <div className="space-y-1.5">
+                  {(['🥇', '🥈', '🥉', '4°'] as const).map((icon, i) => {
+                    const teamId = Number((submittedWinners as unknown as number[])[i])
+                    return (
+                      <div
+                        key={icon}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm"
+                        style={{ background: 'var(--bg-elevated)' }}
+                      >
+                        <span className="text-base w-6 text-center">{icon}</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                          {teamId > 0 ? teamsById[teamId] ?? `#${teamId}` : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

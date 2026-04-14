@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: March 19, 2026*
+*Last updated: April 10, 2026*
 
 ---
 
@@ -58,6 +58,92 @@ All critical bugs fixed. All dead code cleaned up:
 - Leaderboard no longer depends on `getPositions()` storage array; frontend reconstructs rankings from `Carton.nextTokenId()` + `Predictions.tokenPositions(tokenId)` and filters stale entries with `positionsVersion` / `tokenPositionsVersion`
 - Alternative considered for future: use `PositionsUpdated` logs as the leaderboard source, optionally storing a `lastPositionsBlock` pointer to query a narrow block range instead of scanning long history
 
+### Next Session Plan: USDC-Only Cleanup (Apr 10, 2026)
+
+Decision for next implementation pass:
+
+- Remove ETH as a business/payment asset before production
+- Keep USDC as the only purchase currency and prize currency
+- Do not tackle smart accounts / gas sponsorship in this pass
+- ETH/native asset remains relevant only as gas for now, not as purchase/prize UX
+
+Why this refactor is worth doing:
+
+- Simpler pricing, prize-pool messaging, and user explanation
+- Less frontend duplication and fewer support edge cases
+- Avoid mixed-asset accounting before launch
+- Better fit for the intended future direction (`USDC-only` product flow)
+
+Implementation scope for the next session:
+
+1. Smart contracts
+   - `src/Carton.sol`
+   - Disable ETH purchase onchain
+   - Keep `buyCartonWithToken()` as the active purchase path
+   - Prefer a minimal diff: make `buyCarton()` unusable rather than redesigning unrelated storage unless that becomes awkward in tests
+
+2. Treasury / prize logic
+   - `src/Treasury.sol`
+   - Do not do a large single-asset rewrite yet
+   - Leave multi-asset internals in place if that keeps the diff small and testable
+   - Stop configuring/using ETH for normal product flows
+
+3. Deployment / setup
+   - `script/Deploy.s.sol`
+   - Remove ETH price setup
+   - Remove ETH prize distribution setup
+   - Keep only USDC token acceptance, USDC price, and USDC prize distribution
+
+4. Frontend buy flow
+   - `frontend/src/routes/index.tsx`
+   - Remove ETH/USDC purchase toggle
+   - Remove ETH price reads and ETH buy flow
+   - Keep only approve + buy with USDC
+   - Simplify pool and prize copy to USDC-only
+
+5. Frontend prize views
+   - `frontend/src/routes/leaderboard.tsx`
+   - `frontend/src/components/ClaimSection.tsx`
+   - Remove ETH pool/prize/claim UI
+   - Show only USDC amounts in product-facing screens
+
+6. Frontend supporting cleanup
+   - `frontend/src/lib/transaction-errors.ts`
+   - Simplify buy/claim error mapping away from ETH-vs-USDC branching where possible
+   - `frontend/src/routes/admin.dev.tsx`
+   - Simplify close-tournament asset selection to USDC-only if admin UX should match product direction
+   - `frontend/src/routes/__root.tsx`
+   - Consider keeping native balance visible for gas awareness even if ETH is no longer a product asset
+   - `frontend/src/hooks/useBalance.ts`
+   - Revisit whether both balances are still needed in the header once the main flow is cleaned up
+
+7. Tests
+   - `test/Carton.t.sol`
+   - `test/ERC20Integration.t.sol`
+   - `test/Predictions.t.sol` if needed by prize configuration changes
+   - Remove or update tests that rely on ETH purchase / ETH prize setup in the main flow
+   - Keep broader Treasury multi-asset tests unless they become noise or block the refactor unnecessarily
+
+Execution order for next session:
+
+1. Update contracts + deploy script
+2. Fix and run Foundry tests
+3. Clean frontend buy flow
+4. Clean frontend prize/claim screens
+5. Run `npm run lint` and `npm run build` in `frontend/`
+
+Verification checklist for the refactor:
+
+- `forge build`
+- `forge test`
+- `cd frontend && npm run lint`
+- `cd frontend && npm run build`
+
+Open product note:
+
+- Because smart accounts are out of scope for this pass, users will still need native gas even in a `USDC-only` product flow.
+- That means the app can remove ETH as a payment/prize concept now, but should not accidentally hide all signals related to native gas readiness.
+
 ---
 
 ## MVP Roadmap
@@ -109,6 +195,72 @@ The complete tournament flow is:
 - `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed
 
 ### Pre-MVP: Validation & Traction (Pending Decision)
+
+### Frontend UX Focus (Apr 2026)
+
+Context: the MVP flow is functionally complete, so the next highest-leverage work is reducing friction in the core loop `buy carton -> submit predictions -> claim prize`.
+
+#### Recently shipped
+
+- Home now prioritizes the next actionable carton instead of treating all owned cartons equally
+- After a successful purchase, the user is redirected directly into `/predictions?carton=<newTokenId>`
+- The home screen surfaces a clear "Tu siguiente paso" CTA for the best carton to continue
+- The predictions screen auto-selects the most actionable owned carton when opened without a query param
+- Carton status handling was normalized (`none` / `partial` / `complete` / `expired`) and winner-prediction detection was made consistent in the frontend
+
+#### Next UX sprint recommendation (Priority Order)
+
+1. Guided prediction flow (`/predictions`)
+   - Add an explicit step model:
+     - Step 1: select carton
+     - Step 2: fill group match scores
+     - Step 3: choose top-4 winners
+     - Step 4: review / submit
+   - Keep it in the same route first; avoid a multi-route wizard unless truly needed
+   - Goal: reduce cognitive load on the longest, densest screen in the product
+
+2. Better blocked/empty/success states
+   - Improve copy + primary CTA for:
+     - wallet disconnected
+     - no cartons owned
+     - deadline expired
+     - teams hash unset / mismatch
+     - tournament not fully configured
+   - After successful submit, show a stronger "what next" cue instead of only a toast
+   - Goal: users should always know the next action, even when blocked
+
+3. Claim visibility upgrade
+   - Surface claimable state earlier from `/` and `/leaderboard`, not only inside `/predictions`
+   - Consider a lightweight home card like "You have prizes ready to claim"
+   - Goal: make rewards more visible and emotionally sticky
+
+4. Mobile polish on dense screens
+   - Revisit `/predictions`, `/leaderboard`, and fixtures on smaller screens
+   - Focus on hierarchy, spacing, sticky context, and readability over visual ornament
+   - Goal: reduce the feeling of "too much info at once"
+
+#### Product ideas worth evaluating after the UX sprint
+
+- Personal dashboard card on home:
+  - active cartons
+  - predictions pending
+  - best current rank
+  - claimable prizes
+- Tournament readiness panel for users:
+  - deadline set
+  - teams synced
+  - results phase / claim phase
+- Smarter onboarding logic:
+  - if connected user has unfinished cartons, bias the app toward prediction continuation rather than purchase
+
+#### Suggested execution order
+
+1. Finish guided prediction flow
+2. Add stronger blocked/success states
+3. Expose claimable prizes earlier
+4. Do mobile cleanup pass
+
+This keeps work tightly focused on conversion through the main loop before branching into broader product experiments.
 
 Antes de seguir avanzando con el frontend, evaluar si conviene lanzar una landing + waitlist para validar tracción. Decisiones pendientes:
 
@@ -214,6 +366,7 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 - **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
+- **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
 
 ## Related Documents
 
