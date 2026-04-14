@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
-import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI, ZERO_ADDRESS } from '../lib/contracts'
-import { formatEther, formatUnits } from 'viem'
+import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../lib/contracts'
+import { formatUnits } from 'viem'
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { useUserBalance } from '../hooks/useBalance'
@@ -26,16 +26,9 @@ function HomePage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
-  const [currency, setCurrency] = useState<'ETH' | 'USDC'>('ETH')
-  const { eth: ethBalance, usdc: usdcBalance } = useUserBalance()
+  const { usdc: usdcBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
   const approveWrite = useSimulatedContractWrite()
-
-  const { data: cartonPrice, isLoading: priceLoading } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'cartonPrice',
-  })
 
   const { data: activeTournamentId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -64,26 +57,19 @@ function HomePage() {
 
   const usdcPriceValue = usdcPrice ?? 0n
   const usdcAllowanceValue = usdcAllowance ?? 0n
-  const needsApproval = currency === 'USDC' && usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
+  const needsApproval = usdcPriceValue > 0n && usdcAllowanceValue < usdcPriceValue
   const isBuying = purchaseWrite.isBusy
   const isApproving = approveWrite.isBusy
 
   const priceDisplay =
-    currency === 'ETH'
-      ? priceLoading
-        ? '…'
-        : cartonPrice
-          ? `${formatEther(cartonPrice)} ETH`
-          : '—'
-      : usdcPriceLoading
-        ? '…'
-        : usdcPriceValue > 0n
-          ? `${formatUnits(usdcPriceValue, 6)} USDC`
-          : '—'
+    usdcPriceLoading
+      ? '…'
+      : usdcPriceValue > 0n
+        ? `${formatUnits(usdcPriceValue, 6)} USDC`
+        : '—'
 
   const buyButtonText = () => {
     if (!isConnected) return 'Conecta tu wallet para comprar'
-    if (currency === 'ETH') return isBuying ? 'Comprando…' : 'Comprar con ETH'
     return isBuying ? 'Comprando…' : 'Comprar con USDC'
   }
 
@@ -100,14 +86,9 @@ function HomePage() {
 
   const buyBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para comprar un cartón.'
-    if (currency === 'ETH') {
-      if (priceLoading) return 'Cargando precio ETH…'
-      if (!cartonPrice) return 'El precio ETH no está configurado aún.'
-    } else {
-      if (usdcPriceLoading) return 'Cargando precio USDC…'
-      if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
-      if (needsApproval) return 'Aprueba USDC antes de comprar.'
-    }
+    if (usdcPriceLoading) return 'Cargando precio USDC…'
+    if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
+    if (needsApproval) return 'Aprueba USDC antes de comprar.'
     if (purchaseWrite.isSimulating) return 'Verificando la compra…'
     if (purchaseWrite.isPending) return 'Confirma la compra en tu wallet.'
     if (purchaseWrite.isConfirming) return 'Confirmando compra en cadena…'
@@ -118,18 +99,8 @@ function HomePage() {
 
   const balanceDisplay = () => {
     if (!isConnected) return null
-    if (currency === 'ETH')
-      return ethBalance.isLoading ? '…' : `${ethBalance.amount} ${ethBalance.symbol}`
     return usdcBalance.isLoading ? '…' : `${usdcBalance.amount} ${usdcBalance.symbol}`
   }
-
-  const { data: ethPrizePool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: tournamentId > 0n ? [tournamentId, ZERO_ADDRESS] : undefined,
-    query: { enabled: tournamentId > 0n },
-  })
 
   const { data: usdcPrizePool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
@@ -141,20 +112,12 @@ function HomePage() {
 
   const prizeContracts = useMemo(() => {
     if (tournamentId === 0n) return []
-    return POSITION_META.flatMap((meta) => [
-      {
-        address: CONTRACT_ADDRESSES.TREASURY,
-        abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount',
-        args: [tournamentId, ZERO_ADDRESS, BigInt(meta.position)],
-      } as const,
-      {
-        address: CONTRACT_ADDRESSES.TREASURY,
-        abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount',
-        args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
-      } as const,
-    ])
+    return POSITION_META.map((meta) => ({
+      address: CONTRACT_ADDRESSES.TREASURY,
+      abi: TREASURY_ABI,
+      functionName: 'getUserPrizeAmount',
+      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
+    }) as const)
   }, [tournamentId])
 
   const { data: prizeAmounts } = useReadContracts({
@@ -162,47 +125,14 @@ function HomePage() {
     query: { enabled: prizeContracts.length > 0 },
   })
 
-  const ethPositionAmounts = POSITION_META.map((_, index) => {
-    const entry = prizeAmounts?.[index * 2]
-    return (entry?.result as bigint | undefined) ?? 0n
-  })
-
   const usdcPositionAmounts = POSITION_META.map((_, index) => {
-    const entry = prizeAmounts?.[index * 2 + 1]
+    const entry = prizeAmounts?.[index]
     return (entry?.result as bigint | undefined) ?? 0n
   })
 
-  const formatAssetValue = (amount: bigint, asset: 'ETH' | 'USDC') => {
+  const formatAssetValue = (amount: bigint) => {
     if (amount === 0n) return `—`
-    return asset === 'ETH'
-      ? `${Number(formatEther(amount)).toFixed(3)} ETH`
-      : `${Number(formatUnits(amount, 6)).toFixed(2)} USDC`
-  }
-
-  const buyCartonWithEth = () => {
-    if (!cartonPrice) return
-    void purchaseWrite.simulateAndSend(
-      { address: CONTRACT_ADDRESSES.CARTON, abi: CARTON_ABI, functionName: 'buyCarton', args: [], value: cartonPrice },
-      {
-        toastId: 'buy-carton-eth',
-        pendingMessage: 'Esperando confirmación de compra…',
-        successMessage: '¡Cartón comprado con ETH!',
-        revertedMessage: 'La compra con ETH fue rechazada en cadena.',
-        mapError: (error) => mapBuyCartonError(error, 'ETH'),
-        onSuccess: async () => {
-          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
-          const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
-            if (latest === undefined || current > latest) return current
-            return latest
-          }, undefined)
-
-          if (latestTokenId !== undefined) {
-            navigateToCarton(latestTokenId)
-          }
-        },
-        logLabel: 'Buy carton with ETH',
-      },
-    )
+    return `${Number(formatUnits(amount, 6)).toFixed(2)} USDC`
   }
 
   const buyCartonWithUsdc = () => {
@@ -214,7 +144,7 @@ function HomePage() {
         pendingMessage: 'Esperando confirmación de compra…',
         successMessage: '¡Cartón comprado con USDC!',
         revertedMessage: 'La compra con USDC fue rechazada en cadena.',
-        mapError: (error) => mapBuyCartonError(error, 'USDC'),
+        mapError: mapBuyCartonError,
         onSuccess: async () => {
           const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
           const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
@@ -248,8 +178,7 @@ function HomePage() {
   }
 
   const handleBuyClick = () => {
-    if (currency === 'ETH') buyCartonWithEth()
-    else buyCartonWithUsdc()
+    buyCartonWithUsdc()
   }
 
   const { data: cartonsUser, refetch: refetchCartonsUser } = useReadContract({
@@ -287,9 +216,6 @@ function HomePage() {
     return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
   }
 
-  const ethPoolDisplay = ethPrizePool !== undefined
-    ? `${Number(formatEther(ethPrizePool)).toFixed(3)} ETH`
-    : '—'
   const usdcPoolDisplay = usdcPrizePool !== undefined
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
     : '—'
@@ -413,13 +339,7 @@ function HomePage() {
               className="font-display text-5xl font-black leading-none"
               style={{ color: 'var(--accent-gold)', textShadow: 'var(--glow-gold)' }}
             >
-              {ethPoolDisplay}
-            </span>
-            <span
-              className="text-xl font-semibold"
-              style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono-custom)' }}
-            >
-              + {usdcPoolDisplay}
+              {usdcPoolDisplay}
             </span>
           </div>
         </section>
@@ -437,25 +357,9 @@ function HomePage() {
           >
             Comprar Cartón
           </h2>
-          {/* Currency toggle */}
-          <div
-            className="flex rounded-lg overflow-hidden text-sm"
-            style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            {(['ETH', 'USDC'] as const).map((c) => (
-              <button
-                key={c}
-                onClick={() => setCurrency(c)}
-                className="px-3 py-1.5 font-medium transition-colors"
-                style={{
-                  background: currency === c ? 'var(--accent-green)' : 'transparent',
-                  color: currency === c ? 'var(--bg-base)' : 'var(--text-secondary)',
-                }}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+          <span className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+            USDC only
+          </span>
         </div>
 
         {/* Price */}
@@ -474,7 +378,7 @@ function HomePage() {
         </div>
 
         {/* Approve USDC */}
-        {currency === 'USDC' && needsApproval && (
+        {needsApproval && (
           <>
             <Button
               variant="outline"
@@ -592,43 +496,6 @@ function HomePage() {
           className="rounded-xl overflow-hidden"
           style={{ border: '1px solid var(--border-color)' }}
         >
-          {/* ETH section */}
-          {ethPrizePool !== undefined && ethPrizePool > 0n && (
-            <div>
-              <div
-                className="px-4 py-2.5 flex justify-between text-xs font-medium"
-                style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-              >
-                <span className="uppercase tracking-wider">Pool ETH</span>
-                <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
-                  {ethPoolDisplay}
-                </span>
-              </div>
-              {POSITION_META.map((meta, idx) => (
-                <div
-                  key={`eth-${meta.position}`}
-                  className="px-4 py-2.5 flex items-center justify-between text-sm"
-                  style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>{meta.icon}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{meta.label}</span>
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono-custom)',
-                      fontWeight: 600,
-                      color: meta.position === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
-                    }}
-                  >
-                    {formatAssetValue(ethPositionAmounts[idx], 'ETH')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* USDC section */}
           {usdcPrizePool !== undefined && usdcPrizePool > 0n && (
             <div>
               <div
@@ -657,7 +524,7 @@ function HomePage() {
                       color: meta.position === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
                     }}
                   >
-                    {formatAssetValue(usdcPositionAmounts[idx], 'USDC')}
+                    {formatAssetValue(usdcPositionAmounts[idx])}
                   </span>
                 </div>
               ))}

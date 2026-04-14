@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
-import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
-import { formatEther, formatUnits } from 'viem'
+import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
+import { formatUnits } from 'viem'
 
 export const Route = createFileRoute('/leaderboard')({
   component: LeaderboardPage,
@@ -106,27 +106,11 @@ function LeaderboardPage() {
     [userTokensRaw],
   )
 
-  const { data: ethClosed } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'isClosedTournament',
-    args: tournamentId > 0n ? [tournamentId, ZERO_ADDRESS] : undefined,
-    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
-  })
-
   const { data: usdcClosed } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'isClosedTournament',
     args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
-  })
-
-  const { data: ethPool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: tournamentId > 0n ? [tournamentId, ZERO_ADDRESS] : undefined,
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
@@ -137,18 +121,6 @@ function LeaderboardPage() {
     args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
-
-  const ethPrizeContracts = useMemo(
-    () =>
-      positionsArray.map((_, i) => ({
-        address: CONTRACT_ADDRESSES.TREASURY,
-        abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount' as const,
-        args: [tournamentId, ZERO_ADDRESS, BigInt(i + 1)] as const,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(','), tournamentId],
-  )
 
   const usdcPrizeContracts = useMemo(
     () =>
@@ -162,11 +134,6 @@ function LeaderboardPage() {
     [positionsArray.join(','), tournamentId],
   )
 
-  const { data: ethPrizesData } = useReadContracts({
-    contracts: ethPrizeContracts,
-    query: { enabled: Boolean(ethClosed) && ethPrizeContracts.length > 0, refetchInterval: 10_000 },
-  })
-
   const { data: usdcPrizesData } = useReadContracts({
     contracts: usdcPrizeContracts,
     query: { enabled: Boolean(usdcClosed) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
@@ -178,12 +145,11 @@ function LeaderboardPage() {
         rank: i + 1,
         tokenId,
         points: (pointsData?.[i]?.result as bigint | undefined) ?? 0n,
-        ethPrize: ethClosed ? ((ethPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
         usdcPrize: usdcClosed ? ((usdcPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
         isYours: userTokenSet.has(tokenId.toString()),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(','), pointsData, ethPrizesData, usdcPrizesData, userTokenSet, ethClosed, usdcClosed],
+    [positionsArray.join(','), pointsData, usdcPrizesData, userTokenSet, usdcClosed],
   )
 
   const yourBestRank = useMemo(() => {
@@ -201,10 +167,7 @@ function LeaderboardPage() {
 
   const formatPrize = (amount: bigint, decimals: number, symbol: string) => {
     if (amount === 0n) return '—'
-    const formatted =
-      decimals === 18
-        ? Number(formatEther(amount)).toFixed(4)
-        : Number(formatUnits(amount, decimals)).toFixed(2)
+    const formatted = Number(formatUnits(amount, decimals)).toFixed(2)
     return `${formatted} ${symbol}`
   }
 
@@ -212,12 +175,6 @@ function LeaderboardPage() {
     {
       label: 'Jugadores',
       value: positionsArray.length > 0 ? String(positionsArray.length) : '—',
-    },
-    {
-      label: 'Pool ETH',
-      value: ethPool !== undefined ? `${Number(formatEther(ethPool)).toFixed(3)}` : '—',
-      unit: 'ETH',
-      sub: ethClosed ? 'Cerrado' : 'En vivo',
     },
     {
       label: 'Pool USDC',
@@ -246,7 +203,7 @@ function LeaderboardPage() {
       </div>
 
       {/* ─── Stats cards ─── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {statCards.map((card) => (
           <div
             key={card.label}
@@ -280,13 +237,12 @@ function LeaderboardPage() {
       >
         {/* Table header */}
         <div
-          className="hidden md:grid grid-cols-[2.5rem_1fr_auto_auto_auto] gap-3 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
+          className="hidden md:grid grid-cols-[2.5rem_1fr_auto_auto] gap-3 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}
         >
           <div>#</div>
           <div>Cartón</div>
           <div className="text-right">Puntos</div>
-          <div className="text-right">ETH</div>
           <div className="text-right">USDC</div>
         </div>
 
@@ -307,7 +263,7 @@ function LeaderboardPage() {
               return (
                 <div
                   key={row.tokenId.toString()}
-                  className="grid grid-cols-[2.5rem_1fr] md:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-3 items-center px-4 py-3 transition-colors"
+                  className="grid grid-cols-[2.5rem_1fr] md:grid-cols-[2.5rem_1fr_auto_auto] gap-3 items-center px-4 py-3 transition-colors"
                   style={{
                     background: row.isYours ? 'rgba(0,230,118,0.05)' : idx % 2 === 0 ? 'var(--bg-card)' : 'rgba(11,16,32,0.5)',
                     borderLeft: row.isYours ? '2px solid var(--accent-green)' : '2px solid transparent',
@@ -365,17 +321,6 @@ function LeaderboardPage() {
                     }}
                   >
                     {row.points.toString()}
-                  </div>
-
-                  {/* ETH Prize */}
-                  <div
-                    className="hidden md:block text-right text-sm tabular-nums"
-                    style={{
-                      fontFamily: 'var(--font-mono-custom)',
-                      color: row.ethPrize && row.ethPrize > 0n ? 'var(--accent-gold)' : 'var(--text-disabled)',
-                    }}
-                  >
-                    {row.ethPrize !== undefined ? formatPrize(row.ethPrize, 18, 'ETH') : '—'}
                   </div>
 
                   {/* USDC Prize */}

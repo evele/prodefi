@@ -11,6 +11,10 @@ type MatchProps = {
 export function Match({ game, disabled, onScoreChange }: MatchProps) {
   const team1Score = game.result[0]
   const team2Score = game.result[1]
+  const team1Name = teamsById[game.team1] ?? `#${game.team1}`
+  const team2Name = teamsById[game.team2] ?? `#${game.team2}`
+  const team1Label = teamsSiglaById[game.team1] ?? team1Name
+  const team2Label = teamsSiglaById[game.team2] ?? team2Name
   // TODO: Revisar este criterio con producto. Hoy el warning aparece cuando
   // un equipo llega a 10+ goles; tal vez deba evaluarse por goles totales.
   const team1Improbable = team1Score !== null && team1Score >= 10
@@ -25,12 +29,12 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
       >
         {/* Team 1 */}
         <div
-          className="flex-1 flex items-center justify-end gap-2 text-sm font-mono font-semibold tracking-wide"
+          className="flex min-w-0 flex-1 items-center justify-end gap-3 text-right text-sm font-mono font-semibold tracking-wide"
           style={{ color: 'var(--text-primary)' }}
-          title={teamsById[game.team1] ?? `#${game.team1}`}
+          title={team1Name}
         >
           <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
-          {teamsSiglaById[game.team1] ?? teamsById[game.team1] ?? `#${game.team1}`}
+          <span className="truncate">{team1Label}</span>
         </div>
 
         {/* Score inputs */}
@@ -91,11 +95,11 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
 
         {/* Team 2 */}
         <div
-          className="flex-1 flex items-center gap-2 text-sm font-mono font-semibold tracking-wide"
+          className="flex min-w-0 flex-1 items-center gap-3 text-sm font-mono font-semibold tracking-wide"
           style={{ color: 'var(--text-primary)' }}
-          title={teamsById[game.team2] ?? `#${game.team2}`}
+          title={team2Name}
         >
-          {teamsSiglaById[game.team2] ?? teamsById[game.team2] ?? `#${game.team2}`}
+          <span className="truncate">{team2Label}</span>
           <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
         </div>
       </div>

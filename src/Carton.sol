@@ -23,6 +23,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     error PriceNotSet();
     error InsufficientPayment();
     error RefundFailed();
+    error EthPurchaseDisabled();
     error TokenNotAccepted();
     error TokenPriceNotSet();
     error PriceMustBePositive();
@@ -94,29 +95,8 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         return ids;
     }
 
-    function buyCarton() external payable whenNotPaused nonReentrant {
-        if (cartonPrice == 0) revert PriceNotSet();
-        if (msg.value < cartonPrice) revert InsufficientPayment();
-
-        uint256 tokenId = _nextTokenId++;
-        _mint(msg.sender, tokenId, 1, "");
-
-        // Emitir el precio cobrado, no el valor enviado por el usuario
-        emit CartonPurchased(msg.sender, tokenId, cartonPrice);
-
-        // Auto-deposit to Treasury if configured
-        ITreasury _treasury = treasury;
-        uint256 _tournamentId = activeTournamentId;
-        if (address(_treasury) != address(0) && _tournamentId > 0) {
-            _treasury.depositFromSales{value: cartonPrice}(_tournamentId);
-        }
-
-        // Refund excess payment
-        if (msg.value > cartonPrice) {
-            uint256 refund = msg.value - cartonPrice;
-            (bool ok,) = payable(msg.sender).call{value: refund}("");
-            if (!ok) revert RefundFailed();
-        }
+    function buyCarton() external payable {
+        revert EthPurchaseDisabled();
     }
 
     function buyCartonWithToken(address token) external whenNotPaused nonReentrant {
