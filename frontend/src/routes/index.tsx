@@ -26,7 +26,7 @@ function HomePage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
-  const { usdc: usdcBalance } = useUserBalance()
+  const { eth: nativeBalance, usdc: usdcBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
   const approveWrite = useSimulatedContractWrite()
 
@@ -101,6 +101,17 @@ function HomePage() {
     if (!isConnected) return null
     return usdcBalance.isLoading ? '…' : `${usdcBalance.amount} ${usdcBalance.symbol}`
   }
+
+  const gasReadinessNotice = (() => {
+    if (!isConnected || nativeBalance.isLoading) return null
+    if (nativeBalance.value > 0n) return null
+
+    return {
+      title: `Te falta ${nativeBalance.symbol} para gas`,
+      description:
+        `El cartón se paga con USDC, pero igual necesitas ${nativeBalance.symbol} para aprobar y comprar en la red.`,
+    }
+  })()
 
   const { data: usdcPrizePool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
@@ -343,6 +354,23 @@ function HomePage() {
             </span>
           </div>
         </section>
+      )}
+
+      {gasReadinessNotice && (
+        <div
+          className="rounded-xl p-4 space-y-1"
+          style={{
+            background: 'rgba(255, 77, 109, 0.08)',
+            border: '1px solid rgba(255, 77, 109, 0.22)',
+          }}
+        >
+          <p className="text-sm font-semibold" style={{ color: 'var(--accent-red)' }}>
+            {gasReadinessNotice.title}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {gasReadinessNotice.description}
+          </p>
+        </div>
       )}
 
       {/* ─── Buy Carton ─── */}
