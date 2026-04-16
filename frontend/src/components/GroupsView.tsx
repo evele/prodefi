@@ -6,11 +6,12 @@ export type { GroupData }
 type GroupsViewProps = {
   groups: GroupData[]
   disabled: boolean
+  readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
   selectedGroup?: string | null
 }
 
-export function GroupsView({ groups, disabled, onScoreChange, selectedGroup }: GroupsViewProps) {
+export function GroupsView({ groups, disabled, readOnlyAppearance = false, onScoreChange, selectedGroup }: GroupsViewProps) {
   const visible = selectedGroup ? groups.filter((g) => g.groupLabel === selectedGroup) : groups
 
   return (
@@ -21,6 +22,7 @@ export function GroupsView({ groups, disabled, onScoreChange, selectedGroup }: G
           groupLabel={group.groupLabel}
           games={group.games}
           disabled={disabled}
+          readOnlyAppearance={readOnlyAppearance}
           onScoreChange={onScoreChange}
         />
       ))}

@@ -10,6 +10,7 @@ export function TeamWinnerSelector({
   selectedTeams,
   currentPosition,
   disabled,
+  readOnlyAppearance = false,
   onChange,
 }: {
   label: string
@@ -17,6 +18,7 @@ export function TeamWinnerSelector({
   selectedTeams: [number, number, number, number]
   currentPosition: 1 | 2 | 3 | 4
   disabled: boolean
+  readOnlyAppearance?: boolean
   onChange: (teamId: number) => void
 }) {
   const availableTeams = teams.filter(
@@ -34,7 +36,7 @@ export function TeamWinnerSelector({
         onValueChange={(value) => onChange(Number(value))}
         value={selectedTeams[currentPosition - 1] !== 0 ? selectedTeams[currentPosition - 1].toString() : undefined}
       >
-        <SelectTrigger className="flex-1">
+        <SelectTrigger className={`flex-1 ${readOnlyAppearance ? 'disabled:opacity-100' : ''}`}>
           <SelectValue placeholder={`Seleccionar equipo…`} />
         </SelectTrigger>
         <SelectContent>

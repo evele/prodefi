@@ -1206,6 +1206,11 @@
   },
   {
     "type": "error",
+    "name": "EthPurchaseDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ExpectedPause",
     "inputs": []
   },

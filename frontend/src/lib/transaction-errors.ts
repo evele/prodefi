@@ -159,6 +159,42 @@ export function mapPredictionErrorToMessage(error: unknown): string {
   return 'Could not submit game predictions. Please try again.'
 }
 
+export function mapCombinedPredictionErrorToMessage(error: unknown): string {
+  const message = normalizeErrorMessage(error)
+  const shared = mapSharedErrorMessage(message)
+  if (shared) return shared
+
+  if (message.includes("you aren't the owner of this carton")) {
+    return 'The selected carton is not owned by the connected wallet.'
+  }
+  if (message.includes('prediction deadline passed')) {
+    return 'Predictions are already closed for this tournament.'
+  }
+  if (message.includes('prediction already submitted')) {
+    return 'Game predictions were already submitted for this carton.'
+  }
+  if (message.includes('winners already predicted')) {
+    return 'Winner predictions were already submitted for this carton.'
+  }
+  if (message.includes('must submit predictions for all games')) {
+    return 'Complete all game predictions before submitting.'
+  }
+  if (includesAny(message, ['invalid game id', 'duplicate game id'])) {
+    return 'The game list in the UI is out of sync. Refresh and try again.'
+  }
+  if (message.includes('cannot predict after results are set')) {
+    return 'Some match results were already published, so this carton can no longer submit game predictions.'
+  }
+  if (message.includes('duplicate team id')) {
+    return 'Choose 4 different teams before submitting winners.'
+  }
+  if (message.includes('invalid team id')) {
+    return 'One or more selected teams are invalid. Refresh and try again.'
+  }
+
+  return 'Could not submit the full prediction. Please try again.'
+}
+
 export function mapWinnersErrorToMessage(error: unknown): string {
   const message = normalizeErrorMessage(error)
   const shared = mapSharedErrorMessage(message)

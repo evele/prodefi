@@ -5,10 +5,11 @@ import { teamsSiglaById, teamsById, teamsFlagById } from '../lib/teams'
 type MatchProps = {
   game: Game
   disabled: boolean
+  readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
 }
 
-export function Match({ game, disabled, onScoreChange }: MatchProps) {
+export function Match({ game, disabled, readOnlyAppearance = false, onScoreChange }: MatchProps) {
   const team1Score = game.result[0]
   const team2Score = game.result[1]
   const team1Name = teamsById[game.team1] ?? `#${game.team1}`
@@ -41,7 +42,7 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
         <div className="flex items-center gap-1.5 shrink-0">
           <Input
             type="number"
-            className="w-14 h-10 text-center px-1 font-mono text-lg font-semibold"
+            className={`w-14 h-10 text-center px-1 font-mono text-lg font-semibold ${readOnlyAppearance ? 'disabled:opacity-100 disabled:text-[var(--text-primary)]' : ''}`}
             style={{ 
               fontFamily: 'var(--font-mono-custom)',
               borderColor: team1Improbable ? 'rgba(255, 214, 0, 0.45)' : undefined,
@@ -70,7 +71,7 @@ export function Match({ game, disabled, onScoreChange }: MatchProps) {
           </span>
           <Input
             type="number"
-            className="w-14 h-10 text-center px-1 font-mono text-lg font-semibold"
+            className={`w-14 h-10 text-center px-1 font-mono text-lg font-semibold ${readOnlyAppearance ? 'disabled:opacity-100 disabled:text-[var(--text-primary)]' : ''}`}
             style={{ 
               fontFamily: 'var(--font-mono-custom)',
               borderColor: team2Improbable ? 'rgba(255, 214, 0, 0.45)' : undefined,

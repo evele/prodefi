@@ -5,10 +5,11 @@ type GroupMatchesProps = {
   groupLabel: string
   games: Game[]
   disabled: boolean
+  readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
 }
 
-export function GroupMatches({ groupLabel, games, disabled, onScoreChange }: GroupMatchesProps) {
+export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange }: GroupMatchesProps) {
   return (
     <div
       className="rounded-xl px-4 py-3"
@@ -31,6 +32,7 @@ export function GroupMatches({ groupLabel, games, disabled, onScoreChange }: Gro
             key={game.id}
             game={game}
             disabled={disabled}
+            readOnlyAppearance={readOnlyAppearance}
             onScoreChange={onScoreChange}
           />
         ))}
