@@ -193,6 +193,18 @@ contract Predictions is Ownable {
     }
 
     function submitPrediction(uint256 tokenId, Prediction[] calldata _prediction) external onlyCartonOwner(tokenId) {
+        _submitPrediction(msg.sender, tokenId, _prediction);
+    }
+
+    function submitPredictionAndWinners(uint256 tokenId, Prediction[] calldata _prediction, uint8[4] calldata teams)
+        external
+        onlyCartonOwner(tokenId)
+    {
+        _submitPrediction(msg.sender, tokenId, _prediction);
+        _predictWinners(msg.sender, tokenId, teams);
+    }
+
+    function _submitPrediction(address sender, uint256 tokenId, Prediction[] calldata _prediction) internal {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (used[tokenId]) revert PredictionAlreadySubmitted();
         if (_prediction.length != totalGames) revert WrongPredictionCount();
@@ -211,7 +223,7 @@ contract Predictions is Ownable {
             predictions[tokenId].push(Prediction({gameId: gameId, result: _prediction[i].result}));
         }
 
-        emit PredictionsSubmitted(msg.sender, tokenId);
+        emit PredictionsSubmitted(sender, tokenId);
     }
 
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
@@ -299,6 +311,10 @@ contract Predictions is Ownable {
 
     // Functions for winner predictions
     function predictWinners(uint256 tokenId, uint8[4] calldata teams) external onlyCartonOwner(tokenId) {
+        _predictWinners(msg.sender, tokenId, teams);
+    }
+
+    function _predictWinners(address sender, uint256 tokenId, uint8[4] calldata teams) internal {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (winnersPredictions[tokenId].set) revert WinnersAlreadyPredicted();
 
@@ -311,7 +327,7 @@ contract Predictions is Ownable {
 
         winnersPredictions[tokenId] = WinnersPrediction({teams: teams, set: true});
 
-        emit WinnersPredicted(msg.sender, tokenId, teams);
+        emit WinnersPredicted(sender, tokenId, teams);
     }
 
     function all_different(uint8[4] calldata teams) public pure returns (bool) {

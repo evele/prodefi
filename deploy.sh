@@ -66,3 +66,13 @@ else
   echo "❌ Error exporting ABIs. Ensure 'forge' is available and contracts build successfully."
   exit 1
 fi
+
+echo "🧱 Generating typed ABI exports for frontend..."
+node script/export_frontend_abis.mjs
+
+if [ $? -eq 0 ]; then
+  echo "✅ Typed ABI exports generated successfully."
+else
+  echo "❌ Error generating typed ABI exports."
+  exit 1
+fi

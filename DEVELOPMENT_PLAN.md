@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: April 10, 2026*
+*Last updated: April 15, 2026*
 
 ---
 
@@ -13,10 +13,10 @@ For permanent technical information about the project, see CLAUDE.md.
 
 | Contract | Tests | Status |
 |---|---|---|
-| Carton.sol (ERC1155) | 35 | Complete - multi-asset purchase, Treasury auto-deposit |
+| Carton.sol (ERC1155) | 35 | Complete - USDC-only purchase flow, Treasury auto-deposit |
 | Treasury.sol | 52 | Complete - prize pools, tournament lifecycle, claims |
 | Predictions.sol | 14 | Complete - game/winner predictions, points, positions |
-| ERC20Integration | 3 | Complete - end-to-end multi-asset flow |
+| ERC20Integration | 3 | Complete - end-to-end USDC purchase flow |
 | Integration | 3 | Complete - full workflow, deadline enforcement |
 | ~~Counter (boilerplate)~~ | ~~2~~ | ~~Deleted (Feb 14)~~ |
 
@@ -26,10 +26,9 @@ For permanent technical information about the project, see CLAUDE.md.
 
 | Feature | Route | Status |
 |---|---|---|
-| Buy carton (ETH) | `/` | Done |
-| Buy carton (USDC + approve flow) | `/` | Done |
+| Buy carton (USDC-only + approve flow) | `/` | Done |
 | View owned cartones | `/` | Done |
-| Prize pools display (ETH + USDC) | `/` | Done |
+| Prize pools display (USDC) | `/` | Done |
 | Submission deadline countdown | `/` | Done |
 | Game predictions submit | `/predictions` | Done |
 | Winner predictions UI + submit | `/predictions` | Done |
@@ -58,91 +57,50 @@ All critical bugs fixed. All dead code cleaned up:
 - Leaderboard no longer depends on `getPositions()` storage array; frontend reconstructs rankings from `Carton.nextTokenId()` + `Predictions.tokenPositions(tokenId)` and filters stale entries with `positionsVersion` / `tokenPositionsVersion`
 - Alternative considered for future: use `PositionsUpdated` logs as the leaderboard source, optionally storing a `lastPositionsBlock` pointer to query a narrow block range instead of scanning long history
 
-### Next Session Plan: USDC-Only Cleanup (Apr 10, 2026)
+### Recently Completed: USDC-Only Cleanup (Apr 2026)
 
-Decision for next implementation pass:
+Completed in code:
 
-- Remove ETH as a business/payment asset before production
-- Keep USDC as the only purchase currency and prize currency
-- Do not tackle smart accounts / gas sponsorship in this pass
-- ETH/native asset remains relevant only as gas for now, not as purchase/prize UX
+- `src/Carton.sol`: `buyCarton()` is disabled onchain; purchases go through `buyCartonWithToken()`
+- `script/Deploy.s.sol`: deploy/setup now configures only USDC acceptance, price, and prize distribution
+- `frontend/src/routes/index.tsx`: home buy flow is USDC-only with approve + buy UX
+- `frontend/src/routes/leaderboard.tsx` and `frontend/src/components/ClaimSection.tsx`: product-facing pool/prize/claim UI shows USDC only
+- `frontend/src/routes/admin.dev.tsx`: close-tournament flow is aligned to USDC-only admin usage
+- `frontend/src/lib/transaction-errors.ts`: purchase/claim errors now reflect the USDC-only product flow
+- `test/Carton.t.sol`: ETH purchase tests updated to expect `EthPurchaseDisabled`
 
-Why this refactor is worth doing:
+Important note:
 
-- Simpler pricing, prize-pool messaging, and user explanation
-- Less frontend duplication and fewer support edge cases
-- Avoid mixed-asset accounting before launch
-- Better fit for the intended future direction (`USDC-only` product flow)
+- Treasury internals still support multi-asset pools; the product/deploy flow is now USDC-only
+- Native ETH is still relevant for gas, so keeping gas-awareness in the UI remains intentional
 
-Implementation scope for the next session:
+### Next Session Plan: Prediction Screen Polish
 
-1. Smart contracts
-   - `src/Carton.sol`
-   - Disable ETH purchase onchain
-   - Keep `buyCartonWithToken()` as the active purchase path
-   - Prefer a minimal diff: make `buyCarton()` unusable rather than redesigning unrelated storage unless that becomes awkward in tests
+Shipped today in `/predictions`:
 
-2. Treasury / prize logic
-   - `src/Treasury.sol`
-   - Do not do a large single-asset rewrite yet
-   - Leave multi-asset internals in place if that keeps the diff small and testable
-   - Stop configuring/using ETH for normal product flows
+- Incomplete match predictions now block submission again and show clearer visual feedback
+- Added a combined onchain submit path for `games + winners` while keeping the two separate writes as fallback
+- Reset local draft state when switching cartons and after successful submits
+- Reused the same `Partidos` / `Ganadores` panels to show already-submitted onchain data
+- Removed the duplicate submitted-predictions block from the bottom of the page
+- Added clearer per-panel state labels (`Pendiente`, `Borrador`, `Enviado onchain`, `Vencido`)
+- Read-only submitted values now keep strong contrast instead of appearing dimmed
 
-3. Deployment / setup
-   - `script/Deploy.s.sol`
-   - Remove ETH price setup
-   - Remove ETH prize distribution setup
-   - Keep only USDC token acceptance, USDC price, and USDC prize distribution
+Tomorrow's priorities:
 
-4. Frontend buy flow
-   - `frontend/src/routes/index.tsx`
-   - Remove ETH/USDC purchase toggle
-   - Remove ETH price reads and ETH buy flow
-   - Keep only approve + buy with USDC
-   - Simplify pool and prize copy to USDC-only
+1. Keep polishing submitted prediction presentation in the same panels
+   - Move sent predictions farther away from "disabled form" aesthetics and closer to a clean summary state
+   - Tighten hierarchy/spacing between panel header, status badge, and footer help text
+2. Improve success / next-action cues after submit
+   - After `games-only` submit, point more strongly to the winners section
+   - After full submit, show a clearer "done / waiting for results" state
+3. Surface claimable prizes earlier from `/` and `/leaderboard`
+4. Do a mobile cleanup pass on dense screens after the state polish lands
 
-5. Frontend prize views
-   - `frontend/src/routes/leaderboard.tsx`
-   - `frontend/src/components/ClaimSection.tsx`
-   - Remove ETH pool/prize/claim UI
-   - Show only USDC amounts in product-facing screens
+Verification for the next frontend pass:
 
-6. Frontend supporting cleanup
-   - `frontend/src/lib/transaction-errors.ts`
-   - Simplify buy/claim error mapping away from ETH-vs-USDC branching where possible
-   - `frontend/src/routes/admin.dev.tsx`
-   - Simplify close-tournament asset selection to USDC-only if admin UX should match product direction
-   - `frontend/src/routes/__root.tsx`
-   - Consider keeping native balance visible for gas awareness even if ETH is no longer a product asset
-   - `frontend/src/hooks/useBalance.ts`
-   - Revisit whether both balances are still needed in the header once the main flow is cleaned up
-
-7. Tests
-   - `test/Carton.t.sol`
-   - `test/ERC20Integration.t.sol`
-   - `test/Predictions.t.sol` if needed by prize configuration changes
-   - Remove or update tests that rely on ETH purchase / ETH prize setup in the main flow
-   - Keep broader Treasury multi-asset tests unless they become noise or block the refactor unnecessarily
-
-Execution order for next session:
-
-1. Update contracts + deploy script
-2. Fix and run Foundry tests
-3. Clean frontend buy flow
-4. Clean frontend prize/claim screens
-5. Run `npm run lint` and `npm run build` in `frontend/`
-
-Verification checklist for the refactor:
-
-- `forge build`
-- `forge test`
 - `cd frontend && npm run lint`
 - `cd frontend && npm run build`
-
-Open product note:
-
-- Because smart accounts are out of scope for this pass, users will still need native gas even in a `USDC-only` product flow.
-- That means the app can remove ETH as a payment/prize concept now, but should not accidentally hide all signals related to native gas readiness.
 
 ---
 
@@ -151,7 +109,7 @@ Open product note:
 The complete tournament flow is:
 
 1. Admin configures torneo (teams, groups, deadline) --> **DONE**
-2. Users compran cartones (ETH/USDC) --> **DONE**
+2. Users compran cartones (USDC-only) --> **DONE**
 3. Users envian predicciones (partidos + ganadores) --> **DONE**
 4. Admin setea resultados de partidos --> **DONE**
 5. Admin setea ganadores oficiales --> **DONE**
@@ -185,14 +143,14 @@ The complete tournament flow is:
 - ~~Read `getPositions()` from contract~~
 - ~~Read `calculateTotalPoints(tokenId)` per token~~
 - ~~Display ranked list with points, replacing mock data~~
-- Prize/points breakdown per asset, "You" badge, empty state
+- Prize/points breakdown, "You" badge, empty state
 
 #### ~~5. Prize claiming UI (Medium)~~ DONE (Feb 18)
 - ~~Read `getUserPrizeAmount(tournamentId, position)` to show claimable amount~~
 - ~~Read `hasUserClaimed(tournamentId, tokenId)` for claim status~~
 - ~~Call `claimPrize(tournamentId, tokenId, token)` with button~~
-- ~~Show ETH + USDC claimable amounts separately~~
-- `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed
+- ~~Show claimable prize amounts in UI~~
+- `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed, currently USDC-only
 
 ### Pre-MVP: Validation & Traction (Pending Decision)
 
@@ -207,22 +165,22 @@ Context: the MVP flow is functionally complete, so the next highest-leverage wor
 - The home screen surfaces a clear "Tu siguiente paso" CTA for the best carton to continue
 - The predictions screen auto-selects the most actionable owned carton when opened without a query param
 - Carton status handling was normalized (`none` / `partial` / `complete` / `expired`) and winner-prediction detection was made consistent in the frontend
+- Prediction submit UX now blocks incomplete match submissions again and supports a combined submit path for `games + winners`
+- Submitted predictions are now rendered inside the same `Partidos` / `Ganadores` panels, with hidden send CTAs once that section is already onchain
+- Switching cartons and successful submits now reset local drafts correctly instead of leaking previous values
+- Read-only submitted prediction values now keep legibility instead of looking dimmed
 
 #### Next UX sprint recommendation (Priority Order)
 
-1. Guided prediction flow (`/predictions`)
-   - Add an explicit step model:
-     - Step 1: select carton
-     - Step 2: fill group match scores
-     - Step 3: choose top-4 winners
-     - Step 4: review / submit
-   - Keep it in the same route first; avoid a multi-route wizard unless truly needed
-   - Goal: reduce cognitive load on the longest, densest screen in the product
+1. Finish polishing the unified prediction panels (`/predictions`)
+   - Push submitted sections farther toward a clean summary/read-only state instead of a disabled-form look
+   - Improve visual hierarchy between carton status, panel state, and footer guidance
+   - Goal: make the main prediction screen feel coherent instead of "edit mode + archive mode" mixed together
 
 2. Better blocked/empty/success states
    - Improve copy + primary CTA for:
-     - wallet disconnected
-     - no cartons owned
+      - wallet disconnected
+      - no cartons owned
      - deadline expired
      - teams hash unset / mismatch
      - tournament not fully configured
@@ -255,7 +213,7 @@ Context: the MVP flow is functionally complete, so the next highest-leverage wor
 
 #### Suggested execution order
 
-1. Finish guided prediction flow
+1. Finish unified prediction panel polish
 2. Add stronger blocked/success states
 3. Expose claimable prizes earlier
 4. Do mobile cleanup pass
@@ -366,7 +324,9 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 - **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
+- **Apr 15, 2026**: USDC-only cleanup completed. ETH purchase disabled onchain, deploy/product flow aligned to USDC-only, and product-facing prize/claim/admin UX updated while keeping native balance visible for gas awareness.
 - **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
+- **Apr 15, 2026**: Predictions UX iteration. Added combined submit path, restored incomplete-match submit blocking, reset drafts on carton change/success, unified submitted predictions into the same panels, and improved read-only legibility for already-sent values.
 
 ## Related Documents
 

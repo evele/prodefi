@@ -27,6 +27,14 @@ contract PredictionsTest is Test {
         preds.setTotalGames(4);
     }
 
+    function _buildValidPredictions() internal pure returns (Predictions.Prediction[] memory arr) {
+        arr = new Predictions.Prediction[](4);
+        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
+        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
+        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
+        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+    }
+
     function testSubmitAndReadPicks() public {
         // Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
@@ -255,6 +263,37 @@ contract PredictionsTest is Test {
         vm.prank(user);
         vm.expectRevert(Predictions.WinnersAlreadyPredicted.selector);
         preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+    }
+
+    function testSubmitPredictionAndWinners_Valid() public {
+        Predictions.Prediction[] memory arr = _buildValidPredictions();
+
+        vm.prank(user);
+        preds.submitPredictionAndWinners(TOKEN_ID, arr, [1, 2, 3, 4]);
+
+        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        assertEq(stored.length, 4, "length should be 4");
+        assertTrue(preds.used(TOKEN_ID), "games should be marked as submitted");
+
+        uint8[4] memory winners = preds.getWinnersPrediction(TOKEN_ID);
+        assertEq(winners[0], 1);
+        assertEq(winners[1], 2);
+        assertEq(winners[2], 3);
+        assertEq(winners[3], 4);
+    }
+
+    function testSubmitPredictionAndWinners_RevertsAtomicallyOnInvalidWinners() public {
+        Predictions.Prediction[] memory arr = _buildValidPredictions();
+
+        vm.prank(user);
+        vm.expectRevert(Predictions.DuplicateTeamId.selector);
+        preds.submitPredictionAndWinners(TOKEN_ID, arr, [1, 2, 2, 4]);
+
+        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        assertEq(stored.length, 0, "game predictions should not persist on revert");
+        assertFalse(preds.used(TOKEN_ID), "games should remain unsubmitted on revert");
+        uint8[4] memory winners = preds.getWinnersPrediction(TOKEN_ID);
+        assertEq(winners[0], 0, "winner prediction should not persist on revert");
     }
 
     function testPointsCalculation() public {

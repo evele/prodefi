@@ -13,7 +13,7 @@ ProDefi is a Solidity-based prediction platform built on Ethereum using the Foun
 
 - **Carton.sol**: ERC1155 contract for prediction cards with role-based access control
   - Implements minting, burning, pausing functionality
-  - Multi-asset purchase support: ETH via `buyCarton()` and ERC20 via `buyCartonWithToken()`
+  - Product purchase flow is USDC-only: `buyCarton()` is disabled and purchases go through `buyCartonWithToken()`
   - **Treasury Integration**: Auto-deposits sales to Treasury contract when configured
   - Security: ReentrancyGuard protection, SafeERC20 for token operations
   - Uses OpenZeppelin's AccessControl for role management
@@ -33,16 +33,16 @@ ProDefi is a Solidity-based prediction platform built on Ethereum using the Foun
   - Role-based access control (FUND_DEPOSITOR_ROLE, TOURNAMENT_MANAGER_ROLE)
   - **Tournament Lifecycle**: `closeTournament()` snapshots pool, freezes deposits/claims
   - Core functions: `depositFromSales()`, `depositFromSalesERC20()`, `setPrizeDistribution()`, `claimPrize()`, `closeTournament()`
-  - Users can claim prizes for multiple assets in same tournament (ETH + USDC)
+  - Product-facing flow is currently configured for USDC-only prizes/claims, while multi-asset internals remain available
   - Security: SafeERC20 for token transfers, checks-effects-interactions pattern, snapshot-based fairness
   - Integrates with both Carton and Predictions contracts
   - Uses efficient integer division for prize calculations
 
 ### Key Features
 
-1. **Multi-asset Carton Purchase**:
-   - Buy with ETH via `buyCarton()`
-   - Buy with ERC20 (USDC, etc) via `buyCartonWithToken()`
+1. **USDC-Only Carton Purchase (product flow)**:
+   - `buyCarton()` is intentionally disabled
+   - Buy with USDC via `buyCartonWithToken()`
    - Automatic Treasury deposit on each purchase
 2. **Game Predictions**: Users predict scores for 4 games
 3. **Winner Predictions**: Users predict top 4 teams in tournament
@@ -51,12 +51,12 @@ ProDefi is a Solidity-based prediction platform built on Ethereum using the Foun
    - Winner predictions: 19 points (1st), 16 points (2nd), 10 points (3rd/4th)
 5. **Leaderboard**: Owner can set final positions based on total points
 6. **Multi-asset Prize Pool Management**:
-   - Treasury system handles ETH and ERC20 deposits per tournament
+   - Treasury system still handles ETH and ERC20 deposits per tournament internally
    - Auto-deposit from Carton sales (when configured)
    - Separate prize distributions per asset type
    - Tournament closing snapshots prize pool for fairness
 7. **Role-based Prize Claims**: Users claim prizes based on final token positions
-   - Can claim multiple assets (ETH + USDC) for same tournament
+   - Current product flow surfaces USDC prize claims
    - Claims require tournament to be closed (ensures fair distribution)
 
 ## Common Development Commands
@@ -184,15 +184,16 @@ Tests use Foundry's testing framework with:
 - `vm.warp()` for time manipulation
 - Custom setup functions and modifiers
 
-## Current Status (October 14, 2025)
+## Current Status (April 15, 2026)
 
 ### Completed Components
 
-**Smart Contracts (106 tests passing):**
-- **Carton.sol**: ERC1155 prediction cards with multi-asset purchase system (35 tests)
-  - ETH purchase via `buyCarton()`, ERC20 purchase via `buyCartonWithToken()`
+**Smart Contracts (116 tests passing):**
+- **Carton.sol**: ERC1155 prediction cards with USDC-only product purchase flow (35 tests)
+  - `buyCarton()` intentionally reverts with `EthPurchaseDisabled`
+  - Purchases go through `buyCartonWithToken()`
   - **Automatic Treasury integration**: Auto-deposits sales to Treasury on each purchase
-  - Security: ReentrancyGuard, SafeERC20, low-level calls for ETH transfers
+  - Security: ReentrancyGuard, SafeERC20
   - Enhanced with `getUserTokens()` function for efficient user token tracking
   - Automatic token ownership tracking via `_update()` override
   - Admin functions: `setTreasuryAddress()`, `setActiveTournament()`, `setAcceptedToken()`
@@ -204,7 +205,7 @@ Tests use Foundry's testing framework with:
   - **Tournament lifecycle management**: `closeTournament()` snapshots pool, freezes deposits
   - Separate prize distributions per asset type
   - SafeERC20 for secure token operations
-  - Users can claim multiple assets for same tournament
+  - Current deploy/product flow is configured for USDC-only usage
   - Claims gated to closed tournaments (prevents unfair late deposits)
   - FUND_DEPOSITOR_ROLE granted to Carton, TOURNAMENT_MANAGER_ROLE for closing
   - **Critical bug fixed**: Late deposits no longer affect earlier claimants
@@ -219,9 +220,8 @@ Tests use Foundry's testing framework with:
 - **Web3 Integration**: Wagmi + RainbowKit + TanStack Query
 - **Deployed Contracts**: Working on Anvil localhost:8545 with real transactions
 - **Working Features**:
-  - Buy carton transactions with loading states and toast notifications
   - Buy carton with USDC (allowance + approve flow)
-  - Real-time ETH balance display
+  - Native balance display kept for gas awareness
   - Real-time USDC balance display
   - **Show owned cartones**: Displays user's NFT collection with automatic updates
   - **Polling updates**: 10-second refresh + focus-based refresh
@@ -229,14 +229,15 @@ Tests use Foundry's testing framework with:
   - **Teams lookup optimization**: `teamsById` map for O(1) name-by-id
   - **Game predictions UI**: Complete form with 6 games, working submission to contract
   - **Winner predictions UI**: TeamWinnerSelector component with duplicate prevention
-  - **Prize pools**: ETH + USDC pools displayed from Treasury
+  - **Prize pools and claims**: USDC-only in product-facing screens
 
-### Current Phase: Prediction System
+### Current Phase: Frontend UX Refinement
 - ✅ **Show owned cartones**: Complete with real-time updates
 - ✅ **Game predictions**: Complete implementation with working contract submission
 - ✅ **Winner predictions UI + submit**: State management, form UI, contract submission wired
-- ✅ **Display real prize pool data**: From Treasury contract
-- **Prediction display**: Show user's submitted predictions
+- ✅ **Prediction display**: Show user's submitted predictions
+- ✅ **USDC-only buy/pool/claim flow**: Complete in product-facing UI
+- Next: guided prediction flow on `/predictions`, then blocked/success states and earlier claim visibility
 
 ## Learning Context
 
