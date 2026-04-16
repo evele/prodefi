@@ -27,7 +27,7 @@ export const buildAllGroupGames = (): { games: Game[]; groups: GroupData[] } => 
           id: gameId++,
           team1: ids[i],
           team2: ids[j],
-          result: [0, 0],
+          result: [null, null],
           set: false,
         }
         groupGames.push(game)

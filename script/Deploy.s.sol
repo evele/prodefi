@@ -54,10 +54,6 @@ contract DeployScript is Script {
 
         uint256 tournamentId = 1; // Primer torneo
 
-        // Set precio del carton (0.1 ETH)
-        carton.setCartonPrice(0.1 ether);
-        console.log("Carton price set to 0.1 ETH");
-
         // Configure Treasury integration
         carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(tournamentId);
@@ -77,10 +73,6 @@ contract DeployScript is Script {
         distribution[1] = 30; // 2nd place
         distribution[2] = 15; // 3rd place
         distribution[3] = 5; // 4th place
-        treasury.setPrizeDistribution(tournamentId, address(0), distribution); // address(0) = ETH
-        console.log("Prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
-
-        // Set USDC prize distribution (same as ETH)
         treasury.setPrizeDistribution(tournamentId, address(usdc), distribution);
         console.log("USDC prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
 

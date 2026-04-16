@@ -511,6 +511,41 @@
   },
   {
     "type": "function",
+    "name": "submitPredictionAndWinners",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_prediction",
+        "type": "tuple[]",
+        "internalType": "struct Predictions.Prediction[]",
+        "components": [
+          {
+            "name": "gameId",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "result",
+            "type": "uint8[2]",
+            "internalType": "uint8[2]"
+          }
+        ]
+      },
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "teamsHash",
     "inputs": [],
     "outputs": [

@@ -84,40 +84,40 @@ function normalizeErrorMessage(error: unknown) {
   return extractErrorMessage(error).toLowerCase()
 }
 
-export function mapBuyCartonError(error: unknown, currency: 'ETH' | 'USDC'): string {
+export function mapBuyCartonError(error: unknown): string {
   const message = normalizeErrorMessage(error)
   const shared = mapSharedErrorMessage(message)
   if (shared) return shared
 
+  if (message.includes('eth purchase disabled')) {
+    return 'Cartons can only be purchased with USDC.'
+  }
+
   if (includesAny(message, ['price not set', 'token price not set'])) {
-    return `${currency} price is not configured yet.`
+    return 'USDC price is not configured yet.'
   }
 
   if (message.includes('insufficient payment')) {
-    return 'The ETH amount does not match the carton price.'
+    return 'Cartons no longer accept native-token payments.'
   }
 
   if (message.includes('token not accepted')) {
-    return 'This payment token is not accepted.'
+    return 'USDC is not accepted right now.'
   }
 
   if (includesAny(message, ['erc20insufficientallowance', 'insufficient allowance'])) {
-    return 'Approve USDC before buying with USDC.'
+    return 'Approve USDC before buying.'
   }
 
   if (includesAny(message, ['erc20insufficientbalance', 'transfer amount exceeds balance', 'transfer failed'])) {
-    return currency === 'USDC'
-      ? 'Insufficient USDC balance to buy a carton.'
-      : 'Could not transfer funds to buy the carton.'
+    return 'Insufficient USDC balance to buy a carton.'
   }
 
   if (message.includes('refund failed')) {
     return 'The purchase could not complete because the refund failed.'
   }
 
-  return currency === 'ETH'
-    ? 'Could not buy the carton with ETH. Please try again.'
-    : 'Could not buy the carton with USDC. Please try again.'
+  return 'Could not buy the carton with USDC. Please try again.'
 }
 
 export function mapApproveUsdcError(error: unknown): string {
@@ -159,6 +159,42 @@ export function mapPredictionErrorToMessage(error: unknown): string {
   return 'Could not submit game predictions. Please try again.'
 }
 
+export function mapCombinedPredictionErrorToMessage(error: unknown): string {
+  const message = normalizeErrorMessage(error)
+  const shared = mapSharedErrorMessage(message)
+  if (shared) return shared
+
+  if (message.includes("you aren't the owner of this carton")) {
+    return 'The selected carton is not owned by the connected wallet.'
+  }
+  if (message.includes('prediction deadline passed')) {
+    return 'Predictions are already closed for this tournament.'
+  }
+  if (message.includes('prediction already submitted')) {
+    return 'Game predictions were already submitted for this carton.'
+  }
+  if (message.includes('winners already predicted')) {
+    return 'Winner predictions were already submitted for this carton.'
+  }
+  if (message.includes('must submit predictions for all games')) {
+    return 'Complete all game predictions before submitting.'
+  }
+  if (includesAny(message, ['invalid game id', 'duplicate game id'])) {
+    return 'The game list in the UI is out of sync. Refresh and try again.'
+  }
+  if (message.includes('cannot predict after results are set')) {
+    return 'Some match results were already published, so this carton can no longer submit game predictions.'
+  }
+  if (message.includes('duplicate team id')) {
+    return 'Choose 4 different teams before submitting winners.'
+  }
+  if (message.includes('invalid team id')) {
+    return 'One or more selected teams are invalid. Refresh and try again.'
+  }
+
+  return 'Could not submit the full prediction. Please try again.'
+}
+
 export function mapWinnersErrorToMessage(error: unknown): string {
   const message = normalizeErrorMessage(error)
   const shared = mapSharedErrorMessage(message)
@@ -183,19 +219,19 @@ export function mapWinnersErrorToMessage(error: unknown): string {
   return 'Could not submit winner predictions. Please try again.'
 }
 
-export function mapClaimError(error: unknown, asset: 'ETH' | 'USDC'): string {
+export function mapClaimError(error: unknown): string {
   const message = normalizeErrorMessage(error)
   const shared = mapSharedErrorMessage(message)
   if (shared) return shared
 
   if (message.includes('tournament not closed')) {
-    return `${asset} prizes are not claimable yet.`
+    return 'USDC prizes are not claimable yet.'
   }
   if (includesAny(message, ['not token owner', 'you aren\'t the owner of this carton'])) {
     return 'The connected wallet does not own this carton.'
   }
   if (message.includes('already claimed')) {
-    return `${asset} prize was already claimed for this carton.`
+    return 'USDC prize was already claimed for this carton.'
   }
   if (message.includes('token not in leaderboard')) {
     return 'This carton is not ranked in the leaderboard.'
@@ -204,10 +240,10 @@ export function mapClaimError(error: unknown, asset: 'ETH' | 'USDC'): string {
     return 'Leaderboard positions are not configured correctly yet.'
   }
   if (message.includes('no prize available')) {
-    return `No ${asset} prize is available for this carton.`
+    return 'No USDC prize is available for this carton.'
   }
 
-  return `Could not claim the ${asset} prize. Please try again.`
+  return 'Could not claim the USDC prize. Please try again.'
 }
 
 export function mapAdminError(error: unknown): string {

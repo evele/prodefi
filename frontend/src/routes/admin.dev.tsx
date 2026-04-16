@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
-import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI, ZERO_ADDRESS } from '../lib/contracts'
+import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
 import { toast } from 'sonner'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
@@ -446,9 +446,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   const { execute, isBusy } = useAdminWrite()
 
   const [tournamentId, setTournamentId] = useState('1')
-  const [tokenType, setTokenType] = useState<'eth' | 'usdc'>('eth')
-
-  const tokenAddress = tokenType === 'eth' ? ZERO_ADDRESS : CONTRACT_ADDRESSES.USDC
+  const tokenAddress = CONTRACT_ADDRESSES.USDC
 
   const { data: managerRole } = useReadContract({
     address: treasury,
@@ -494,7 +492,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
         args: [BigInt(tid), tokenAddress],
       },
       {
-        toastId: `admin-close-${tid}-${tokenType}`,
+        toastId: `admin-close-${tid}-usdc`,
         pendingMessage: 'Waiting for tournament close confirmation...',
         successMessage: 'Tournament closed successfully.',
         revertedMessage: 'Tournament close was rejected on-chain.',
@@ -504,9 +502,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   }
 
   const poolDisplay = prizePool !== undefined
-    ? tokenType === 'eth'
-      ? `${(Number(prizePool) / 1e18).toFixed(4)} ETH`
-      : `${(Number(prizePool) / 1e6).toFixed(2)} USDC`
+    ? `${(Number(prizePool) / 1e6).toFixed(2)} USDC`
     : '—'
 
   return (
@@ -535,19 +531,8 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             />
           </div>
 
-          <div className="flex gap-2 items-center">
-            <span className="text-sm font-medium w-24">Token</span>
-            <select
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={tokenType}
-              onChange={(e) => setTokenType(e.target.value as 'eth' | 'usdc')}
-            >
-              <option value="eth">ETH</option>
-              <option value="usdc">USDC</option>
-            </select>
-          </div>
-
           <div className="text-sm space-y-1">
+            <div><span className="font-medium">Asset:</span> USDC</div>
             <div><span className="font-medium">Prize Pool:</span> {poolDisplay}</div>
             <div>
               <span className="font-medium">Closed:</span>{' '}

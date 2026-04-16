@@ -27,7 +27,6 @@ contract ERC20IntegrationTest is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Setup Carton
-        carton.setCartonPrice(0.1 ether);
         carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(TOURNAMENT_ID);
         carton.setAcceptedToken(address(usdc), true);
@@ -43,7 +42,6 @@ contract ERC20IntegrationTest is Test {
         distribution[1] = 30;
         distribution[2] = 15;
         distribution[3] = 5;
-        treasury.setPrizeDistribution(TOURNAMENT_ID, address(0), distribution);
         treasury.setPrizeDistribution(TOURNAMENT_ID, address(usdc), distribution);
 
         // Mint USDC to user1 for testing
@@ -52,18 +50,11 @@ contract ERC20IntegrationTest is Test {
         vm.stopPrank();
     }
 
-    function test_BuyCartonWithETH_AutoDepositsToTreasury() public {
+    function test_BuyCartonWithETH_RevertsAfterUsdcOnlyCleanup() public {
         vm.startPrank(user1);
         vm.deal(user1, 1 ether);
-
-        uint256 treasuryBalanceBefore = treasury.getPrizePool(TOURNAMENT_ID, address(0));
-
+        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
         carton.buyCarton{value: 0.1 ether}();
-
-        uint256 treasuryBalanceAfter = treasury.getPrizePool(TOURNAMENT_ID, address(0));
-
-        assertEq(treasuryBalanceAfter - treasuryBalanceBefore, 0.1 ether, "Treasury should receive ETH");
-        assertEq(carton.balanceOf(user1, 1), 1, "User should own token #1");
 
         vm.stopPrank();
     }
@@ -89,22 +80,18 @@ contract ERC20IntegrationTest is Test {
         vm.stopPrank();
     }
 
-    function test_MultiAssetPrizePool() public {
-        // Buy with ETH
+    function test_MultipleUsdcPurchasesAccumulateSinglePrizePool() public {
         vm.startPrank(user1);
-        vm.deal(user1, 1 ether);
-        carton.buyCarton{value: 0.1 ether}();
+        usdc.approve(address(carton), 100 * 10 ** 6);
+        carton.buyCartonWithToken(address(usdc));
         vm.stopPrank();
 
-        // Buy with USDC
         vm.startPrank(address(3));
         usdc.mint(address(3), 1000 * 10 ** 6);
         usdc.approve(address(carton), 100 * 10 ** 6);
         carton.buyCartonWithToken(address(usdc));
         vm.stopPrank();
 
-        // Check both prize pools
-        assertEq(treasury.getPrizePool(TOURNAMENT_ID, address(0)), 0.1 ether, "ETH pool should have 0.1 ETH");
-        assertEq(treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 100 * 10 ** 6, "USDC pool should have 100 USDC");
+        assertEq(treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 200 * 10 ** 6, "USDC pool should have 200 USDC");
     }
 }
