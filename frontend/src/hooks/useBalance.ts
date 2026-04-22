@@ -32,12 +32,14 @@ export function useUserBalance() {
   return {
     isConnected,
     eth: {
+      value: ethBalance?.value ?? 0n,
       amount: ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0.0000',
       symbol: ethBalance?.symbol ?? 'ETH',
       isLoading: isEthLoading,
       error: ethError,
     },
     usdc: {
+      value: usdcRawBalance ?? 0n,
       amount: usdcRawBalance ? Number(formatUnits(usdcRawBalance, 6)).toFixed(2) : '0.00',
       symbol: 'USDC',
       isLoading: isUsdcLoading,

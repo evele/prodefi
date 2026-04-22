@@ -16,6 +16,7 @@ import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
 import type { Game } from '../lib/types'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { useUserBalance } from '../hooks/useBalance'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapCombinedPredictionErrorToMessage, mapPredictionErrorToMessage, mapWinnersErrorToMessage } from '../lib/transaction-errors'
 
@@ -112,6 +113,7 @@ const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 function PredictionsPage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
+  const { eth: nativeBalance } = useUserBalance()
   const { carton } = useSearch({ from: '/predictions' })
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
@@ -617,6 +619,17 @@ function PredictionsPage() {
   const canSubmitCombined = combinedSubmitBlockedMessage === null
   const canSubmitWinners = winnersSubmitBlockedMessage === null
 
+  const gasReadinessNotice = (() => {
+    if (!isConnected || nativeBalance.isLoading || !hasOwnedCartons || isExpired) return null
+    if (nativeBalance.value > 0n) return null
+
+    return {
+      title: `Te falta ${nativeBalance.symbol} para gas`,
+      description:
+        `Aunque el juego sea USDC-only, todavía necesitas ${nativeBalance.symbol} para enviar predicciones y reclamar premios.`,
+    }
+  })()
+
   const handleCartonChange = (value: string) => {
     navigate({ to: '/predictions', search: { carton: value } })
   }
@@ -687,6 +700,23 @@ function PredictionsPage() {
           </span>
         )}
       </div>
+
+      {gasReadinessNotice && (
+        <div
+          className="rounded-lg px-4 py-3 space-y-1"
+          style={{
+            background: 'rgba(255,77,109,0.08)',
+            border: '1px solid rgba(255,77,109,0.22)',
+          }}
+        >
+          <p className="text-sm font-semibold" style={{ color: 'var(--accent-red)' }}>
+            {gasReadinessNotice.title}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {gasReadinessNotice.description}
+          </p>
+        </div>
+      )}
 
       {/* ─── Carton selector ─── */}
       <div

@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: April 15, 2026*
+*Last updated: April 16, 2026*
 
 ---
 
@@ -169,6 +169,7 @@ Context: the MVP flow is functionally complete, so the next highest-leverage wor
 - Submitted predictions are now rendered inside the same `Partidos` / `Ganadores` panels, with hidden send CTAs once that section is already onchain
 - Switching cartons and successful submits now reset local drafts correctly instead of leaking previous values
 - Read-only submitted prediction values now keep legibility instead of looking dimmed
+- Home and predictions now surface explicit native-gas warnings when the connected wallet has no ETH, clarifying that the USDC-only product flow still requires gas for approvals, submits, and claims
 
 #### Next UX sprint recommendation (Priority Order)
 
