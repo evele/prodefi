@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowDownRight, CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ConfirmModal } from '../components/ui/modal'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
@@ -14,6 +14,7 @@ import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contract
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
+import { isImprobableGame } from '../lib/improbable-scores'
 import type { Game } from '../lib/types'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { useUserBalance } from '../hooks/useBalance'
@@ -92,6 +93,47 @@ function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired
   }
 }
 
+type FlowCallout = {
+  eyebrow: string
+  title: string
+  detail: string
+  tone: 'neutral' | 'success' | 'warning'
+  ctaLabel?: string
+  ctaTarget?: 'games-panel' | 'winners-panel'
+}
+
+type BlockingStateCard = {
+  eyebrow: string
+  title: string
+  detail: string
+  tone: 'neutral' | 'warning'
+  actionLabel?: string
+  actionTo?: '/' | '/admin/dev'
+}
+
+function getFlowCalloutToneStyles(tone: FlowCallout['tone']) {
+  switch (tone) {
+    case 'success':
+      return {
+        background: 'rgba(0,230,118,0.08)',
+        border: '1px solid rgba(0,230,118,0.2)',
+        accent: 'var(--accent-green)',
+      }
+    case 'warning':
+      return {
+        background: 'rgba(255,214,0,0.08)',
+        border: '1px solid rgba(255,214,0,0.2)',
+        accent: 'var(--accent-gold)',
+      }
+    default:
+      return {
+        background: 'rgba(96,165,250,0.08)',
+        border: '1px solid rgba(96,165,250,0.18)',
+        accent: 'rgb(125, 211, 252)',
+      }
+  }
+}
+
 export const Route = createFileRoute('/predictions')({
   component: PredictionsPage,
   validateSearch: (search: Record<string, unknown>) => ({
@@ -104,10 +146,6 @@ const DEADLINE_NOT_SET_MESSAGE =
 const PREDICTION_REVERT_MESSAGE = 'Las predicciones de partidos fueron rechazadas en cadena.'
 const COMBINED_REVERT_MESSAGE = 'La predicción completa fue rechazada en cadena.'
 const WINNERS_REVERT_MESSAGE = 'Las predicciones de ganadores fueron rechazadas en cadena.'
-// TODO: Revisar este criterio con producto. Hoy se marca como "poco habitual"
-// cuando un equipo llega a 10+ goles, pero tal vez deba basarse en goles
-// totales del partido (por ejemplo, 6-5).
-const IMPROBABLE_SCORE_THRESHOLD = 10
 const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 
 function PredictionsPage() {
@@ -314,7 +352,7 @@ function PredictionsPage() {
 
   const improbableScoreSummaries = useMemo(() => {
     return games
-      .filter((game) => game.result.some((score) => score !== null && score >= IMPROBABLE_SCORE_THRESHOLD))
+      .filter((game) => isImprobableGame(game))
       .map((game) => `${teamsById[game.team1]} ${game.result[0] ?? '?'}-${game.result[1] ?? '?'} ${teamsById[game.team2]}`)
   }, [games])
 
@@ -440,41 +478,11 @@ function PredictionsPage() {
   const hasCompleteGamePredictions = games.length > 0 && remainingGamesCount === 0
   const hasGameDraft = completedGamesCount > 0
   const hasWinnerDraft = winnerPrediction.some((teamId) => teamId !== 0)
-  const selectedGroupPendingGames = useMemo(() => {
-    if (!selectedGroup) return 0
-    const group = groups.find((entry) => entry.groupLabel === selectedGroup)
-    if (!group) return 0
-    return group.games.filter((game) => game.result[0] === null || game.result[1] === null).length
-  }, [groups, selectedGroup])
   const gamesPanelStatus = selectedCartonGamesSubmitted ? 'submitted' : isExpired ? 'expired' : hasGameDraft ? 'draft' : 'pending'
   const winnersPanelStatus = selectedCartonWinnersSubmitted ? 'submitted' : isExpired ? 'expired' : hasWinnerDraft ? 'draft' : 'pending'
   const gamesPanelMeta = getPanelStatusMeta(gamesPanelStatus)
   const winnersPanelMeta = getPanelStatusMeta(winnersPanelStatus)
   const canAttemptCombinedSubmit = tokenId !== undefined && selectedCartonIsOwned && !selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted
-  const checklistItems = [
-    {
-      key: 'carton',
-      label: 'Selecciona un carton',
-      done: tokenId !== undefined && selectedCartonIsOwned,
-      detail: tokenId !== undefined && selectedCartonIsOwned ? `Carton #${tokenId.toString()} listo` : 'Elige con cuál vas a jugar',
-    },
-    {
-      key: 'games',
-      label: 'Completa todos los partidos',
-      done: selectedCartonGamesSubmitted || hasCompleteGamePredictions,
-      detail: selectedCartonGamesSubmitted ? 'Partidos ya enviados onchain' : `${completedGamesCount}/${games.length} resultados completos`,
-    },
-    {
-      key: 'winners',
-      label: 'Elige 4 ganadores distintos',
-      done: selectedCartonWinnersSubmitted || hasValidWinners,
-      detail: selectedCartonWinnersSubmitted
-        ? 'Ganadores ya enviados onchain'
-        : hasValidWinners
-          ? 'Ganadores listos para enviar'
-          : 'Faltan tus 4 ganadores del torneo',
-    },
-  ] as const
 
   const ownedCartonStatusContracts = useMemo(() => {
     if (!ownedCartons?.length) return []
@@ -555,6 +563,47 @@ function PredictionsPage() {
   }, [onchainTeamsHash])
 
   const totalGamesMismatch = totalGames !== undefined && Number(totalGames) !== games.length
+  const tournamentReadyForSubmission = hasDeadlineConfigured && teamsHashStatus === 'match' && !totalGamesMismatch
+  const checklistItems = [
+    {
+      key: 'carton',
+      label: 'Selecciona un carton',
+      done: tokenId !== undefined && selectedCartonIsOwned,
+      detail: !isConnected
+        ? 'Conecta tu wallet para cargar tus cartones'
+        : !hasOwnedCartons
+          ? 'Compra un carton para empezar'
+          : tokenId !== undefined && selectedCartonIsOwned
+            ? `Carton #${tokenId.toString()} listo`
+            : 'Elige con cual vas a jugar',
+    },
+    {
+      key: 'games',
+      label: 'Completa todos los partidos',
+      done: selectedCartonGamesSubmitted || hasCompleteGamePredictions,
+      detail: !tokenId || !selectedCartonIsOwned
+        ? 'Primero selecciona un carton valido'
+        : !tournamentReadyForSubmission
+          ? 'Esperando configuracion completa del torneo'
+          : selectedCartonGamesSubmitted
+            ? 'Partidos ya enviados onchain'
+            : `${completedGamesCount}/${games.length} resultados completos`,
+    },
+    {
+      key: 'winners',
+      label: 'Elige 4 ganadores distintos',
+      done: selectedCartonWinnersSubmitted || hasValidWinners,
+      detail: !tokenId || !selectedCartonIsOwned
+        ? 'Primero selecciona un carton valido'
+        : !tournamentReadyForSubmission
+          ? 'Esperando configuracion completa del torneo'
+          : selectedCartonWinnersSubmitted
+            ? 'Ganadores ya enviados onchain'
+            : hasValidWinners
+              ? 'Ganadores listos para enviar'
+              : 'Faltan tus 4 ganadores del torneo',
+    },
+  ] as const
 
   const predictionSubmitBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para enviar predicciones de partidos.'
@@ -618,6 +667,200 @@ function PredictionsPage() {
   const canSubmitGames = predictionSubmitBlockedMessage === null
   const canSubmitCombined = combinedSubmitBlockedMessage === null
   const canSubmitWinners = winnersSubmitBlockedMessage === null
+  const adminActionTo = import.meta.env.DEV ? '/admin/dev' as const : undefined
+
+  const blockingState: BlockingStateCard | null = (() => {
+    if (!isConnected) {
+      return {
+        eyebrow: 'Wallet desconectada',
+        title: 'Necesitas conectar tu wallet para empezar.',
+        detail: 'Cuando la conectes, esta pantalla cargara tus cartones y habilitara el flujo de envio.',
+        tone: 'neutral',
+      }
+    }
+
+    if (!hasOwnedCartons) {
+      return {
+        eyebrow: 'Sin cartones',
+        title: 'Esta wallet todavia no tiene cartones.',
+        detail: 'Compra uno primero y luego vuelve aqui para completar partidos y ganadores.',
+        tone: 'neutral',
+        actionLabel: 'Ir al inicio',
+        actionTo: '/',
+      }
+    }
+
+    if (tokenId !== undefined && !selectedCartonIsOwned) {
+      return {
+        eyebrow: 'Carton invalido',
+        title: 'El carton seleccionado no pertenece a esta wallet.',
+        detail: 'Cambia a un carton propio para volver a editar o revisar una prediccion valida.',
+        tone: 'warning',
+      }
+    }
+
+    if (!hasDeadlineConfigured) {
+      return {
+        eyebrow: 'Torneo incompleto',
+        title: 'El deadline de envio todavia no esta configurado.',
+        detail: 'Hasta que exista una fecha valida, la app mantiene bloqueado el envio para evitar estados ambiguos.',
+        tone: 'warning',
+        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
+        actionTo: adminActionTo,
+      }
+    }
+
+    if (teamsHashStatus === 'unset') {
+      return {
+        eyebrow: 'Equipos no cargados',
+        title: 'Falta publicar la configuracion de equipos en cadena.',
+        detail: 'La pantalla puede mostrar el fixture local, pero no deberia permitir envios hasta que ambos lados coincidan.',
+        tone: 'warning',
+        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
+        actionTo: adminActionTo,
+      }
+    }
+
+    if (teamsHashStatus === 'mismatch') {
+      return {
+        eyebrow: 'Desincronizacion',
+        title: 'La lista de equipos local no coincide con la version onchain.',
+        detail: 'Primero hay que alinear la configuracion para evitar que el usuario confirme una prediccion sobre datos inconsistentes.',
+        tone: 'warning',
+        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
+        actionTo: adminActionTo,
+      }
+    }
+
+    if (totalGamesMismatch) {
+      return {
+        eyebrow: 'Fixture inconsistente',
+        title: 'La cantidad de partidos no coincide entre UI y contrato.',
+        detail: 'Mientras ese numero no cierre, la app mantiene bloqueado el envio para no grabar una prediccion incompleta o mal indexada.',
+        tone: 'warning',
+      }
+    }
+
+    if (isExpired && !(selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted)) {
+      return {
+        eyebrow: 'Plazo cerrado',
+        title: 'Este carton ya no puede seguir editandose.',
+        detail: 'Puedes revisar lo que alcanzo a quedar cargado, pero el torneo ya cerro el periodo de envio.',
+        tone: 'warning',
+      }
+    }
+
+    return null
+  })()
+
+  const flowCallout: FlowCallout | null = (() => {
+    if (!isConnected) {
+      return {
+        eyebrow: 'Antes de empezar',
+        title: 'Conecta tu wallet para abrir tus cartones.',
+        detail: 'Desde aqui podras revisar estados, completar predicciones y enviarlas onchain.',
+        tone: 'neutral',
+      }
+    }
+
+    if (!hasOwnedCartons) {
+      return {
+        eyebrow: 'Sin cartones',
+        title: 'Todavia no tienes cartones para completar.',
+        detail: 'Cuando compres uno, esta pantalla te llevara por el flujo de partidos y ganadores.',
+        tone: 'neutral',
+      }
+    }
+
+    if (!tokenId) {
+      return {
+        eyebrow: 'Elige un carton',
+        title: 'Selecciona el carton con el que quieres seguir.',
+        detail: 'La pantalla se adapta al estado de ese carton para mostrarte el siguiente paso.',
+        tone: 'neutral',
+      }
+    }
+
+    if (!selectedCartonIsOwned) {
+      return {
+        eyebrow: 'Carton invalido',
+        title: 'Ese carton no pertenece a la wallet conectada.',
+        detail: 'Cambia de carton para seguir con una prediccion valida.',
+        tone: 'warning',
+      }
+    }
+
+    if (!hasDeadlineConfigured || teamsHashStatus === 'unset' || teamsHashStatus === 'mismatch' || totalGamesMismatch) {
+      return {
+        eyebrow: 'Torneo en configuracion',
+        title: 'Todavia falta informacion base para cerrar predicciones.',
+        detail: 'Cuando el torneo quede sincronizado, podras enviar este carton normalmente.',
+        tone: 'warning',
+      }
+    }
+
+    if (selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted) {
+      return {
+        eyebrow: 'Prediccion cerrada',
+        title: 'Tu carton ya quedo confirmado onchain.',
+        detail: 'No tienes mas acciones pendientes aqui. Solo queda esperar resultados y luego revisar premios.',
+        tone: 'success',
+        ctaLabel: 'Revisar ganadores',
+        ctaTarget: 'winners-panel',
+      }
+    }
+
+    if (isExpired) {
+      return {
+        eyebrow: 'Plazo cerrado',
+        title: 'Este carton quedo incompleto al cerrar el deadline.',
+        detail: 'Puedes revisar lo que alcanzo a quedar cargado, pero ya no es posible enviar cambios.',
+        tone: 'warning',
+      }
+    }
+
+    if (selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted) {
+      return {
+        eyebrow: 'Siguiente paso',
+        title: 'Partidos confirmados. Solo faltan los 4 ganadores.',
+        detail: 'Baja a la siguiente seccion y cierra el carton con tus puestos del torneo.',
+        tone: 'success',
+        ctaLabel: 'Ir a ganadores',
+        ctaTarget: 'winners-panel',
+      }
+    }
+
+    if (canAttemptCombinedSubmit && canSubmitCombined) {
+      return {
+        eyebrow: 'Listo para enviar',
+        title: 'Ya puedes cerrar la prediccion completa en una sola transaccion.',
+        detail: 'Tus partidos y tus 4 ganadores ya estan completos. Revisa una vez mas y envia todo junto.',
+        tone: 'success',
+        ctaLabel: 'Revisar envio',
+        ctaTarget: 'winners-panel',
+      }
+    }
+
+    if (hasCompleteGamePredictions) {
+      return {
+        eyebrow: 'Partidos completos',
+        title: 'Tus resultados ya estan listos para enviarse.',
+        detail: 'Puedes mandar solo partidos o aprovechar y completar ganadores para cerrar todo junto.',
+        tone: 'neutral',
+        ctaLabel: 'Ir a ganadores',
+        ctaTarget: 'winners-panel',
+      }
+    }
+
+    return {
+      eyebrow: 'Empieza aqui',
+      title: 'Completa primero los resultados de partidos.',
+      detail: 'Cuando cierres esa parte, la pantalla te va a empujar hacia los ganadores del torneo.',
+      tone: 'neutral',
+      ctaLabel: 'Ir a partidos',
+      ctaTarget: 'games-panel',
+    }
+  })()
 
   const gasReadinessNotice = (() => {
     if (!isConnected || nativeBalance.isLoading || !hasOwnedCartons || isExpired) return null
@@ -634,6 +877,33 @@ function PredictionsPage() {
     navigate({ to: '/predictions', search: { carton: value } })
   }
 
+  const handleRouteNavigation = (to?: BlockingStateCard['actionTo']) => {
+    if (!to) return
+    navigate({ to })
+  }
+
+  const scrollToSection = (target?: FlowCallout['ctaTarget']) => {
+    if (!target || typeof document === 'undefined') return
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const selectorEmptyStyles = getFlowCalloutToneStyles(!isConnected || !hasOwnedCartons ? 'neutral' : 'warning')
+  const blockingStateStyles = blockingState ? getFlowCalloutToneStyles(blockingState.tone) : null
+  const checklistToneStyles = blockingState ? blockingStateStyles : null
+  const passivePanelTone = !isConnected || !hasOwnedCartons || !tokenId ? 'neutral' : 'warning'
+  const gamesPanelNoticeTone = canSubmitGames ? 'success' : passivePanelTone
+  const winnersPanelNoticeTone = (canAttemptCombinedSubmit ? canSubmitCombined : canSubmitWinners) ? 'success' : passivePanelTone
+  const gamesPanelNoticeStyles = getFlowCalloutToneStyles(gamesPanelNoticeTone)
+  const winnersPanelNoticeStyles = getFlowCalloutToneStyles(winnersPanelNoticeTone)
+  const gamesPanelNotice = selectedCartonGamesSubmitted
+    ? null
+    : predictionSubmitBlockedMessage ?? 'Tus resultados estan completos. Ya puedes enviarlos cuando quieras.'
+  const winnersPanelNotice = selectedCartonWinnersSubmitted
+    ? null
+    : canAttemptCombinedSubmit
+      ? combinedSubmitBlockedMessage ?? 'Recomendado: envia partidos y ganadores juntos en una sola transaccion.'
+      : winnersSubmitBlockedMessage ?? 'Tus 4 ganadores ya estan listos para enviarse.'
+
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
     const s = Math.max(0, secs)
@@ -646,16 +916,63 @@ function PredictionsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
-
       {/* ─── Page header ─── */}
       <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>
+        <h1 className="font-display text-2xl font-black uppercase tracking-wide sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
           Predicciones
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
           Predice resultados y ganadores del torneo
         </p>
       </div>
+
+      {(() => {
+        if (!flowCallout) return null
+        const toneStyles = getFlowCalloutToneStyles(flowCallout.tone)
+        const Icon = flowCallout.tone === 'success' ? CheckCircle2 : flowCallout.tone === 'warning' ? LockKeyhole : Clock3
+
+        return (
+          <div
+            className="rounded-xl p-4 sm:p-5"
+            style={{
+              background: toneStyles.background,
+              border: toneStyles.border,
+            }}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div
+                  className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.04)', color: toneStyles.accent }}
+                >
+                  <Icon size={18} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.24em]" style={{ color: toneStyles.accent }}>
+                    {flowCallout.eyebrow}
+                  </p>
+                  <p className="text-base font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
+                    {flowCallout.title}
+                  </p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {flowCallout.detail}
+                  </p>
+                </div>
+              </div>
+              {flowCallout.ctaLabel && flowCallout.ctaTarget && (
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => scrollToSection(flowCallout.ctaTarget)}
+                >
+                  {flowCallout.ctaLabel}
+                  <ArrowDownRight size={16} />
+                </Button>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ─── Status banners ─── */}
       {teamsHashStatus === 'mismatch' && (
@@ -676,7 +993,7 @@ function PredictionsPage() {
 
       {/* ─── Deadline banner ─── */}
       <div
-        className="rounded-lg px-4 py-2.5 flex items-center justify-between text-sm"
+        className="flex flex-col gap-1.5 rounded-lg px-4 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"
         role="status"
         aria-live="polite"
         style={{
@@ -695,7 +1012,7 @@ function PredictionsPage() {
           )}
         </span>
         {!isExpired && remaining !== undefined && (
-          <span style={{ fontFamily: 'var(--font-mono-custom)', fontWeight: 600 }}>
+          <span className="text-xs sm:text-sm" style={{ fontFamily: 'var(--font-mono-custom)', fontWeight: 600 }}>
             {formatCountdown(remaining)}
           </span>
         )}
@@ -727,9 +1044,34 @@ function PredictionsPage() {
           Seleccionar Cartón
         </p>
         {!isConnected ? (
-          <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>Conecta tu wallet para ver tus cartones.</p>
+          <div
+            className="rounded-lg px-4 py-4 space-y-2"
+            style={{ background: selectorEmptyStyles.background, border: selectorEmptyStyles.border }}
+          >
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Conecta tu wallet para ver tus cartones.
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Apenas la conectes, esta pantalla prioriza el carton mas accionable y te muestra el siguiente paso para terminarlo.
+            </p>
+          </div>
         ) : !hasOwnedCartons ? (
-          <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>Esta wallet no tiene cartones aún.</p>
+          <div
+            className="rounded-lg px-4 py-4 space-y-3"
+            style={{ background: selectorEmptyStyles.background, border: selectorEmptyStyles.border }}
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Esta wallet no tiene cartones aun.
+              </p>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                El flujo de predicciones empieza cuando compras uno. Despues vuelves aqui para completar partidos y ganadores.
+              </p>
+            </div>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleRouteNavigation('/')}>
+              Ir al inicio
+            </Button>
+          </div>
         ) : (
           <>
             <Select value={tokenId?.toString()} onValueChange={handleCartonChange}>
@@ -767,24 +1109,64 @@ function PredictionsPage() {
         )}
       </div>
 
+      {blockingState && blockingStateStyles && (
+        <div
+          className="rounded-xl p-4 sm:p-5"
+          style={{ background: blockingStateStyles.background, border: blockingStateStyles.border }}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: blockingStateStyles.accent }}>
+                {blockingState.eyebrow}
+              </p>
+              <p className="text-base font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
+                {blockingState.title}
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                {blockingState.detail}
+              </p>
+            </div>
+            {blockingState.actionLabel && blockingState.actionTo && (
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleRouteNavigation(blockingState.actionTo)}>
+                {blockingState.actionLabel}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── Submission checklist ─── */}
       <div
         className="rounded-xl p-4 space-y-3"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+        style={{
+          background: checklistToneStyles ? checklistToneStyles.background : 'var(--bg-card)',
+          border: checklistToneStyles ? checklistToneStyles.border : '1px solid var(--border-color)',
+        }}
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
               Checklist de envío
             </p>
             <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
-              {canAttemptCombinedSubmit && canSubmitCombined
-                ? 'Ya puedes enviar todo en una sola transacción.'
-                : 'Completa estos 3 puntos antes de cerrar la predicción completa.'}
+              {blockingState
+                ? blockingState.title
+                : selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted
+                  ? 'Este carton ya no tiene pasos pendientes; abajo puedes revisar lo enviado.'
+                  : selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted
+                    ? 'Partidos cerrados. Ahora falta elegir y enviar los 4 ganadores.'
+                    : canAttemptCombinedSubmit && canSubmitCombined
+                      ? 'Ya puedes enviar todo en una sola transacción.'
+                      : 'Completa estos 3 puntos antes de cerrar la predicción completa.'}
             </p>
+            {blockingState && (
+              <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                {blockingState.detail}
+              </p>
+            )}
           </div>
           {tokenId !== undefined && selectedCartonIsOwned && (
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <span className="text-xs sm:self-start" style={{ color: 'var(--text-secondary)' }}>
               Carton #{tokenId.toString()}
             </span>
           )}
@@ -817,12 +1199,13 @@ function PredictionsPage() {
 
       {/* ─── Game Predictions ─── */}
       <div
+        id="games-panel"
         className="rounded-xl overflow-hidden"
         style={{ border: '1px solid var(--border-color)' }}
       >
         {/* Section header */}
         <div
-          className="px-4 py-3 flex items-center justify-between"
+          className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
           style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
         >
           <div>
@@ -836,13 +1219,13 @@ function PredictionsPage() {
               {gamesPanelMeta.detail}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2 py-1 rounded-full" style={{ background: gamesPanelMeta.bg, color: gamesPanelMeta.color }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full px-2 py-1 text-xs" style={{ background: gamesPanelMeta.bg, color: gamesPanelMeta.color }}>
               {gamesPanelMeta.label}
             </span>
             {!selectedCartonGamesSubmitted && tokenId !== undefined && selectedCartonIsOwned && (
               <span
-                className="text-xs px-2 py-1 rounded-full"
+                className="rounded-full px-2 py-1 text-xs"
                 style={{
                   background: hasCompleteGamePredictions ? 'rgba(0,230,118,0.1)' : 'rgba(255,214,0,0.12)',
                   color: hasCompleteGamePredictions ? 'var(--accent-green)' : 'var(--accent-gold)',
@@ -860,30 +1243,26 @@ function PredictionsPage() {
         </div>
 
         {/* Group tabs */}
-        <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
-          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx > 0) setSelectedGroup(displayGroups[idx - 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) <= 0} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
+          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx > 0) setSelectedGroup(displayGroups[idx - 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) <= 0} className="shrink-0 rounded p-1 hover:bg-bg-card disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
           <div className="flex gap-1.5 rounded-lg p-1 flex-1" style={{ background: 'var(--bg-card)' }}>
-            {displayGroups.map((group) => (<button key={group.groupLabel} onClick={() => setSelectedGroup(group.groupLabel)} className="flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-all" style={{ background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent', color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)', border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}` }}>{group.groupLabel}</button>))}
+            {displayGroups.map((group) => (<button key={group.groupLabel} onClick={() => setSelectedGroup(group.groupLabel)} className="flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-all sm:px-3 sm:text-sm" style={{ background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent', color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)', border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}` }}>{group.groupLabel}</button>))}
           </div>
-          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx < displayGroups.length - 1) setSelectedGroup(displayGroups[idx + 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) >= displayGroups.length - 1} className="shrink-0 p-1 rounded hover:bg-bg-card disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
+          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx < displayGroups.length - 1) setSelectedGroup(displayGroups[idx + 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) >= displayGroups.length - 1} className="shrink-0 rounded p-1 hover:bg-bg-card disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
         </div>
 
         {/* Group matches */}
         <div className="p-3">
-          {!selectedCartonGamesSubmitted && tokenId !== undefined && selectedCartonIsOwned && (
+          {gamesPanelNotice && (
             <div
               className="mb-3 rounded-lg px-3 py-2 text-sm"
               style={{
-                background: hasCompleteGamePredictions ? 'rgba(0,230,118,0.08)' : 'rgba(255,214,0,0.08)',
-                border: `1px solid ${hasCompleteGamePredictions ? 'rgba(0,230,118,0.18)' : 'rgba(255,214,0,0.18)'}`,
-                color: hasCompleteGamePredictions ? 'var(--accent-green)' : 'var(--accent-gold)',
+                background: gamesPanelNoticeStyles.background,
+                border: gamesPanelNoticeStyles.border,
+                color: gamesPanelNoticeStyles.accent,
               }}
             >
-              {hasCompleteGamePredictions
-                ? 'Todos los resultados de partidos están completos. Ya puedes enviarlos.'
-                : selectedGroupPendingGames > 0
-                  ? `Te faltan ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} por completar. En el grupo ${selectedGroup} quedan ${selectedGroupPendingGames}.`
-                  : `Te faltan ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} por completar antes de enviar.`}
+              {gamesPanelNotice}
             </div>
           )}
           <GroupsView
@@ -902,7 +1281,9 @@ function PredictionsPage() {
         >
           {selectedCartonGamesSubmitted ? (
             <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-              Estado actual: {gamesPanelMeta.label}. Puedes revisar los resultados enviados arriba.
+              {selectedCartonWinnersSubmitted
+                ? 'Partidos confirmados. Este carton ya quedo cerrado y aqui solo ves el resumen enviado.'
+                : 'Partidos confirmados. El siguiente paso es bajar a Ganadores para completar el carton.'}
             </p>
           ) : (
             <>
@@ -935,7 +1316,7 @@ function PredictionsPage() {
         isOpen={isImprobableScoresModalOpen}
         onClose={() => setIsImprobableScoresModalOpen(false)}
         title="Confirmar marcadores poco habituales"
-        message={`Hay ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} donde un equipo anota 10 o más goles: ${improbableScoreSummaries.join(', ')}. ¿Seguro que querés enviar estas predicciones?`}
+        message={`Tenes ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} con resultados de goleada historica: ${improbableScoreSummaries.join(', ')}. ¿Confirmas que queres enviar estas predicciones?`}
         confirmLabel={pendingGameSubmitMode === 'combined' ? 'Sí, enviar todo' : 'Sí, enviar partidos'}
         variant="warning"
         onConfirm={pendingGameSubmitMode === 'combined' ? submitPredictionAndWinners : submitPrediction}
@@ -943,11 +1324,12 @@ function PredictionsPage() {
 
       {/* ─── Winner Predictions ─── */}
       <div
+        id="winners-panel"
         className="rounded-xl overflow-hidden"
         style={{ border: '1px solid var(--border-color)' }}
       >
         <div
-          className="px-4 py-3 flex items-center justify-between"
+          className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
           style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
         >
           <div>
@@ -961,12 +1343,26 @@ function PredictionsPage() {
               {winnersPanelMeta.detail}
             </p>
           </div>
-          <span className="text-xs px-2 py-1 rounded-full" style={{ background: winnersPanelMeta.bg, color: winnersPanelMeta.color }}>
-            {winnersPanelMeta.label}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full px-2 py-1 text-xs" style={{ background: winnersPanelMeta.bg, color: winnersPanelMeta.color }}>
+              {winnersPanelMeta.label}
+            </span>
+          </div>
         </div>
 
         <div className="p-4 space-y-3">
+          {winnersPanelNotice && (
+            <div
+              className="rounded-lg px-3 py-2 text-sm"
+              style={{
+                background: winnersPanelNoticeStyles.background,
+                border: winnersPanelNoticeStyles.border,
+                color: winnersPanelNoticeStyles.accent,
+              }}
+            >
+              {winnersPanelNotice}
+            </div>
+          )}
           <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(1, teamId)} />
           <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(2, teamId)} />
           <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(3, teamId)} />
@@ -979,7 +1375,9 @@ function PredictionsPage() {
         >
           {selectedCartonWinnersSubmitted ? (
             <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-              Estado actual: {winnersPanelMeta.label}. Puedes revisar los equipos enviados arriba.
+              {selectedCartonGamesSubmitted
+                ? 'Ganadores confirmados. Este carton ya no requiere mas acciones y queda a la espera de resultados.'
+                : 'Ganadores confirmados. Puedes revisar arriba los equipos que quedaron guardados.'}
             </p>
           ) : canAttemptCombinedSubmit ? (
             <>

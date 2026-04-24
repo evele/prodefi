@@ -12,12 +12,12 @@ type GroupMatchesProps = {
 export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange }: GroupMatchesProps) {
   return (
     <div
-      className="rounded-xl px-4 py-3"
+      className="rounded-xl px-3 py-3 sm:px-4"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
     >
-      <div className="flex items-center gap-2 mb-2">
+      <div className="mb-2 flex items-center gap-2 sm:mb-3">
         <span
-          className="font-display text-base font-bold tracking-wider uppercase"
+          className="font-display text-sm font-bold tracking-wider uppercase sm:text-base"
           style={{ color: 'var(--accent-green)' }}
         >
           Grupo {groupLabel}
