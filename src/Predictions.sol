@@ -157,6 +157,10 @@ contract Predictions is Ownable {
     }
 
     // Function for owner to set positions
+    // TODO: Final leaderboard integrity improvements:
+    // - Add an optional challenge window between setting final positions and tournament finalization.
+    // - Add batched verification so final positions can be checked in chunks without recalculating every token in one tx.
+    // - Add a resultsHash/leaderboardHash commitment to anchor the offchain ranking calculation used for final positions.
     function setPositions(uint256[] calldata _predictionIds, uint256[] calldata _predictionPoints)
         public
         onlyOwner
@@ -185,6 +189,25 @@ contract Predictions is Ownable {
             revert TokenNotInLeaderboard();
         }
         return tokenPositions[tokenId];
+    }
+
+    function allResultsSet() public view returns (bool) {
+        for (uint8 i = 1; i <= totalGames; i++) {
+            if (!games[i].set) return false;
+        }
+        return totalGames > 0;
+    }
+
+    function officialWinnersSet() external view returns (bool) {
+        return officialWinners.set;
+    }
+
+    function hasFinalPositions() public view returns (bool) {
+        return positionsVersion > 0;
+    }
+
+    function isReadyForFinalization() external view returns (bool) {
+        return allResultsSet() && officialWinners.set && hasFinalPositions();
     }
 
     modifier onlyCartonOwner(uint256 tokenId) {

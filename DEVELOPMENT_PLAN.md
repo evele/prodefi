@@ -291,6 +291,14 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - Country flags in team UI
 - `PredictionsFactory` for multi-tournament support
 
+### Tournament lifecycle consolidation
+
+- Lifecycle state is tournament-wide: `closeSales(tournamentId)` blocks new purchases/deposits, while `finalizeTournament(tournamentId)` snapshots configured prize assets and enables claims.
+- Prize accounting remains token-based inside `Treasury` (`prizePools`, `prizePoolDistributions`, claims), but the product/frontend is USDC-only for now.
+- Prize distribution is intended to be set after sales close, when the final pool is known. Distribution may sum to less than 100% to leave room for development, donation, jackpot, or other reserves.
+- Results can be set onchain as matches are played. Provisional rankings can be computed offchain for display, while final positions are set onchain once and become the source of truth for prize claims.
+- Deferred integrity improvements: challenge window before finalization, batched final-position verification, and `resultsHash`/`leaderboardHash` commitments for the offchain ranking calculation.
+
 ---
 
 ## Architecture Decisions

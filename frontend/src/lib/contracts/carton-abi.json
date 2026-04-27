@@ -1272,6 +1272,11 @@
   },
   {
     "type": "error",
+    "name": "TournamentSalesClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "WithdrawFailed",
     "inputs": []
   },

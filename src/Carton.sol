@@ -14,6 +14,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 interface ITreasury {
     function depositFromSales(uint256 tournamentId) external payable;
     function depositFromSalesERC20(uint256 tournamentId, address token, uint256 amount) external;
+    function salesClosed(uint256 tournamentId) external view returns (bool);
 }
 
 /// @custom:security-contact inux2012@gmail.com
@@ -32,6 +33,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     error NoTokensToWithdraw();
     error ZeroTreasuryAddress();
     error ZeroTournamentId();
+    error TournamentSalesClosed();
 
     bytes32 public constant URI_SETTER_ROLE = keccak256("URI_SETTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -102,6 +104,12 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     function buyCartonWithToken(address token) external whenNotPaused nonReentrant {
         if (!acceptedTokens[token]) revert TokenNotAccepted();
         if (tokenPrices[token] == 0) revert TokenPriceNotSet();
+        ITreasury _treasury = treasury;
+        uint256 _tournamentId = activeTournamentId;
+        if (address(_treasury) != address(0) && _tournamentId > 0 && _treasury.salesClosed(_tournamentId)) {
+            revert TournamentSalesClosed();
+        }
+
         uint256 amount = tokenPrices[token];
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -111,8 +119,6 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         emit CartonPurchasedWithToken(msg.sender, tokenId, token, amount);
 
         // Auto-deposit to Treasury if configured
-        ITreasury _treasury = treasury;
-        uint256 _tournamentId = activeTournamentId;
         if (address(_treasury) != address(0) && _tournamentId > 0) {
             IERC20(token).approve(address(_treasury), amount);
             _treasury.depositFromSalesERC20(_tournamentId, token, amount);

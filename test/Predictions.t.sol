@@ -492,14 +492,26 @@ contract PredictionsTest is Test {
         cart.setTreasuryAddress(address(treasury));
         cart.setActiveTournament(1);
 
+        treasury.depositFromSales{value: 1 ether}(1);
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        treasury.closeSales(1);
+
         uint8[] memory percentages = new uint8[](1);
         percentages[0] = 100;
         treasury.setPrizeDistribution(1, address(0), percentages);
-        treasury.depositFromSales{value: 1 ether}(1);
-        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
-        treasury.closeTournament(1, address(0));
-
         preds.setResults(1, 2, 1);
+        preds.setResults(2, 1, 1);
+        preds.setResults(3, 0, 2);
+        preds.setResults(4, 3, 0);
+        preds.setOfficialWinners([uint8(1), uint8(2), uint8(3), uint8(4)]);
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = TOKEN_ID;
+        uint256[] memory points = new uint256[](1);
+        points[0] = 100;
+        preds.setPositions(tokenIds, points);
+
+        treasury.finalizeTournament(1);
 
         vm.expectRevert(Predictions.TournamentClosedForCorrections.selector);
         preds.updateResults(1, 3, 2);

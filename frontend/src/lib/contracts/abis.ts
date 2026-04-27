@@ -1276,6 +1276,11 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
+    "name": "TournamentSalesClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "WithdrawFailed",
     "inputs": []
   },
@@ -1321,6 +1326,19 @@ export const PREDICTIONS_ABI = [
       }
     ],
     "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "allResultsSet",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1585,11 +1603,50 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "hasFinalPositions",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isReadyForFinalization",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "officialWinners",
     "inputs": [],
     "outputs": [
       {
         "name": "set",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "officialWinnersSet",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
         "type": "bool",
         "internalType": "bool"
       }
@@ -2506,6 +2563,19 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "closeSales",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "closeTournament",
     "inputs": [
       {
@@ -2514,7 +2584,7 @@ export const TREASURY_ABI = [
         "internalType": "uint256"
       },
       {
-        "name": "token",
+        "name": "",
         "type": "address",
         "internalType": "address"
       }
@@ -2581,6 +2651,38 @@ export const TREASURY_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "finalizeTournament",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getPrizeDistributionTokenCount",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -2783,6 +2885,54 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "prizeDistributionSet",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "prizeDistributionTokens",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "prizePoolDistributions",
     "inputs": [
       {
@@ -2872,6 +3022,25 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "salesClosed",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setPrizeDistribution",
     "inputs": [
       {
@@ -2901,6 +3070,25 @@ export const TREASURY_ABI = [
         "name": "interfaceId",
         "type": "bytes4",
         "internalType": "bytes4"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tournamentFinalized",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -3057,6 +3245,19 @@ export const TREASURY_ABI = [
   },
   {
     "type": "event",
+    "name": "SalesClosed",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SetPrizeDistribution",
     "inputs": [
       {
@@ -3100,6 +3301,19 @@ export const TREASURY_ABI = [
         "name": "closedPrizePool",
         "type": "uint256",
         "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TournamentFinalized",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
         "internalType": "uint256"
       }
     ],
@@ -3184,12 +3398,32 @@ export const TREASURY_ABI = [
   },
   {
     "type": "error",
+    "name": "SalesAlreadyClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SalesNotClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "TournamentAlreadyClosed",
     "inputs": []
   },
   {
     "type": "error",
     "name": "TournamentNotClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentNotFinalized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentNotReadyForFinalization",
     "inputs": []
   },
   {
