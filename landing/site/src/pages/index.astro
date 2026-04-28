@@ -1,0 +1,467 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+
+const page = {
+  title: 'ProDefi | Predicciones del Mundial 2026',
+  description:
+    'Conseguí tu cartón, hacé tus predicciones del Mundial 2026 y competí por premios reales en ProDefi.',
+  appUrl: 'https://app.prodefi.com',
+  waitlistAction: '',
+  waitlistCount: '+12.430 ya anotados',
+  launchMessage: 'Te avisamos apenas abramos los cartones.',
+  targetDate: '2026-06-11T20:00:00-03:00',
+  targetDateLabel: '11 de junio de 2026',
+  primaryPrize: 'Pozo principal',
+  prizeDetails: 'Top 4 del ranking',
+  winnerCount: '04 puestos',
+  email: 'hola@prodefi.app',
+}
+
+const steps = [
+  {
+    number: '01',
+    title: 'Conseguí tu cartón',
+    description: 'Una entrada al ranking del Mundial. Sin vueltas, sin tutoriales eternos.',
+  },
+  {
+    number: '02',
+    title: 'Hacé tus predicciones',
+    description: 'Resultados, ganadores, sorpresas. La lectura de partido corre por tu cuenta.',
+  },
+  {
+    number: '03',
+    title: 'Competí por premios',
+    description: 'Cada acierto suma. El ranking se define en la cancha y se verifica solo.',
+  },
+]
+
+const faqItems = [
+  {
+    question: '¿Qué es ProDefi?',
+    answer:
+      'Una plataforma para predecir el Mundial 2026. Conseguís un cartón, marcás resultados y competís contra otros hinchas en un único ranking global.',
+  },
+  {
+    question: '¿Cómo funciona?',
+    answer:
+      'Entrás, conseguís tu cartón, completás tus predicciones antes de cada deadline y seguís tu posición en el ranking a medida que se juegan los partidos.',
+  },
+  {
+    question: '¿Necesito saber de crypto para jugar?',
+    answer:
+      'No. La experiencia está pensada para que la parte técnica quede por debajo. Vos te enfocás en leer el Mundial y competir.',
+  },
+  {
+    question: '¿Cómo participo?',
+    answer:
+      'Sumate a la waiting list y te avisamos primero cuando abramos. Después vas directo a la app para conseguir tu cartón.',
+  },
+  {
+    question: '¿Qué puedo ganar?',
+    answer:
+      'Premios reales para los primeros puestos del ranking general. La tabla final, el pozo y la distribución se publican antes del lanzamiento.',
+  },
+  {
+    question: '¿Cuándo se lanza?',
+    answer:
+      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la waiting list.',
+  },
+  {
+    question: '¿Qué significa que sea onchain?',
+    answer:
+      'Que las reglas, los puntajes y los premios quedan verificables públicamente. No dependés de que alguien te diga que fue justo: podés comprobarlo.',
+  },
+]
+
+const socialLinks = [
+  { label: 'Twitter / X', href: '#' },
+  { label: 'Instagram', href: '#' },
+  { label: 'Discord', href: '#' },
+]
+
+const year = new Date().getFullYear()
+---
+
+<BaseLayout title={page.title} description={page.description}>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="#top" aria-label="ProDefi, inicio">
+        <span class="brand-wordmark">PRODEFI</span>
+        <span class="brand-ball" aria-hidden="true">⚽</span>
+      </a>
+
+      <nav class="header-nav" aria-label="Navegación principal">
+        <a href="#countdown">Mundial</a>
+        <a href="#premios">Premios</a>
+        <a href="#waitlist">Waitlist</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <a class="chip-link chip-link--accent" href="#waitlist">Sumarme</a>
+    </div>
+  </header>
+
+  <main id="contenido">
+    <section class="hero" id="top">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <div class="kicker-row">
+            <span class="kicker-line"></span>
+            <p class="eyebrow eyebrow--celeste">Predicciones del Mundial · Onchain</p>
+          </div>
+
+          <h1 class="display hero-title">
+            Jugá<br />
+            al <span class="editorial">Mundial</span><br />
+            como nunca.
+          </h1>
+
+          <p class="hero-lead">
+            Conseguí tu cartón, predecí los partidos del Mundial 2026 y competí contra miles de
+            hinchas por <strong>premios reales</strong>. Una sola pasión, un solo ranking.
+          </p>
+
+          <div class="cta-row">
+            <a class="button button--accent" href="#waitlist">Sumate a la waiting list</a>
+            <a class="button button--ghost" href={page.appUrl}>Ir a la app</a>
+          </div>
+
+          <p class="trust-row">
+            <span class="trust-dot"></span>
+            <span>Resultados verificables · Sin saber de crypto</span>
+          </p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="hero-card" aria-label="Placeholder de imagen hero editable">
+            <div class="hero-card__grain"></div>
+            <div class="hero-card__label">
+              <span>[IMAGEN_HERO]</span>
+              <span>Editable</span>
+            </div>
+            <div class="hero-card__copy">
+              <span class="eyebrow eyebrow--celeste">Mundial · 2026</span>
+              <strong class="display">Vamos,<br />Argentina.</strong>
+            </div>
+            <div class="hero-card__crosshair hero-card__crosshair--vertical"></div>
+            <div class="hero-card__crosshair hero-card__crosshair--horizontal"></div>
+          </div>
+
+          <div class="hero-sticker">Beta abierta</div>
+        </div>
+      </div>
+
+      <div class="afa-stripe" aria-hidden="true"></div>
+
+      <div class="hero-steps-wrap">
+        <div class="shell hero-steps">
+          {steps.map((step, index) => (
+            <article class:list={["step-card", index > 0 && 'step-card--bordered']}>
+              <p class="step-number">Paso {step.number}</p>
+              <h2 class="display step-title">{step.title}</h2>
+              <p class="step-description">{step.description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="countdown-section" id="countdown" data-target-date={page.targetDate}>
+      <div class="countdown-watermark" aria-hidden="true">2026</div>
+      <div class="shell section-inner">
+        <div class="section-topline">
+          <div class="kicker-row">
+            <span class="kicker-line"></span>
+            <p class="eyebrow eyebrow--celeste">Cuenta regresiva</p>
+          </div>
+          <p class="microcopy">{page.targetDateLabel} · Buenos Aires</p>
+        </div>
+
+        <h2 class="display section-title section-title--countdown">
+          Falta poco para <span class="editorial">la fiesta</span>.
+        </h2>
+        <p class="section-lead section-lead--countdown">
+          El silbatazo inicial del Mundial 2026 está cada vez más cerca. Asegurá tu lugar en
+          ProDefi antes de que arranque la pelota.
+        </p>
+
+        <div class="countdown-grid" aria-label="Cuenta regresiva al Mundial 2026">
+          <div class="countdown-cell">
+            <span class="display countdown-value" data-countdown="days">00</span>
+            <span class="eyebrow">Días</span>
+          </div>
+          <div class="countdown-cell">
+            <span class="display countdown-value" data-countdown="hours">00</span>
+            <span class="eyebrow">Horas</span>
+          </div>
+          <div class="countdown-cell">
+            <span class="display countdown-value" data-countdown="minutes">00</span>
+            <span class="eyebrow">Minutos</span>
+          </div>
+          <div class="countdown-cell">
+            <span class="display countdown-value" data-countdown="seconds">00</span>
+            <span class="eyebrow">Segundos</span>
+          </div>
+        </div>
+
+        <div class="meta-strip">
+          <span>● En vivo</span>
+          <span>La ansiedad también juega</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="prizes-section" id="premios">
+      <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+      <div class="shell section-inner section-inner--light">
+        <div class="kicker-row kicker-row--ink">
+          <span class="kicker-line kicker-line--ink"></span>
+          <p class="eyebrow eyebrow--ink">Premios</p>
+        </div>
+
+        <div class="prizes-headline">
+          <h2 class="display section-title section-title--ink">
+            El que más sabe<br /><span class="editorial">se lleva todo.</span>
+          </h2>
+          <p class="section-lead section-lead--ink">
+            Cada predicción suma puntos. Al final del Mundial, los mejores del ranking se reparten
+            un pozo real. Sin sorteos, sin trampas: gana el que mejor entendió la pelota.
+          </p>
+        </div>
+
+        <div class="prize-grid">
+          <article class="prize-card prize-card--dark">
+            <p class="eyebrow eyebrow--lima">1° puesto</p>
+            <h3 class="display prize-value">{page.primaryPrize}</h3>
+            <p class="prize-note">Pozo principal · acumulado del Mundial</p>
+          </article>
+
+          <article class="prize-card prize-card--celeste">
+            <p class="eyebrow eyebrow--ink">Top ranking</p>
+            <h3 class="display prize-value prize-value--compact">{page.winnerCount}</h3>
+            <p class="prize-body">
+              Premios escalonados para los primeros del ranking general. Más fino jugás, más alto
+              quedás.
+            </p>
+            <ul class="ranking-lines" aria-label="Puestos premiados">
+              <li>#01 <span></span></li>
+              <li>#02 <span></span></li>
+              <li>#03 <span></span></li>
+              <li>#04 <span></span></li>
+            </ul>
+          </article>
+
+          <article class="prize-card prize-card--light">
+            <p class="eyebrow eyebrow--ink">Detalle</p>
+            <h3 class="display prize-value prize-value--compact">{page.prizeDetails}</h3>
+            <p class="prize-body prize-body--muted">
+              Tabla completa, fechas de pago y reglas del torneo se publican junto al lanzamiento.
+            </p>
+            <a class="button button--outline" href="#waitlist">Avisame cuando salga</a>
+          </article>
+        </div>
+
+        <div class="light-meta-strip">
+          <span>● Ranking transparente</span>
+          <span>● Premios verificables</span>
+          <span>● Sin letra chica</span>
+        </div>
+      </div>
+      <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+    </section>
+
+    <section class="waitlist-section" id="waitlist" data-waitlist-action={page.waitlistAction}>
+      <div class="waitlist-lines" aria-hidden="true"></div>
+      <div class="shell waitlist-inner">
+        <div class="waitlist-kicker">
+          <span class="kicker-line kicker-line--accent"></span>
+          <p class="eyebrow eyebrow--lima">Waiting list</p>
+          <span class="kicker-line kicker-line--accent"></span>
+        </div>
+
+        <h2 class="display section-title section-title--center">
+          Que no te lo<br /><span class="editorial">cuente otro.</span>
+        </h2>
+
+        <p class="section-lead section-lead--center">
+          Dejanos tu mail y te avisamos apenas abramos los cartones. Cero spam, cero vueltas.
+        </p>
+
+        <form class="waitlist-form" method="post" action={page.waitlistAction} data-waitlist-form novalidate>
+          <label class="sr-only" for="waitlist-email">Email</label>
+          <input
+            id="waitlist-email"
+            name="email"
+            type="email"
+            placeholder="tu@email.com"
+            autocomplete="email"
+            required
+          />
+          <button class="button button--accent" type="submit">Sumarme</button>
+        </form>
+
+        <p class="waitlist-feedback" data-waitlist-feedback aria-live="polite">
+          {page.launchMessage}
+        </p>
+
+        <div class="waitlist-meta">
+          <span>{page.waitlistCount}</span>
+          <span>·</span>
+          <span>Integración editable</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq-section" id="faq">
+      <div class="shell section-inner">
+        <div class="kicker-row">
+          <span class="kicker-line"></span>
+          <p class="eyebrow eyebrow--celeste">Preguntas frecuentes</p>
+        </div>
+
+        <h2 class="display section-title">
+          ¿Tenés <span class="editorial">dudas</span>? Las sacamos.
+        </h2>
+
+        <div class="faq-list">
+          {faqItems.map((item, index) => (
+            <details class="faq-item" open={index === 0}>
+              <summary>
+                <span class="faq-title-wrap">
+                  <span class="mono faq-index">{String(index + 1).padStart(2, '0')}</span>
+                  <span class="display faq-question">{item.question}</span>
+                </span>
+                <span class="faq-plus" aria-hidden="true">+</span>
+              </summary>
+              <div class="faq-answer">
+                <p>{item.answer}</p>
+              </div>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+    <div class="shell footer-inner">
+      <p class="display footer-wordmark">PRODEFI</p>
+
+      <div class="footer-grid">
+        <div>
+          <p class="eyebrow">Producto</p>
+          <div class="footer-links">
+            <a href={page.appUrl}>Ir a la app</a>
+            <a href="#waitlist">Waiting list</a>
+            <a href="#faq">FAQ</a>
+          </div>
+        </div>
+
+        <div>
+          <p class="eyebrow">Comunidad</p>
+          <div class="footer-links">
+            {socialLinks.map((link) => (
+              <a href={link.href}>{link.label}</a>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p class="eyebrow">Contacto</p>
+          <div class="footer-links">
+            <a href={`mailto:${page.email}`}>{page.email}</a>
+            <p class="footer-note">Hecho en Argentina, con la pelota en los pies.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-meta">
+        <span>© {year} ProDefi · Todos los partidos</span>
+        <span>Landing · Astro</span>
+      </div>
+    </div>
+  </footer>
+
+  <script is:inline>
+    const countdownRoot = document.querySelector('[data-target-date]')
+    if (countdownRoot) {
+      const target = new Date(countdownRoot.dataset.targetDate || '').getTime()
+      const nodes = {
+        days: countdownRoot.querySelector('[data-countdown="days"]'),
+        hours: countdownRoot.querySelector('[data-countdown="hours"]'),
+        minutes: countdownRoot.querySelector('[data-countdown="minutes"]'),
+        seconds: countdownRoot.querySelector('[data-countdown="seconds"]'),
+      }
+
+      const paintCountdown = () => {
+        const diff = Math.max(0, target - Date.now())
+        const days = Math.floor(diff / 86400000)
+        const hours = Math.floor((diff % 86400000) / 3600000)
+        const minutes = Math.floor((diff % 3600000) / 60000)
+        const seconds = Math.floor((diff % 60000) / 1000)
+
+        const values = { days, hours, minutes, seconds }
+        for (const [key, value] of Object.entries(values)) {
+          if (nodes[key]) nodes[key].textContent = String(value).padStart(2, '0')
+        }
+      }
+
+      paintCountdown()
+      window.setInterval(paintCountdown, 1000)
+    }
+
+    const waitlistSection = document.querySelector('[data-waitlist-action]')
+    const waitlistForm = document.querySelector('[data-waitlist-form]')
+    const waitlistFeedback = document.querySelector('[data-waitlist-feedback]')
+    if (waitlistSection && waitlistForm && waitlistFeedback) {
+      const endpoint = waitlistSection.dataset.waitlistAction || ''
+      const emailInput = waitlistForm.querySelector('input[type="email"]')
+
+      waitlistForm.addEventListener('submit', async (event) => {
+        if (!(emailInput instanceof HTMLInputElement)) return
+
+        const email = emailInput.value.trim()
+        const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        if (!isValid) {
+          event.preventDefault()
+          waitlistFeedback.textContent = 'Mirá, ese mail no anda. Probá de nuevo.'
+          waitlistFeedback.dataset.state = 'error'
+          return
+        }
+
+        if (!endpoint) {
+          event.preventDefault()
+          waitlistFeedback.textContent =
+            'Formulario listo para conectar. Definí `waitlistAction` en `src/pages/index.astro` y sale jugando.'
+          waitlistFeedback.dataset.state = 'idle'
+          return
+        }
+
+        event.preventDefault()
+        waitlistFeedback.textContent = 'Enviando...'
+        waitlistFeedback.dataset.state = 'idle'
+
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          })
+
+          if (!response.ok) throw new Error('bad response')
+
+          waitlistForm.reset()
+          waitlistFeedback.textContent = 'Estás adentro. Te avisamos apenas abramos los cartones.'
+          waitlistFeedback.dataset.state = 'success'
+        } catch {
+          waitlistFeedback.textContent = 'No pudimos guardar tu mail. Probá de nuevo en un rato.'
+          waitlistFeedback.dataset.state = 'error'
+        }
+      })
+    }
+  </script>
+</BaseLayout>

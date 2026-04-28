@@ -3,6 +3,8 @@ cache/
 out/
 /lib/
 node_modules/
+landing/site/dist/
+landing/site/.astro/
 
 # Ignores development broadcast logs
 !/broadcast
@@ -14,4 +16,3 @@ docs/
 
 # Dotenv file
 .env
-
