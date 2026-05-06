@@ -10,8 +10,8 @@
   --celeste: #74acdf;
   --celeste-2: #9cc6eb;
   --celeste-deep: #2b6fa8;
-  --lima: #c8ff3d;
-  --lima-deep: #7fbe1a;
+  --lima: #00e676;
+  --lima-deep: #00c85a;
   --danger: #ff8c8c;
   --shell: 1280px;
 }
@@ -61,7 +61,7 @@ input {
 .display {
   font-family: 'Anton', sans-serif;
   text-transform: uppercase;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 0.92;
 }
 
@@ -76,8 +76,16 @@ input {
 .mono,
 .microcopy {
   font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.eyebrow {
+  letter-spacing: 0.18em;
+}
+
+.mono,
+.microcopy {
+  letter-spacing: 0.16em;
 }
 
 .eyebrow,
@@ -166,7 +174,7 @@ input {
   color: var(--muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
@@ -226,12 +234,23 @@ input {
   position: relative;
   display: grid;
   gap: 2.2rem;
-  padding: 2.4rem 0 2rem;
+  padding: 2rem 0 2rem;
 }
 
 .hero-title {
   margin: 0;
   font-size: clamp(4.4rem, 18vw, 9.8rem);
+  line-height: 0.98;
+  padding-top: 0.08em;
+}
+
+.hero-title .editorial {
+  color: var(--celeste);
+}
+
+.section-title .editorial,
+.hero-title .editorial {
+  margin-right: 0.04em;
 }
 
 .hero-lead,
@@ -269,7 +288,7 @@ input {
   color: var(--muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -286,6 +305,10 @@ input {
   display: flex;
   align-items: center;
   gap: 0.9rem;
+}
+
+.hero-copy .kicker-row {
+  margin-bottom: 1rem;
 }
 
 .kicker-row--ink {
@@ -358,7 +381,7 @@ input {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.64rem;
   color: rgba(255, 255, 255, 0.75);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
@@ -547,7 +570,7 @@ input {
   margin-top: 1rem;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
@@ -574,7 +597,8 @@ input {
 }
 
 .section-title--ink,
-.prize-value {
+.prize-value,
+.prize-heading {
   color: var(--ink);
 }
 
@@ -631,14 +655,26 @@ input {
 }
 
 .prize-card--dark .prize-value,
+.prize-card--dark .prize-heading,
+.prize-card--dark .prize-body,
 .prize-card--dark .prize-note,
-.prize-card--dark .eyebrow {
+.prize-card--dark .eyebrow,
+.prize-card--dark .button {
   position: relative;
   z-index: 1;
 }
 
-.prize-card--dark .prize-value {
+.prize-card--dark .prize-value,
+.prize-card--dark .prize-heading,
+.prize-card--dark .prize-body,
+.prize-card--dark .button {
   color: var(--bone);
+}
+
+.prize-heading {
+  margin: 0;
+  font-size: clamp(2.3rem, 12vw, 4.2rem);
+  line-height: 0.96;
 }
 
 .prize-value {
@@ -655,7 +691,7 @@ input {
   color: var(--muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
@@ -684,6 +720,52 @@ input {
 
 .light-meta-strip {
   margin-top: 1.5rem;
+}
+
+.rules-hero__inner {
+  max-width: 58rem;
+}
+
+.rules-grid {
+  display: grid;
+  gap: 1px;
+  margin-top: 2.5rem;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.rules-card {
+  background: var(--ink-2);
+  padding: 1.6rem 1.35rem;
+}
+
+.rules-card__title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.8rem, 9vw, 3.2rem);
+  line-height: 0.98;
+}
+
+.rules-list {
+  display: grid;
+  gap: 0.85rem;
+  margin: 1.25rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--bone-2);
+  line-height: 1.6;
+}
+
+.rules-note-box {
+  margin-top: 1.4rem;
+  border: 1px solid var(--line);
+  background: rgba(116, 172, 223, 0.06);
+  padding: 1.35rem;
+}
+
+.rules-note-box__body {
+  margin: 0.65rem 0 0;
+  max-width: 52rem;
+  color: var(--bone-2);
+  line-height: 1.6;
 }
 
 .waitlist-section {
@@ -819,6 +901,7 @@ input {
   margin: 0;
   font-size: clamp(4rem, 22vw, 13rem);
   line-height: 0.84;
+  letter-spacing: -0.02em;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -877,12 +960,12 @@ input {
     grid-template-columns: minmax(0, 1.1fr) minmax(19rem, 0.84fr);
     align-items: end;
     gap: 3.2rem;
-    padding-top: 4rem;
     padding-bottom: 2.5rem;
   }
 
   .hero-title {
     font-size: clamp(6rem, 10vw, 9.6rem);
+    padding-top: 0.04em;
   }
 
   .hero-steps {
@@ -942,6 +1025,11 @@ input {
     padding: 2rem 1.8rem;
   }
 
+  .rules-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 3rem;
+  }
+
   .waitlist-form {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -963,6 +1051,10 @@ input {
   }
 
   .footer-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rules-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

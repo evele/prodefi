@@ -1,21 +1,41 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro'
 
+const waitlistAction = import.meta.env.PUBLIC_WAITLIST_ACTION || '/api/waitlist'
+
 const page = {
   title: 'ProDefi | Predicciones del Mundial 2026',
   description:
-    'Conseguí tu cartón, hacé tus predicciones del Mundial 2026 y competí por premios reales en ProDefi.',
-  appUrl: 'https://app.prodefi.com',
-  waitlistAction: '',
-  waitlistCount: '+12.430 ya anotados',
-  launchMessage: 'Te avisamos apenas abramos los cartones.',
+    'Conseguí tu cartón, hacé tus predicciones del Mundial 2026 y competí por premios reales con reglas transparentes.',
+  waitlistAction,
+  launchMessage: 'Dejá tu mail y te avisamos apenas abramos los cartones.',
   targetDate: '2026-06-11T20:00:00-03:00',
   targetDateLabel: '11 de junio de 2026',
-  primaryPrize: 'Pozo principal',
-  prizeDetails: 'Top 4 del ranking',
-  winnerCount: '04 puestos',
-  email: 'hola@prodefi.app',
+  heroSticker: 'Acceso anticipado',
 }
+
+const prizeCards = [
+  {
+    eyebrow: 'Pozo',
+    title: 'Pozo dinámico',
+    description: 'Se arma con los inscriptos confirmados antes del cierre.',
+    note: 'Se comunica antes del arranque.',
+  },
+  {
+    eyebrow: 'Puestos',
+    title: 'Puestos premiados',
+    description: 'Se definen según el tamaño final del pozo y la cantidad de inscriptos.',
+    note: 'El reparto acompaña el pozo acumulado.',
+  },
+  {
+    eyebrow: 'Reglas',
+    title: 'Reglas públicas',
+    description: 'Puntajes, desempates y distribución se publican antes del arranque.',
+    note: 'Todo queda visible en una sola página.',
+    href: '/reglas',
+    cta: 'Ver reglas y criterios',
+  },
+]
 
 const steps = [
   {
@@ -31,7 +51,7 @@ const steps = [
   {
     number: '03',
     title: 'Competí por premios',
-    description: 'Cada acierto suma. El ranking se define en la cancha y se verifica solo.',
+    description: 'Cada acierto suma. Cuanto más arriba terminás, más te podés llevar.',
   },
 ]
 
@@ -39,32 +59,32 @@ const faqItems = [
   {
     question: '¿Qué es ProDefi?',
     answer:
-      'Una plataforma para predecir el Mundial 2026. Conseguís un cartón, marcás resultados y competís contra otros hinchas en un único ranking global.',
+      'Una plataforma de Pronósticos Deportivos (casi como el clásico prode) sobre el Mundial 2026. Conseguís un cartón, marcás resultados y competís contra otros hinchas en un único ranking global.',
   },
   {
     question: '¿Cómo funciona?',
     answer:
-      'Entrás, conseguís tu cartón, completás tus predicciones antes de cada deadline y seguís tu posición en el ranking a medida que se juegan los partidos.',
+      'Te logueás, conseguís tu cartón, completás tus predicciones antes de que cierre y seguís tu posición en el ranking a medida que se juegan los partidos.',
   },
   {
     question: '¿Necesito saber de crypto para jugar?',
     answer:
-      'No. La experiencia está pensada para que la parte técnica quede por debajo. Vos te enfocás en leer el Mundial y competir.',
+      'No hace falta ser experto. La experiencia está pensada para que la parte técnica no te frene. No trates de entenderla, disfrutala.',
   },
   {
     question: '¿Cómo participo?',
     answer:
-      'Sumate a la waiting list y te avisamos primero cuando abramos. Después vas directo a la app para conseguir tu cartón.',
+      'Sumate a la lista de espera y te avisamos cuando esté listo.',
   },
   {
     question: '¿Qué puedo ganar?',
     answer:
-      'Premios reales para los primeros puestos del ranking general. La tabla final, el pozo y la distribución se publican antes del lanzamiento.',
+      'Premios reales según tu posición final. El pozo, los puestos premiados y la distribución se publican antes del lanzamiento.',
   },
   {
     question: '¿Cuándo se lanza?',
     answer:
-      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la waiting list.',
+      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la lista de espera.',
   },
   {
     question: '¿Qué significa que sea onchain?',
@@ -73,11 +93,8 @@ const faqItems = [
   },
 ]
 
-const socialLinks = [
-  { label: 'Twitter / X', href: '#' },
-  { label: 'Instagram', href: '#' },
-  { label: 'Discord', href: '#' },
-]
+const socialLinks = []
+const activeSocialLinks = socialLinks.filter((link) => link.href)
 
 const year = new Date().getFullYear()
 ---
@@ -95,7 +112,7 @@ const year = new Date().getFullYear()
       <nav class="header-nav" aria-label="Navegación principal">
         <a href="#countdown">Mundial</a>
         <a href="#premios">Premios</a>
-        <a href="#waitlist">Waitlist</a>
+        <a href="#waitlist">Lista de espera</a>
         <a href="#faq">FAQ</a>
       </nav>
 
@@ -115,32 +132,32 @@ const year = new Date().getFullYear()
 
           <h1 class="display hero-title">
             Jugá<br />
-            al <span class="editorial">Mundial</span><br />
-            como nunca.
+            el <span class="editorial">Mundial</span><br />
+            como nunca
           </h1>
 
           <p class="hero-lead">
-            Conseguí tu cartón, predecí los partidos del Mundial 2026 y competí contra miles de
-            hinchas por <strong>premios reales</strong>. Una sola pasión, un solo ranking.
+            Conseguí tu cartón, predecí los partidos del Mundial 2026 y competí por
+            <strong>premios reales</strong> con reglas transparentes. Una sola pasión, un solo ranking.
           </p>
 
           <div class="cta-row">
-            <a class="button button--accent" href="#waitlist">Sumate a la waiting list</a>
-            <a class="button button--ghost" href={page.appUrl}>Ir a la app</a>
+            <a class="button button--accent" href="#waitlist">Sumate a la lista de espera</a>
+            <!-- TODO: recuperar CTA a la app cuando exista una version publica. -->
           </div>
 
           <p class="trust-row">
             <span class="trust-dot"></span>
-            <span>Resultados verificables · Sin saber de crypto</span>
+            <span>Resultados verificables · Reglas claras</span>
           </p>
         </div>
 
         <div class="hero-visual">
-          <div class="hero-card" aria-label="Placeholder de imagen hero editable">
+          <div class="hero-card" aria-label="Visual editorial del Mundial 2026">
             <div class="hero-card__grain"></div>
             <div class="hero-card__label">
-              <span>[IMAGEN_HERO]</span>
-              <span>Editable</span>
+              <span>ProDefi</span>
+              <span>Mundial 2026</span>
             </div>
             <div class="hero-card__copy">
               <span class="eyebrow eyebrow--celeste">Mundial · 2026</span>
@@ -150,7 +167,7 @@ const year = new Date().getFullYear()
             <div class="hero-card__crosshair hero-card__crosshair--horizontal"></div>
           </div>
 
-          <div class="hero-sticker">Beta abierta</div>
+          <div class="hero-sticker">{page.heroSticker}</div>
         </div>
       </div>
 
@@ -181,7 +198,7 @@ const year = new Date().getFullYear()
         </div>
 
         <h2 class="display section-title section-title--countdown">
-          Falta poco para <span class="editorial">la fiesta</span>.
+          Falta poco para <span class="editorial">la fiesta</span>
         </h2>
         <p class="section-lead section-lead--countdown">
           El silbatazo inicial del Mundial 2026 está cada vez más cerca. Asegurá tu lugar en
@@ -224,49 +241,44 @@ const year = new Date().getFullYear()
 
         <div class="prizes-headline">
           <h2 class="display section-title section-title--ink">
-            El que más sabe<br /><span class="editorial">se lleva todo.</span>
+            Más acertás<br /><span class="editorial">más te llevás</span>
           </h2>
           <p class="section-lead section-lead--ink">
-            Cada predicción suma puntos. Al final del Mundial, los mejores del ranking se reparten
-            un pozo real. Sin sorteos, sin trampas: gana el que mejor entendió la pelota.
+            El pozo, los puestos premiados y la distribución final se ajustan según la cantidad de
+            inscriptos. Lo importante no es prometer números fijos: es dejar claras las reglas con
+            las que se define todo.
           </p>
         </div>
 
         <div class="prize-grid">
-          <article class="prize-card prize-card--dark">
-            <p class="eyebrow eyebrow--lima">1° puesto</p>
-            <h3 class="display prize-value">{page.primaryPrize}</h3>
-            <p class="prize-note">Pozo principal · acumulado del Mundial</p>
-          </article>
-
-          <article class="prize-card prize-card--celeste">
-            <p class="eyebrow eyebrow--ink">Top ranking</p>
-            <h3 class="display prize-value prize-value--compact">{page.winnerCount}</h3>
-            <p class="prize-body">
-              Premios escalonados para los primeros del ranking general. Más fino jugás, más alto
-              quedás.
-            </p>
-            <ul class="ranking-lines" aria-label="Puestos premiados">
-              <li>#01 <span></span></li>
-              <li>#02 <span></span></li>
-              <li>#03 <span></span></li>
-              <li>#04 <span></span></li>
-            </ul>
-          </article>
-
-          <article class="prize-card prize-card--light">
-            <p class="eyebrow eyebrow--ink">Detalle</p>
-            <h3 class="display prize-value prize-value--compact">{page.prizeDetails}</h3>
-            <p class="prize-body prize-body--muted">
-              Tabla completa, fechas de pago y reglas del torneo se publican junto al lanzamiento.
-            </p>
-            <a class="button button--outline" href="#waitlist">Avisame cuando salga</a>
-          </article>
+          {prizeCards.map((card, index) => (
+            <article
+              class:list={[
+                'prize-card',
+                index === 0 && 'prize-card--dark',
+                index === 1 && 'prize-card--celeste',
+                index === 2 && 'prize-card--light',
+              ]}
+            >
+              <p class:list={[
+                'eyebrow',
+                index === 0 ? 'eyebrow--lima' : 'eyebrow--ink',
+              ]}>
+                {card.eyebrow}
+              </p>
+              <h3 class="display prize-heading">{card.title}</h3>
+              <p class:list={['prize-body', index === 2 && 'prize-body--muted']}>{card.description}</p>
+              <p class="prize-note">{card.note}</p>
+              {card.href && card.cta && (
+                <a class="button button--outline" href={card.href}>{card.cta}</a>
+              )}
+            </article>
+          ))}
         </div>
 
         <div class="light-meta-strip">
-          <span>● Ranking transparente</span>
-          <span>● Premios verificables</span>
+          <span>● Pozo dinámico</span>
+          <span>● Reglas públicas</span>
           <span>● Sin letra chica</span>
         </div>
       </div>
@@ -278,12 +290,12 @@ const year = new Date().getFullYear()
       <div class="shell waitlist-inner">
         <div class="waitlist-kicker">
           <span class="kicker-line kicker-line--accent"></span>
-          <p class="eyebrow eyebrow--lima">Waiting list</p>
+          <p class="eyebrow eyebrow--lima">Lista de espera</p>
           <span class="kicker-line kicker-line--accent"></span>
         </div>
 
         <h2 class="display section-title section-title--center">
-          Que no te lo<br /><span class="editorial">cuente otro.</span>
+          Que no te lo<br /><span class="editorial">cuente otro</span>
         </h2>
 
         <p class="section-lead section-lead--center">
@@ -308,9 +320,9 @@ const year = new Date().getFullYear()
         </p>
 
         <div class="waitlist-meta">
-          <span>{page.waitlistCount}</span>
+          <span>Aviso prioritario</span>
           <span>·</span>
-          <span>Integración editable</span>
+          <span>Lanzamiento antes del Mundial</span>
         </div>
       </div>
     </section>
@@ -323,7 +335,7 @@ const year = new Date().getFullYear()
         </div>
 
         <h2 class="display section-title">
-          ¿Tenés <span class="editorial">dudas</span>? Las sacamos.
+          ¿Tenés <span class="editorial">dudas</span>? Las sacamos
         </h2>
 
         <div class="faq-list">
@@ -353,27 +365,30 @@ const year = new Date().getFullYear()
 
       <div class="footer-grid">
         <div>
-          <p class="eyebrow">Producto</p>
+          <p class="eyebrow">Navegación</p>
           <div class="footer-links">
-            <a href={page.appUrl}>Ir a la app</a>
-            <a href="#waitlist">Waiting list</a>
+            <a href="#waitlist">Lista de espera</a>
             <a href="#faq">FAQ</a>
+            <a href="/reglas">Reglas</a>
+            <!-- TODO: agregar link a la app cuando exista una version publica. -->
           </div>
         </div>
 
         <div>
           <p class="eyebrow">Comunidad</p>
           <div class="footer-links">
-            {socialLinks.map((link) => (
-              <a href={link.href}>{link.label}</a>
-            ))}
+            {activeSocialLinks.length > 0 ? (
+              activeSocialLinks.map((link) => <a href={link.href}>{link.label}</a>)
+            ) : (
+              <p class="footer-note">Canales oficiales en camino.</p>
+            )}
           </div>
         </div>
 
         <div>
-          <p class="eyebrow">Contacto</p>
+          <p class="eyebrow">Estado</p>
           <div class="footer-links">
-            <a href={`mailto:${page.email}`}>{page.email}</a>
+            <p class="footer-note">Lanzamiento en preparación para el Mundial 2026.</p>
             <p class="footer-note">Hecho en Argentina, con la pelota en los pies.</p>
           </div>
         </div>
@@ -381,7 +396,7 @@ const year = new Date().getFullYear()
 
       <div class="footer-meta">
         <span>© {year} ProDefi · Todos los partidos</span>
-        <span>Landing · Astro</span>
+        <span>Predicciones · Mundial 2026</span>
       </div>
     </div>
   </footer>
@@ -436,7 +451,7 @@ const year = new Date().getFullYear()
         if (!endpoint) {
           event.preventDefault()
           waitlistFeedback.textContent =
-            'Formulario listo para conectar. Definí `waitlistAction` en `src/pages/index.astro` y sale jugando.'
+            'La lista de espera abre pronto. Volvé en un rato para dejar tu mail.'
           waitlistFeedback.dataset.state = 'idle'
           return
         }

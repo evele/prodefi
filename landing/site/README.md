@@ -16,8 +16,6 @@ npm run preview
 Editá `src/pages/index.astro` para cambiar:
 
 - `appUrl`
-- `waitlistAction`
-- `waitlistCount`
 - `targetDate`
 - `primaryPrize`
 - `prizeDetails`
@@ -28,11 +26,12 @@ Editá `src/pages/index.astro` para cambiar:
 
 La landing ya tiene el formulario y la validación cliente. Para activarlo de verdad:
 
-1. Definí `waitlistAction` en `src/pages/index.astro`.
-2. El endpoint debe aceptar `POST` JSON con `{ email }`.
-3. Si responde `2xx`, el frontend muestra estado de éxito.
+1. Por defecto la landing envía a `/api/waitlist`.
+2. Si necesitás otro destino, definí `PUBLIC_WAITLIST_ACTION`.
+3. El endpoint debe aceptar `POST` JSON con `{ email }`.
+4. Si responde `2xx`, el frontend muestra estado de éxito.
 
-Mientras `waitlistAction` esté vacío, la landing queda en modo wiring y no envía datos.
+Con Firebase Hosting + Functions, `/api/waitlist` queda resuelto con el rewrite de `firebase.json`.
 
 ## Deploy
 

@@ -573,10 +573,10 @@ function Footer({ isMobile, onApp }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span className="eyebrow">Contacto</span>
-            <a href="mailto:hola@prodefi.app" style={{ textDecoration: 'none', color: 'var(--bone-2)', fontSize: 15 }}>
-              hola@prodefi.app
-            </a>
+            <span className="eyebrow">Estado</span>
+            <span style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Lanzamiento en preparacion para el Mundial 2026.
+            </span>
             <span style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginTop: 8 }}>
               Hecho en Argentina, con la pelota en los pies.
             </span>
