@@ -46,16 +46,16 @@ contract IntegrationTest is BaseTest {
 
         uint256[] memory allPoints = _calculateAllUserPoints();
 
-        // User 1 should have perfect predictions (36 game + 55 winner = 91 total)
-        assertEq(allPoints[0], 91, "User1 should have 91 total points");
+        // User 1 should have perfect predictions (40 game + 63 winner = 103 total)
+        assertEq(allPoints[0], 103, "User1 should have 103 total points");
 
         // Verify ranking order
         assertTrue(allPoints[0] > allPoints[1], "User1 should have more points than User2");
         assertTrue(allPoints[1] > allPoints[2], "User2 should have more points than User3");
 
         // Verify minimum point thresholds
-        _assertPointsInRange(allPoints[0], 85, 95); // User1 high score
-        _assertPointsInRange(allPoints[1], 10, 60); // User2 medium score
+        _assertPointsInRange(allPoints[0], 100, 105); // User1 high score
+        _assertPointsInRange(allPoints[1], 60, 75); // User2 medium score
         _assertPointsInRange(allPoints[2], 0, 40); // User3 low score
 
         // ========== PHASE 5: UPDATE POINTS AND SET RANKINGS ==========
