@@ -309,19 +309,19 @@ contract PredictionsTest is Test {
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
         // Establecer resultados de los partidos (1-based gameIds)
-        preds.setResults(1, 2, 1); // Exacto: 7 + 2 = 9 puntos
-        preds.setResults(2, 1, 1); // Empate: 7 + 2 = 9 puntos
-        preds.setResults(3, 0, 3); // Acertar visitante: 6 + 2 = 8 puntos
-        preds.setResults(4, 2, 2); // Empate: 7 + 2 = 9 puntos
+        preds.setResults(1, 2, 1); // Exacto: 7 + 3 = 10 puntos
+        preds.setResults(2, 1, 1); // Empate: 7 + 3 = 10 puntos
+        preds.setResults(3, 0, 3); // Acertar visitante: 6 + 3 = 9 puntos
+        preds.setResults(4, 2, 2); // Empate: 7 + 3 = 10 puntos
 
         // Verificar puntos de cada partido
-        assertEq(preds.calculatePoints(TOKEN_ID, 0), 9);
-        assertEq(preds.calculatePoints(TOKEN_ID, 1), 9);
-        assertEq(preds.calculatePoints(TOKEN_ID, 2), 8);
-        assertEq(preds.calculatePoints(TOKEN_ID, 3), 9);
+        assertEq(preds.calculatePoints(TOKEN_ID, 0), 10);
+        assertEq(preds.calculatePoints(TOKEN_ID, 1), 10);
+        assertEq(preds.calculatePoints(TOKEN_ID, 2), 9);
+        assertEq(preds.calculatePoints(TOKEN_ID, 3), 10);
 
         // Verificar puntos totales (solo partidos)
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 35);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
 
         // Establecer ganadores oficiales
         preds.setOfficialWinners([1, 2, 3, 4]);
@@ -331,16 +331,16 @@ contract PredictionsTest is Test {
         preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
 
         // Verificar puntos de ganadores
-        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 55); // 19 + 16 + 10 + 10
+        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63); // 25 + 18 + 10 + 10
 
         // Verificar puntos totales (partidos + ganadores)
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 90); // 35 + 55
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 102); // 39 + 63
 
         // Establecer posiciones
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
         ids[0] = TOKEN_ID;
-        points[0] = 90;
+        points[0] = 102;
         preds.setPositions(ids, points);
 
         // Verificar que las posiciones se establecieron correctamente
@@ -349,7 +349,70 @@ contract PredictionsTest is Test {
         // Actualizar puntos totales
         vm.prank(user);
         preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 90);
+        assertEq(preds.totalPoints(TOKEN_ID), 102);
+    }
+
+    function testMatchPointsClampAtZeroAndKeepOutcomeBonus() public {
+        Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
+        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(5), uint8(5)]});
+        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(6), uint8(5)]});
+        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(1)]});
+        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
+
+        vm.prank(user);
+        preds.submitPrediction(TOKEN_ID, gamePreds);
+
+        preds.setResults(1, 5, 5); // Exacto -> 10
+        preds.setResults(2, 5, 5); // Miss corto con signo incorrecto -> 6
+        preds.setResults(3, 5, 5); // diffTotal 9 -> base 0, sin bonus -> 0
+        preds.setResults(4, 6, 5); // diffTotal 10 -> base 0, +3 por acertar local -> 3
+
+        assertEq(preds.calculatePoints(TOKEN_ID, 0), 10);
+        assertEq(preds.calculatePoints(TOKEN_ID, 1), 6);
+        assertEq(preds.calculatePoints(TOKEN_ID, 2), 0);
+        assertEq(preds.calculatePoints(TOKEN_ID, 3), 3);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 19);
+    }
+
+    function testWinnerPointsUseUpdatedWeights() public setup {
+        uint256 championOnlyTokenId = cart.mint(user, 1, "");
+        uint256 runnerUpOnlyTokenId = cart.mint(user, 1, "");
+        uint256 podiumSwapTokenId = cart.mint(user, 1, "");
+
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        vm.prank(user);
+        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        vm.prank(user);
+        preds.predictWinners(championOnlyTokenId, [1, 3, 5, 6]);
+        vm.prank(user);
+        preds.predictWinners(runnerUpOnlyTokenId, [5, 2, 6, 7]);
+        vm.prank(user);
+        preds.predictWinners(podiumSwapTokenId, [5, 6, 4, 3]);
+
+        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63);
+        assertEq(preds.calculateWinnerPoints(championOnlyTokenId), 25);
+        assertEq(preds.calculateWinnerPoints(runnerUpOnlyTokenId), 18);
+        assertEq(preds.calculateWinnerPoints(podiumSwapTokenId), 20);
+    }
+
+    function testTotalPointsIgnoreMissingWinnerPrediction() public {
+        Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
+        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
+        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
+        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
+        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+
+        vm.prank(user);
+        preds.submitPrediction(TOKEN_ID, gamePreds);
+
+        preds.setResults(1, 2, 1);
+        preds.setResults(2, 1, 1);
+        preds.setResults(3, 0, 3);
+        preds.setResults(4, 2, 2);
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
     }
 
     function testPartialResultsCanBeRecalculated() public {
@@ -362,26 +425,26 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
-        preds.setResults(1, 2, 1); // 9 puntos
-        preds.setResults(2, 1, 1); // 9 puntos
+        preds.setResults(1, 2, 1); // 10 puntos
+        preds.setResults(2, 1, 1); // 10 puntos
 
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 18);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 20);
 
         vm.prank(user);
         preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 18);
+        assertEq(preds.totalPoints(TOKEN_ID), 20);
 
         vm.expectRevert(Predictions.ResultNotSet.selector);
         preds.calculatePoints(TOKEN_ID, 2);
 
-        preds.setResults(3, 0, 3); // 8 puntos
-        preds.setResults(4, 2, 2); // 9 puntos
+        preds.setResults(3, 0, 3); // 9 puntos
+        preds.setResults(4, 2, 2); // 10 puntos
 
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 35);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
 
         vm.prank(user);
         preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 35);
+        assertEq(preds.totalPoints(TOKEN_ID), 39);
     }
 
     function testSetPositions() public {
@@ -481,7 +544,7 @@ contract PredictionsTest is Test {
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
         preds.setResults(1, 2, 1);
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 9);
+        assertEq(preds.calculateTotalPoints(TOKEN_ID), 10);
 
         preds.updateResults(1, 0, 0);
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 4);

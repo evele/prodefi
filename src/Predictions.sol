@@ -56,8 +56,10 @@ contract Predictions is Ownable {
     uint8 constant VISITANTE = 2;
     uint8 constant MAX_TEAM_ID = 48; // Maximum allowed team ID
     uint8 constant MAX_WINNERS = 4; // Maximum number of winner teams to predict
-    uint8 constant POINTS_FIRST = 19; // Points for guessing first place
-    uint8 constant POINTS_SECOND = 16; // Points for guessing second place
+    uint8 constant MATCH_BASE_POINTS = 7; // Base points before score-difference penalties
+    uint8 constant MATCH_OUTCOME_BONUS = 3; // Bonus for guessing local/draw/visitor correctly
+    uint8 constant POINTS_FIRST = 25; // Points for guessing first place
+    uint8 constant POINTS_SECOND = 18; // Points for guessing second place
     uint8 constant POINTS_THIRD_FOURTH = 10; // Points for guessing third or fourth place
 
     // Structure to store official winners
@@ -302,19 +304,15 @@ contract Predictions is Ownable {
         Game storage game = games[pred.gameId];
         if (!game.set) revert ResultNotSet();
 
-        uint8 points = abs(
-            int8(
-                7
-                    - (calculateDifferencePoints(pred.result[0], game.result[0])
-                        + calculateDifferencePoints(pred.result[1], game.result[1]))
-            )
-        );
+        uint16 diffTotal = uint16(calculateDifferencePoints(pred.result[0], game.result[0]))
+            + uint16(calculateDifferencePoints(pred.result[1], game.result[1]));
+        uint8 points = diffTotal >= MATCH_BASE_POINTS ? 0 : uint8(MATCH_BASE_POINTS - diffTotal);
 
         if (
             getLocalEmpateVisitante(pred.result[0], pred.result[1])
                 == getLocalEmpateVisitante(game.result[0], game.result[1])
         ) {
-            points += 2;
+            points += MATCH_OUTCOME_BONUS;
         }
 
         return points;
@@ -420,7 +418,7 @@ contract Predictions is Ownable {
         }
 
         // Si los ganadores están establecidos, sumar los puntos de los ganadores
-        if (officialWinners.set) {
+        if (officialWinners.set && winnersPredictions[tokenId].set) {
             winnerPoints = calculateWinnerPoints(tokenId);
         }
 
