@@ -5,6 +5,7 @@
 - `test/` — Foundry tests (`*.t.sol`) with shared helpers in `BaseTest.sol`.
 - `script/` — Forge scripts (e.g., `Deploy.s.sol`, `Counter.s.sol`).
 - `frontend/` — React + TypeScript (Vite) app; UI and wallet integration lives here.
+- `landing/site/` — real landing site source. `landing/design/` is design/mock exploration and should not be treated as the production landing unless the task explicitly asks for design work there.
 - Generated: `out/`, `broadcast/`, `cache/` (do not edit). Secrets in `.env` files (root and `frontend/`).
 
 ## Build, Test, and Development Commands

@@ -384,6 +384,27 @@ contract CartonTest is BaseTest {
         assertEq(USDC.balanceOf(address(treasury)), 1000000); // Treasury should have the tokens
     }
 
+    function testBuyCartonWithToken_RevertsAfterSalesClose() public {
+        treasury = new Treasury(admin, address(carton), address(predictions));
+
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(address(USDC), 1000000);
+        carton.setTreasuryAddress(address(treasury));
+        carton.setActiveTournament(1);
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), admin);
+        treasury.closeSales(1);
+        vm.stopPrank();
+
+        USDC.mint(user, 1000000);
+
+        vm.startPrank(user);
+        USDC.approve(address(carton), 1000000);
+        vm.expectRevert(Carton.TournamentSalesClosed.selector);
+        carton.buyCartonWithToken(address(USDC));
+        vm.stopPrank();
+    }
+
     function testBuyCartonWithoutTreasuryConfiguredStillReverts() public {
         vm.deal(user, 1 ether);
         vm.prank(user);

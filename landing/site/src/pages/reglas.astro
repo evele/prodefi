@@ -1,0 +1,166 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+
+const page = {
+  title: 'Reglas | ProDefi',
+  description:
+    'Reglas de participación, puntaje, desempates y distribución de premios para ProDefi Mundial 2026.',
+}
+
+// TODO: completar la tabla exacta de puntajes cuando quede cerrada la edicion.
+// TODO: completar criterios finales de desempate y distribucion antes del lanzamiento.
+const sections = [
+  {
+    eyebrow: 'Participación',
+    title: 'Cómo entra una inscripción',
+    items: [
+      'Participan las inscripciones confirmadas dentro del plazo vigente de la edición.',
+      'El cierre de inscripciones se comunica antes del arranque del torneo.',
+      'Una vez cerrado el ingreso, el pozo y la base de participantes quedan consolidados para esa edición.',
+    ],
+  },
+  {
+    eyebrow: 'Puntaje',
+    title: 'Cómo se suman puntos',
+    items: [
+      'Cada acierto suma puntos según la tabla oficial publicada antes del arranque.',
+      'La tabla final define qué predicciones puntúan, cuánto vale cada una y cómo se computan los resultados.',
+      'La versión vigente para esa edición queda publicada en esta página antes del primer partido.',
+    ],
+  },
+  {
+    eyebrow: 'Desempates',
+    title: 'Cómo se ordena el ranking',
+    items: [
+      'Si dos o más participantes terminan con el mismo puntaje total, se aplican los criterios de desempate publicados para esa edición.',
+      'El orden de esos criterios queda informado junto con la tabla oficial de puntajes.',
+      'Los desempates no se modifican una vez iniciado el torneo.',
+    ],
+  },
+  {
+    eyebrow: 'Pozo',
+    title: 'Cómo se arma y distribuye',
+    items: [
+      'El pozo final depende de la cantidad de inscriptos confirmados al cierre.',
+      'La cantidad de puestos premiados se define según el tamaño final del pozo.',
+      'La distribución final se publica antes del arranque junto con las reglas vigentes de la edición.',
+    ],
+  },
+  {
+    eyebrow: 'Transparencia',
+    title: 'Cuándo se publican las reglas',
+    items: [
+      'Puntajes, desempates, pozo y distribución se publican antes del inicio del torneo.',
+      'Si hubiera ajustes previos al arranque, se informan en esta misma página.',
+      'Una vez iniciado el torneo, las reglas de esa edición quedan cerradas.',
+    ],
+  },
+]
+---
+
+<BaseLayout title={page.title} description={page.description}>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/" aria-label="ProDefi, inicio">
+        <span class="brand-wordmark">PRODEFI</span>
+        <span class="brand-ball" aria-hidden="true">⚽</span>
+      </a>
+
+      <nav class="header-nav" aria-label="Navegación principal">
+        <a href="/">Inicio</a>
+        <a href="/#premios">Premios</a>
+        <a href="/#waitlist">Lista de espera</a>
+        <a href="/reglas" aria-current="page">Reglas</a>
+      </nav>
+
+      <a class="chip-link chip-link--accent" href="/#waitlist">Sumarme</a>
+    </div>
+  </header>
+
+  <main id="contenido" class="rules-page">
+    <section class="rules-hero">
+      <div class="shell section-inner rules-hero__inner">
+        <div class="kicker-row">
+          <span class="kicker-line"></span>
+          <p class="eyebrow eyebrow--celeste">Reglas del torneo</p>
+        </div>
+
+        <h1 class="display section-title">
+          Puntajes, premios<br /><span class="editorial">y criterios</span>
+        </h1>
+
+        <p class="section-lead">
+          Esta página concentra las reglas de participación, puntaje, desempates y distribución de
+          premios de ProDefi. La versión final de cada edición se publica antes del arranque.
+        </p>
+
+        <div class="cta-row">
+          <a class="button button--accent" href="/#waitlist">Sumarme a la lista de espera</a>
+          <a class="button button--ghost" href="/">Volver a la landing</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="rules-section">
+      <div class="shell section-inner">
+        <div class="rules-grid">
+          {sections.map((section) => (
+            <article class="rules-card">
+              <p class="eyebrow eyebrow--celeste">{section.eyebrow}</p>
+              <h2 class="display rules-card__title">{section.title}</h2>
+              <ul class="rules-list">
+                {section.items.map((item) => (
+                  <li>{item}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+
+        <div class="rules-note-box">
+          <p class="eyebrow eyebrow--celeste">Importante</p>
+          <p class="rules-note-box__body">
+            Mientras la inscripción siga abierta, no se prometen montos fijos ni un reparto cerrado.
+            Lo que sí se publica antes del arranque es la versión final de puntajes, desempates,
+            puestos premiados y distribución para esa edición.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+    <div class="shell footer-inner">
+      <p class="display footer-wordmark">PRODEFI</p>
+
+      <div class="footer-grid">
+        <div>
+          <p class="eyebrow">Navegación</p>
+          <div class="footer-links">
+            <a href="/">Inicio</a>
+            <a href="/#waitlist">Lista de espera</a>
+            <a href="/reglas">Reglas</a>
+          </div>
+        </div>
+
+        <div>
+          <p class="eyebrow">Comunidad</p>
+          <div class="footer-links">
+            <p class="footer-note">Canales oficiales en camino.</p>
+          </div>
+        </div>
+
+        <div>
+          <p class="eyebrow">Estado</p>
+          <div class="footer-links">
+            <p class="footer-note">Documento vivo previo al lanzamiento.</p>
+            <p class="footer-note">Las reglas finales se publican antes del arranque.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+</BaseLayout>

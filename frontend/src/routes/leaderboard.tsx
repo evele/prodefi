@@ -106,11 +106,11 @@ function LeaderboardPage() {
     [userTokensRaw],
   )
 
-  const { data: usdcClosed } = useReadContract({
+  const { data: tournamentFinalized } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
-    functionName: 'isClosedTournament',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    functionName: 'tournamentFinalized',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
@@ -136,7 +136,7 @@ function LeaderboardPage() {
 
   const { data: usdcPrizesData } = useReadContracts({
     contracts: usdcPrizeContracts,
-    query: { enabled: Boolean(usdcClosed) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
+    query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
   })
 
   const leaderboardRows = useMemo(
@@ -145,11 +145,11 @@ function LeaderboardPage() {
         rank: i + 1,
         tokenId,
         points: (pointsData?.[i]?.result as bigint | undefined) ?? 0n,
-        usdcPrize: usdcClosed ? ((usdcPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
+        usdcPrize: tournamentFinalized ? ((usdcPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
         isYours: userTokenSet.has(tokenId.toString()),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(','), pointsData, usdcPrizesData, userTokenSet, usdcClosed],
+    [positionsArray.join(','), pointsData, usdcPrizesData, userTokenSet, tournamentFinalized],
   )
 
   const yourBestRank = useMemo(() => {
@@ -180,7 +180,7 @@ function LeaderboardPage() {
       label: 'Pool USDC',
       value: usdcPool !== undefined ? `${Number(formatUnits(usdcPool, 6)).toFixed(2)}` : '—',
       unit: 'USDC',
-      sub: usdcClosed ? 'Cerrado' : 'En vivo',
+      sub: tournamentFinalized ? 'Finalizado' : 'En vivo',
     },
     {
       label: 'Tu mejor puesto',

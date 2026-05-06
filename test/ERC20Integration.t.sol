@@ -36,14 +36,6 @@ contract ERC20IntegrationTest is Test {
         treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), owner);
 
-        // Setup prize distributions
-        uint8[] memory distribution = new uint8[](4);
-        distribution[0] = 50;
-        distribution[1] = 30;
-        distribution[2] = 15;
-        distribution[3] = 5;
-        treasury.setPrizeDistribution(TOURNAMENT_ID, address(usdc), distribution);
-
         // Mint USDC to user1 for testing
         usdc.mint(user1, 1000 * 10 ** 6);
 

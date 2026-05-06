@@ -25,6 +25,10 @@ contract Treasury is AccessControl {
     error InvalidPercentageSum();
     error NoPrizePool();
     error NoPrizeDistribution();
+    error SalesAlreadyClosed();
+    error SalesNotClosed();
+    error TournamentNotFinalized();
+    error TournamentNotReadyForFinalization();
 
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
@@ -38,6 +42,8 @@ contract Treasury is AccessControl {
 
     // Prize distribution by tournament and asset type
     mapping(uint256 => mapping(address => uint8[])) public prizePoolDistributions;
+    mapping(uint256 => mapping(address => bool)) public prizeDistributionSet;
+    mapping(uint256 => address[]) public prizeDistributionTokens;
 
     // Snapshots prizepool to finalize
     mapping(uint256 => mapping(address => uint256)) public closedPrizePools;
@@ -45,12 +51,15 @@ contract Treasury is AccessControl {
     // Flag of closed tournament
     mapping(uint256 => mapping(address => bool)) public isClosedTournament;
     mapping(uint256 => bool) public isTournamentClosedAnyAsset;
+    mapping(uint256 => bool) public salesClosed;
+    mapping(uint256 => bool) public tournamentFinalized;
 
     Carton public cartonContract;
     Predictions public predictionsContract;
 
     // Events
     event DepositFromSale(uint256 indexed tournamentId, address indexed token, uint256 amount);
+    event SalesClosed(uint256 indexed tournamentId);
     event ClaimPrize(
         uint256 indexed tournamentId,
         uint256 indexed tokenId,
@@ -60,6 +69,7 @@ contract Treasury is AccessControl {
         uint256 amount
     );
     event SetPrizeDistribution(uint256 indexed tournamentId, address indexed token, uint8[] percentages);
+    event TournamentFinalized(uint256 indexed tournamentId);
     event TournamentClosed(uint256 indexed tournamentId, address indexed token, uint256 closedPrizePool);
 
     constructor(address defaultAdmin, address cartonAddress, address predictionsAddress) {
@@ -73,7 +83,7 @@ contract Treasury is AccessControl {
     /// @param tournamentId Tournament ID
     function depositFromSales(uint256 tournamentId) external payable onlyRole(FUND_DEPOSITOR_ROLE) {
         if (msg.value == 0) revert ZeroAmount();
-        if (isClosedTournament[tournamentId][address(0)]) revert TournamentAlreadyClosed();
+        if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
         prizePools[tournamentId][address(0)] += msg.value;
         emit DepositFromSale(tournamentId, address(0), msg.value);
     }
@@ -88,11 +98,17 @@ contract Treasury is AccessControl {
     {
         if (token == address(0)) revert UseDepositForETH();
         if (amount == 0) revert ZeroAmount();
-        if (isClosedTournament[tournamentId][token]) revert TournamentAlreadyClosed();
+        if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         prizePools[tournamentId][token] += amount;
         emit DepositFromSale(tournamentId, token, amount);
+    }
+
+    function closeSales(uint256 tournamentId) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
+        if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
+        salesClosed[tournamentId] = true;
+        emit SalesClosed(tournamentId);
     }
 
     /// @notice User claims prize based on their token's final position for specific asset
@@ -100,7 +116,7 @@ contract Treasury is AccessControl {
     /// @param tokenId Token ID to claim prize for
     /// @param token Token address (address(0) for ETH)
     function claimPrize(uint256 tournamentId, uint256 tokenId, address token) external {
-        if (!isClosedTournament[tournamentId][token]) revert TournamentNotClosed();
+        if (!tournamentFinalized[tournamentId]) revert TournamentNotFinalized();
         if (cartonContract.balanceOf(msg.sender, tokenId) == 0) revert NotTokenOwner();
         if (claimed[tournamentId][tokenId][token]) revert AlreadyClaimed();
 
@@ -135,13 +151,21 @@ contract Treasury is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        // Verify percentages sum between 90% and 100% (reserve for charity/development)
+        if (!salesClosed[tournamentId]) revert SalesNotClosed();
+        if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+
+        // Percentages may leave an explicit reserve for development, donation, or jackpot.
         uint256 sum_percentages = 0;
         for (uint256 i = 0; i < percentages.length; i++) {
             if (percentages[i] > 100) revert InvalidPercentage();
             sum_percentages += percentages[i];
         }
-        if (sum_percentages < 90 || sum_percentages > 100) revert InvalidPercentageSum();
+        if (sum_percentages == 0 || sum_percentages > 100) revert InvalidPercentageSum();
+
+        if (!prizeDistributionSet[tournamentId][token]) {
+            prizeDistributionSet[tournamentId][token] = true;
+            prizeDistributionTokens[tournamentId].push(token);
+        }
 
         delete prizePoolDistributions[tournamentId][token];
         for (uint256 i = 0; i < percentages.length; i++) {
@@ -167,9 +191,8 @@ contract Treasury is AccessControl {
         uint8 percentage_position = prizePoolDistributions[tournamentId][token][position - 1];
 
         // Use closed pool if tournament is closed, otherwise use current pool
-        uint256 poolToUse = isClosedTournament[tournamentId][token]
-            ? closedPrizePools[tournamentId][token]
-            : prizePools[tournamentId][token];
+        uint256 poolToUse =
+            tournamentFinalized[tournamentId] ? closedPrizePools[tournamentId][token] : prizePools[tournamentId][token];
 
         return (poolToUse * percentage_position) / 100;
     }
@@ -182,19 +205,38 @@ contract Treasury is AccessControl {
         return claimed[tournamentId][tokenId][token];
     }
 
-    /// @notice Closes tournament and snapshots prize pool for claims
-    /// @param tournamentId Tournament ID
-    /// @param token Token address (address(0) for ETH)
-    function closeTournament(uint256 tournamentId, address token) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
-        if (isClosedTournament[tournamentId][token]) revert TournamentAlreadyClosed();
-        uint256 pool = prizePools[tournamentId][token];
-        if (pool == 0) revert NoPrizePool();
-        if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
+    function getPrizeDistributionTokenCount(uint256 tournamentId) external view returns (uint256) {
+        return prizeDistributionTokens[tournamentId].length;
+    }
 
-        closedPrizePools[tournamentId][token] = pool;
-        isClosedTournament[tournamentId][token] = true;
+    /// @notice Finalizes the whole tournament and snapshots all configured prize assets.
+    function finalizeTournament(uint256 tournamentId) public onlyRole(TOURNAMENT_MANAGER_ROLE) {
+        if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+        if (!salesClosed[tournamentId]) revert SalesNotClosed();
+
+        address[] storage tokens = prizeDistributionTokens[tournamentId];
+        if (tokens.length == 0) revert NoPrizeDistribution();
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 pool = prizePools[tournamentId][token];
+            if (pool == 0) revert NoPrizePool();
+            if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
+
+            closedPrizePools[tournamentId][token] = pool;
+            isClosedTournament[tournamentId][token] = true;
+            emit TournamentClosed(tournamentId, token, pool);
+        }
+
+        if (!predictionsContract.isReadyForFinalization()) revert TournamentNotReadyForFinalization();
+
+        tournamentFinalized[tournamentId] = true;
         isTournamentClosedAnyAsset[tournamentId] = true;
+        emit TournamentFinalized(tournamentId);
+    }
 
-        emit TournamentClosed(tournamentId, token, pool);
+    /// @notice Backward-compatible wrapper; prefer finalizeTournament for new code.
+    function closeTournament(uint256 tournamentId, address) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
+        finalizeTournament(tournamentId);
     }
 }

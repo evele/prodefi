@@ -17,11 +17,11 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
   })
   const tournamentId = activeTournamentId ?? 0n
 
-  const { data: usdcClosed } = useReadContract({
+  const { data: tournamentFinalized } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
-    functionName: 'isClosedTournament',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    functionName: 'tournamentFinalized',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
@@ -29,23 +29,23 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'positionsVersion',
-    query: { enabled: Boolean(usdcClosed), refetchInterval: 10_000 },
+    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: rawRank } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositions',
-    args: usdcClosed ? [tokenId] : undefined,
-    query: { enabled: Boolean(usdcClosed), refetchInterval: 10_000 },
+    args: tournamentFinalized ? [tokenId] : undefined,
+    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: rankVersion } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositionsVersion',
-    args: usdcClosed ? [tokenId] : undefined,
-    query: { enabled: Boolean(usdcClosed), refetchInterval: 10_000 },
+    args: tournamentFinalized ? [tokenId] : undefined,
+    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const rank = useMemo(() => {
@@ -59,7 +59,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     abi: TREASURY_ABI,
     functionName: 'getUserPrizeAmount',
     args: rank !== null && tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(rank)] : undefined,
-    query: { enabled: rank !== null && Boolean(usdcClosed), refetchInterval: 10_000 },
+    query: { enabled: rank !== null && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: usdcClaimed, refetch: refetchUsdcClaimed } = useReadContract({
@@ -67,7 +67,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     abi: TREASURY_ABI,
     functionName: 'hasUserClaimed',
     args: tournamentId > 0n ? [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n && Boolean(usdcClosed), refetchInterval: 10_000 },
+    query: { enabled: tournamentId > 0n && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const handleClaimUsdc = () => {
@@ -90,7 +90,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     )
   }
 
-  if (!usdcClosed) return null
+  if (!tournamentFinalized) return null
 
   const usdcPrizeValue = usdcPrize ?? 0n
 

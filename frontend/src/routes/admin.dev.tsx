@@ -51,10 +51,10 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
     query: { refetchInterval: 10_000 },
   })
 
-  const { data: isTournamentClosedAnyAsset } = useReadContract({
+  const { data: tournamentFinalized } = useReadContract({
     address: treasury,
     abi: TREASURY_ABI,
-    functionName: 'isTournamentClosedAnyAsset',
+    functionName: 'tournamentFinalized',
     args: activeTournamentId !== undefined ? [activeTournamentId] : undefined,
     query: {
       enabled: activeTournamentId !== undefined,
@@ -98,8 +98,8 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   }
 
   const submitResult = (gameId: number) => {
-    if (isTournamentClosedAnyAsset) {
-      toast.error('This tournament is already closed. Results can no longer be corrected.')
+    if (tournamentFinalized) {
+      toast.error('This tournament is finalized. Results can no longer be corrected.')
       return
     }
 
@@ -141,13 +141,13 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
       <CardHeader>
         <CardTitle>Set Results</CardTitle>
         <CardDescription>
-          Set actual match results or correct them before the tournament is closed.
+          Set actual match results or correct them before the tournament is finalized.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isTournamentClosedAnyAsset && (
+        {tournamentFinalized && (
           <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-            This tournament already has a closed prize pool. Result corrections are locked.
+            This tournament is finalized. Result corrections are locked.
           </div>
         )}
         <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -181,7 +181,7 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
               <Button
                 size="sm"
                 onClick={() => submitResult(game.id)}
-                disabled={!isOwner || isBusy || Boolean(isTournamentClosedAnyAsset)}
+                disabled={!isOwner || isBusy || Boolean(tournamentFinalized)}
               >
                 {storedGamesById.get(game.id)?.set ? 'Update' : 'Set'}
               </Button>
@@ -446,7 +446,9 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   const { execute, isBusy } = useAdminWrite()
 
   const [tournamentId, setTournamentId] = useState('1')
+  const [distributionInput, setDistributionInput] = useState('50,30,15,5')
   const tokenAddress = CONTRACT_ADDRESSES.USDC
+  const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
 
   const { data: managerRole } = useReadContract({
     address: treasury,
@@ -462,11 +464,27 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     query: { enabled: !!managerRole && !!address, refetchInterval: 10_000 },
   })
 
-  const { data: isClosed } = useReadContract({
+  const { data: salesClosed } = useReadContract({
     address: treasury,
     abi: TREASURY_ABI,
-    functionName: 'isClosedTournament',
-    args: [BigInt(tournamentId || '0'), tokenAddress],
+    functionName: 'salesClosed',
+    args: [parsedTournamentId],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: tournamentFinalized } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'tournamentFinalized',
+    args: [parsedTournamentId],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: usdcDistributionSet } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'prizeDistributionSet',
+    args: [parsedTournamentId, tokenAddress],
     query: { refetchInterval: 10_000 },
   })
 
@@ -478,7 +496,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     query: { refetchInterval: 10_000 },
   })
 
-  const submit = () => {
+  const closeSales = () => {
     const tid = Number(tournamentId)
     if (isNaN(tid) || tid <= 0) {
       toast.error('Enter a valid tournament ID')
@@ -488,15 +506,72 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       {
         address: treasury,
         abi: TREASURY_ABI,
-        functionName: 'closeTournament',
-        args: [BigInt(tid), tokenAddress],
+        functionName: 'closeSales',
+        args: [BigInt(tid)],
       },
       {
-        toastId: `admin-close-${tid}-usdc`,
-        pendingMessage: 'Waiting for tournament close confirmation...',
-        successMessage: 'Tournament closed successfully.',
-        revertedMessage: 'Tournament close was rejected on-chain.',
-        logLabel: 'Admin close tournament',
+        toastId: `admin-close-sales-${tid}`,
+        pendingMessage: 'Waiting for sales close confirmation...',
+        successMessage: 'Sales closed successfully.',
+        revertedMessage: 'Sales close was rejected on-chain.',
+        logLabel: 'Admin close sales',
+      },
+    )
+  }
+
+  const setPrizeDistribution = () => {
+    const tid = Number(tournamentId)
+    if (isNaN(tid) || tid <= 0) {
+      toast.error('Enter a valid tournament ID')
+      return
+    }
+
+    const percentages = distributionInput
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => !Number.isNaN(value))
+
+    if (percentages.length === 0 || percentages.some((value) => !Number.isInteger(value) || value < 0 || value > 100)) {
+      toast.error('Enter comma-separated percentages between 0 and 100')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'setPrizeDistribution',
+        args: [BigInt(tid), tokenAddress, percentages],
+      },
+      {
+        toastId: `admin-prize-distribution-${tid}-usdc`,
+        pendingMessage: 'Waiting for prize distribution confirmation...',
+        successMessage: 'USDC prize distribution saved.',
+        revertedMessage: 'Prize distribution was rejected on-chain.',
+        logLabel: 'Admin set prize distribution',
+      },
+    )
+  }
+
+  const finalizeTournament = () => {
+    const tid = Number(tournamentId)
+    if (isNaN(tid) || tid <= 0) {
+      toast.error('Enter a valid tournament ID')
+      return
+    }
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'finalizeTournament',
+        args: [BigInt(tid)],
+      },
+      {
+        toastId: `admin-finalize-${tid}`,
+        pendingMessage: 'Waiting for tournament finalization...',
+        successMessage: 'Tournament finalized successfully.',
+        revertedMessage: 'Tournament finalization was rejected on-chain.',
+        logLabel: 'Admin finalize tournament',
       },
     )
   }
@@ -508,8 +583,8 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Close Tournament</CardTitle>
-        <CardDescription>Snapshot prize pool and freeze deposits (requires TOURNAMENT_MANAGER_ROLE)</CardDescription>
+        <CardTitle>Tournament Lifecycle</CardTitle>
+        <CardDescription>Close sales, configure USDC prizes, then finalize claims.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -535,18 +610,52 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             <div><span className="font-medium">Asset:</span> USDC</div>
             <div><span className="font-medium">Prize Pool:</span> {poolDisplay}</div>
             <div>
-              <span className="font-medium">Closed:</span>{' '}
-              <span className={isClosed ? 'text-green-600' : 'text-yellow-600'}>
-                {String(Boolean(isClosed))}
+              <span className="font-medium">Sales Closed:</span>{' '}
+              <span className={salesClosed ? 'text-green-600' : 'text-yellow-600'}>
+                {String(Boolean(salesClosed))}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">USDC Distribution:</span>{' '}
+              <span className={usdcDistributionSet ? 'text-green-600' : 'text-yellow-600'}>
+                {String(Boolean(usdcDistributionSet))}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Finalized:</span>{' '}
+              <span className={tournamentFinalized ? 'text-green-600' : 'text-yellow-600'}>
+                {String(Boolean(tournamentFinalized))}
               </span>
             </div>
           </div>
 
           <Button
-            onClick={submit}
-            disabled={!isOwner || !hasManagerRole || Boolean(isClosed) || isBusy}
+            onClick={closeSales}
+            disabled={!isOwner || !hasManagerRole || Boolean(salesClosed) || isBusy}
           >
-            {isBusy ? 'Closing...' : 'Close Tournament'}
+            {isBusy ? 'Closing...' : 'Close Sales'}
+          </Button>
+
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-medium w-24">USDC %</span>
+            <Input
+              value={distributionInput}
+              onChange={(e) => setDistributionInput(e.target.value)}
+              placeholder="50,30,15,5"
+            />
+            <Button
+              onClick={setPrizeDistribution}
+              disabled={!isOwner || !hasManagerRole || !salesClosed || Boolean(tournamentFinalized) || isBusy}
+            >
+              {isBusy ? 'Saving...' : 'Set Distribution'}
+            </Button>
+          </div>
+
+          <Button
+            onClick={finalizeTournament}
+            disabled={!isOwner || !hasManagerRole || !salesClosed || !usdcDistributionSet || Boolean(tournamentFinalized) || isBusy}
+          >
+            {isBusy ? 'Finalizing...' : 'Finalize Tournament'}
           </Button>
         </div>
       </CardContent>

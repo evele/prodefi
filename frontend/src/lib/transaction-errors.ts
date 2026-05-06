@@ -105,6 +105,10 @@ export function mapBuyCartonError(error: unknown): string {
     return 'USDC is not accepted right now.'
   }
 
+  if (includesAny(message, ['tournamentsalesclosed', 'salesalreadyclosed', 'sales already closed'])) {
+    return 'Carton sales are already closed for this tournament.'
+  }
+
   if (includesAny(message, ['erc20insufficientallowance', 'insufficient allowance'])) {
     return 'Approve USDC before buying.'
   }
@@ -224,7 +228,7 @@ export function mapClaimError(error: unknown): string {
   const shared = mapSharedErrorMessage(message)
   if (shared) return shared
 
-  if (message.includes('tournament not closed')) {
+  if (includesAny(message, ['tournament not closed', 'tournamentnotfinalized', 'tournament not finalized'])) {
     return 'USDC prizes are not claimable yet.'
   }
   if (includesAny(message, ['not token owner', 'you aren\'t the owner of this carton'])) {
@@ -300,13 +304,28 @@ export function mapAdminError(error: unknown): string {
     return 'The selected game ID is invalid.'
   }
   if (message.includes('tournament already closed')) {
-    return 'This tournament is already closed for the selected asset.'
+    return 'This tournament is already finalized.'
+  }
+  if (includesAny(message, ['salesalreadyclosed', 'sales already closed'])) {
+    return 'Sales are already closed for this tournament.'
+  }
+  if (includesAny(message, ['salesnotclosed', 'sales not closed'])) {
+    return 'Close sales before this action.'
+  }
+  if (includesAny(message, ['tournamentnotfinalized', 'tournament not finalized'])) {
+    return 'Tournament must be finalized before this action.'
+  }
+  if (includesAny(message, ['tournamentnotreadyforfinalization', 'tournament not ready for finalization'])) {
+    return 'Finalize requires closed sales, prize distribution, all results, official winners, and final positions.'
   }
   if (message.includes('no prize pool')) {
-    return 'This tournament has no prize pool to close yet.'
+    return 'This tournament has no prize pool to finalize yet.'
   }
   if (message.includes('no prize distribution')) {
-    return 'Prize distribution must be configured before closing the tournament.'
+    return 'Prize distribution must be configured before finalizing the tournament.'
+  }
+  if (includesAny(message, ['invalidpercentage', 'invalid percentage'])) {
+    return 'Prize distribution percentages must be between 0 and 100 and sum to at most 100.'
   }
 
   return 'Admin action failed. Review the inputs and try again.'

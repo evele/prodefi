@@ -3,6 +3,8 @@ cache/
 out/
 /lib/
 node_modules/
+landing/site/dist/
+landing/site/.astro/
 
 # Ignores development broadcast logs
 !/broadcast
@@ -15,3 +17,8 @@ docs/
 # Dotenv file
 .env
 
+# Firebase local state and logs
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+landing/site/firebase-debug.log

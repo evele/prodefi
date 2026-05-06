@@ -16,11 +16,17 @@ DEPLOY_OUTPUT=$(forge script script/Deploy.s.sol --fork-url http://localhost:854
 # Imprimir la salida completa del deploy
 echo "$DEPLOY_OUTPUT"
 
-# Extraer las direcciones de los contratos
-CARTON_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Carton deployed at:" | awk '{print $4}')
-PREDICTIONS_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Predictions deployed at:" | awk '{print $4}')
-TREASURY_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "Treasury deployed at:" | awk '{print $4}')
-USDC_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep "MockUSDC deployed at:" | awk '{print $4}')
+# Extraer las direcciones de los contratos de forma robusta aunque Foundry
+# agregue prefijos o cambie levemente el formato de los logs.
+extract_address() {
+    local label="$1"
+    printf '%s\n' "$DEPLOY_OUTPUT" | grep "$label" | grep -m1 -Eo '0x[a-fA-F0-9]{40}'
+}
+
+CARTON_ADDRESS=$(extract_address "Carton deployed at:")
+PREDICTIONS_ADDRESS=$(extract_address "Predictions deployed at:")
+TREASURY_ADDRESS=$(extract_address "Treasury deployed at:")
+USDC_ADDRESS=$(extract_address "MockUSDC deployed at:")
 
 # Verificar que se extrajeron las direcciones
 if [ -z "$CARTON_ADDRESS" ] || [ -z "$PREDICTIONS_ADDRESS" ] || [ -z "$TREASURY_ADDRESS" ] || [ -z "$USDC_ADDRESS" ]; then
