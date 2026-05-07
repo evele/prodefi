@@ -1,17 +1,17 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro'
+import worldCupPoster from '../images/image_217bb8c0-803c-4772-9c18-18f1e677f831.webp'
 
 const waitlistAction = import.meta.env.PUBLIC_WAITLIST_ACTION || '/api/waitlist'
 
 const page = {
-  title: 'ProDefi | Predicciones del Mundial 2026',
+  title: 'Prode Mundial 2026 | Predicciones y premios | ProDefi',
   description:
-    'Conseguí tu cartón, hacé tus predicciones del Mundial 2026 y competí por premios reales con reglas transparentes.',
+    'Jugá al Prode Mundial 2026 con predicciones, ranking verificable, reglas públicas y premios reales. Sumate a la lista de espera de ProDefi.',
   waitlistAction,
   launchMessage: 'Dejá tu mail y te avisamos apenas abramos los cartones.',
   targetDate: '2026-06-11T20:00:00-03:00',
   targetDateLabel: '11 de junio de 2026',
-  heroSticker: 'Acceso anticipado',
 }
 
 const prizeCards = [
@@ -30,8 +30,8 @@ const prizeCards = [
   {
     eyebrow: 'Reglas',
     title: 'Reglas públicas',
-    description: 'Puntajes, desempates y distribución se publican antes del arranque.',
-    note: 'Todo queda visible en una sola página.',
+    description: 'Puntajes, desempates y reparto ya están definidos para que sepas a qué jugás.',
+    note: '',
     href: '/reglas',
     cta: 'Ver reglas y criterios',
   },
@@ -41,17 +41,17 @@ const steps = [
   {
     number: '01',
     title: 'Conseguí tu cartón',
-    description: 'Una entrada al ranking del Mundial. Sin vueltas, sin tutoriales eternos.',
+    description: 'Tu entrada al ranking del Mundial. Un cartón, una chance real de pelear arriba.',
   },
   {
     number: '02',
     title: 'Hacé tus predicciones',
-    description: 'Resultados, ganadores, sorpresas. La lectura de partido corre por tu cuenta.',
+    description: 'Cargá resultados exactos y tu top 4 del torneo. La lectura de partido corre por tu cuenta.',
   },
   {
     number: '03',
     title: 'Competí por premios',
-    description: 'Cada acierto suma. Cuanto más arriba terminás, más te podés llevar.',
+    description: 'Cada acierto suma. Si empatan en puntos, primero manda la cantidad de exactos.',
   },
 ]
 
@@ -59,12 +59,12 @@ const faqItems = [
   {
     question: '¿Qué es ProDefi?',
     answer:
-      'Una plataforma de Pronósticos Deportivos (casi como el clásico prode) sobre el Mundial 2026. Conseguís un cartón, marcás resultados y competís contra otros hinchas en un único ranking global.',
+      'ProDefi es un prode mundial 2026 onchain. Conseguís tu cartón, cargás predicciones de resultados y competís contra otros hinchas en un único ranking global.',
   },
   {
     question: '¿Cómo funciona?',
     answer:
-      'Te logueás, conseguís tu cartón, completás tus predicciones antes de que cierre y seguís tu posición en el ranking a medida que se juegan los partidos.',
+      'Entrás al Prode Mundial 2026 con tu cartón, cargás tus resultados exactos y tu top 4 antes del cierre, y seguís tu posición en el ranking a medida que se juegan los partidos.',
   },
   {
     question: '¿Necesito saber de crypto para jugar?',
@@ -74,17 +74,22 @@ const faqItems = [
   {
     question: '¿Cómo participo?',
     answer:
-      'Sumate a la lista de espera y te avisamos cuando esté listo.',
+      'Sumate a la lista de espera y te avisamos cuando abramos el Prode Mundial 2026.',
+  },
+  {
+    question: '¿Cómo se define el ranking?',
+    answer:
+      'Primero manda el puntaje total. Si hay empate, queda arriba quien tenga más resultados exactos. Si persiste, comparten posición.',
   },
   {
     question: '¿Qué puedo ganar?',
     answer:
-      'Premios reales según tu posición final. El pozo, los puestos premiados y la distribución se publican antes del lanzamiento.',
+      'Premios reales según tu posición final. En el flujo actual del producto, los premios se liquidan en USDC y el reparto final queda publicado en reglas.',
   },
   {
     question: '¿Cuándo se lanza?',
     answer:
-      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la lista de espera.',
+      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta del prode mundial la anunciamos por la lista de espera.',
   },
   {
     question: '¿Qué significa que sea onchain?',
@@ -96,10 +101,23 @@ const faqItems = [
 const socialLinks = []
 const activeSocialLinks = socialLinks.filter((link) => link.href)
 
+const faqStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqItems.map((item) => ({
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer,
+    },
+  })),
+}
+
 const year = new Date().getFullYear()
 ---
 
-<BaseLayout title={page.title} description={page.description}>
+<BaseLayout title={page.title} description={page.description} structuredData={faqStructuredData}>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
 
   <header class="site-header">
@@ -127,18 +145,16 @@ const year = new Date().getFullYear()
         <div class="hero-copy">
           <div class="kicker-row">
             <span class="kicker-line"></span>
-            <p class="eyebrow eyebrow--celeste">Predicciones del Mundial · Onchain</p>
+            <p class="eyebrow eyebrow--celeste">Prode Mundial 2026 · Predicciones onchain</p>
           </div>
 
           <h1 class="display hero-title">
-            Jugá<br />
-            el <span class="editorial">Mundial</span><br />
-            como nunca
+            Prode Mundial<br />
+            <span class="editorial">2026</span>
           </h1>
 
           <p class="hero-lead">
-            Conseguí tu cartón, predecí los partidos del Mundial 2026 y competí por
-            <strong>premios reales</strong> con reglas transparentes. Una sola pasión, un solo ranking.
+            ProDefi es tu <strong>prode mundial 2026</strong>: conseguí tu cartón, cargá predicciones de resultados y del top 4, y competí por <strong>premios reales</strong> en un ranking verificable.
           </p>
 
           <div class="cta-row">
@@ -148,26 +164,21 @@ const year = new Date().getFullYear()
 
           <p class="trust-row">
             <span class="trust-dot"></span>
-            <span>Resultados verificables · Reglas claras</span>
+            <span>Prode mundial · Reglas públicas · Ranking verificable</span>
           </p>
         </div>
 
         <div class="hero-visual">
-          <div class="hero-card" aria-label="Visual editorial del Mundial 2026">
+          <div class="hero-card">
+            <img
+              class="hero-card__poster"
+              src={worldCupPoster.src}
+              alt="Poster oficial del Mundial 2026"
+              loading="eager"
+              decoding="async"
+            />
             <div class="hero-card__grain"></div>
-            <div class="hero-card__label">
-              <span>ProDefi</span>
-              <span>Mundial 2026</span>
-            </div>
-            <div class="hero-card__copy">
-              <span class="eyebrow eyebrow--celeste">Mundial · 2026</span>
-              <strong class="display">Vamos,<br />Argentina.</strong>
-            </div>
-            <div class="hero-card__crosshair hero-card__crosshair--vertical"></div>
-            <div class="hero-card__crosshair hero-card__crosshair--horizontal"></div>
           </div>
-
-          <div class="hero-sticker">{page.heroSticker}</div>
         </div>
       </div>
 
@@ -299,7 +310,8 @@ const year = new Date().getFullYear()
         </h2>
 
         <p class="section-lead section-lead--center">
-          Dejanos tu mail y te avisamos apenas abramos los cartones. Cero spam, cero vueltas.
+          Dejanos tu mail y te avisamos apenas abramos los cartones. Prioridad de acceso, cero spam,
+          cero vueltas.
         </p>
 
         <form class="waitlist-form" method="post" action={page.waitlistAction} data-waitlist-form novalidate>
@@ -318,12 +330,6 @@ const year = new Date().getFullYear()
         <p class="waitlist-feedback" data-waitlist-feedback aria-live="polite">
           {page.launchMessage}
         </p>
-
-        <div class="waitlist-meta">
-          <span>Aviso prioritario</span>
-          <span>·</span>
-          <span>Lanzamiento antes del Mundial</span>
-        </div>
       </div>
     </section>
 
@@ -388,7 +394,7 @@ const year = new Date().getFullYear()
         <div>
           <p class="eyebrow">Estado</p>
           <div class="footer-links">
-            <p class="footer-note">Lanzamiento en preparación para el Mundial 2026.</p>
+            <p class="footer-note">Waitlist abierta. Reglas y desempates ya publicados.</p>
             <p class="footer-note">Hecho en Argentina, con la pelota en los pies.</p>
           </div>
         </div>

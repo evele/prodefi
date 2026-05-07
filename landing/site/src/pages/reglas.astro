@@ -2,63 +2,53 @@
 import BaseLayout from '../layouts/BaseLayout.astro'
 
 const page = {
-  title: 'Reglas | ProDefi',
+  title: 'Reglas del Prode Mundial 2026 | Puntaje, ranking y premios | ProDefi',
   description:
-    'Reglas de participación, puntaje, desempates y distribución de premios para ProDefi Mundial 2026.',
+    'Consultá las reglas del Prode Mundial 2026: puntaje por partido, ranking, desempates, premios y criterios de ProDefi.',
 }
 
-// TODO: completar la tabla exacta de puntajes cuando quede cerrada la edicion.
-// TODO: completar criterios finales de desempate y distribucion antes del lanzamiento.
-const sections = [
-  {
-    eyebrow: 'Participación',
-    title: 'Cómo entra una inscripción',
-    items: [
-      'Participan las inscripciones confirmadas dentro del plazo vigente de la edición.',
-      'El cierre de inscripciones se comunica antes del arranque del torneo.',
-      'Una vez cerrado el ingreso, el pozo y la base de participantes quedan consolidados para esa edición.',
-    ],
-  },
-  {
-    eyebrow: 'Puntaje',
-    title: 'Cómo se suman puntos',
-    items: [
-      'Cada acierto suma puntos según la tabla oficial publicada antes del arranque.',
-      'La tabla final define qué predicciones puntúan, cuánto vale cada una y cómo se computan los resultados.',
-      'La versión vigente para esa edición queda publicada en esta página antes del primer partido.',
-    ],
-  },
-  {
-    eyebrow: 'Desempates',
-    title: 'Cómo se ordena el ranking',
-    items: [
-      'Si dos o más participantes terminan con el mismo puntaje total, se aplican los criterios de desempate publicados para esa edición.',
-      'El orden de esos criterios queda informado junto con la tabla oficial de puntajes.',
-      'Los desempates no se modifican una vez iniciado el torneo.',
-    ],
-  },
-  {
-    eyebrow: 'Pozo',
-    title: 'Cómo se arma y distribuye',
-    items: [
-      'El pozo final depende de la cantidad de inscriptos confirmados al cierre.',
-      'La cantidad de puestos premiados se define según el tamaño final del pozo.',
-      'La distribución final se publica antes del arranque junto con las reglas vigentes de la edición.',
-    ],
-  },
-  {
-    eyebrow: 'Transparencia',
-    title: 'Cuándo se publican las reglas',
-    items: [
-      'Puntajes, desempates, pozo y distribución se publican antes del inicio del torneo.',
-      'Si hubiera ajustes previos al arranque, se informan en esta misma página.',
-      'Una vez iniciado el torneo, las reglas de esa edición quedan cerradas.',
-    ],
-  },
+const matchRows = [
+  ['Base por partido', '7 puntos'],
+  ['Bonus por acertar local / empate / visitante', '+3 puntos'],
+  ['Puntaje mínimo por partido', '0 puntos'],
+  ['Puntaje máximo por partido', '10 puntos'],
 ]
+
+const winnerRows = [
+  ['Campeón', '25 puntos'],
+  ['Subcampeón', '18 puntos'],
+  ['Tercer puesto', '10 puntos'],
+  ['Cuarto puesto', '10 puntos'],
+]
+
+const matchExamples = [
+  ['Oficial 2-1, tu predicción 2-1', '10 puntos'],
+  ['Oficial 5-5, tu predicción 6-5', '6 puntos'],
+  ['Oficial 6-5, tu predicción 1-0', '3 puntos'],
+  ['Oficial 5-5, tu predicción 0-1', '0 puntos'],
+]
+
+const breadcrumbStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Inicio',
+      item: 'https://prodefi.online/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Reglas del Prode Mundial 2026',
+      item: 'https://prodefi.online/reglas/',
+    },
+  ],
+}
 ---
 
-<BaseLayout title={page.title} description={page.description}>
+<BaseLayout title={page.title} description={page.description} structuredData={breadcrumbStructuredData}>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
 
   <header class="site-header">
@@ -72,7 +62,6 @@ const sections = [
         <a href="/">Inicio</a>
         <a href="/#premios">Premios</a>
         <a href="/#waitlist">Lista de espera</a>
-        <a href="/reglas" aria-current="page">Reglas</a>
       </nav>
 
       <a class="chip-link chip-link--accent" href="/#waitlist">Sumarme</a>
@@ -84,16 +73,18 @@ const sections = [
       <div class="shell section-inner rules-hero__inner">
         <div class="kicker-row">
           <span class="kicker-line"></span>
-          <p class="eyebrow eyebrow--celeste">Reglas del torneo</p>
+          <p class="eyebrow eyebrow--celeste">Reglas del Prode Mundial 2026</p>
         </div>
 
         <h1 class="display section-title">
-          Puntajes, premios<br /><span class="editorial">y criterios</span>
+          Reglas del Prode<br /><span class="editorial">Mundial 2026</span>
         </h1>
 
         <p class="section-lead">
-          Esta página concentra las reglas de participación, puntaje, desempates y distribución de
-          premios de ProDefi. La versión final de cada edición se publica antes del arranque.
+          Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking,
+          desempates, premios y condiciones con las que se publica el ranking final de ProDefi.
+          Cuando una edición esté abierta, esta misma página mostrará además su deadline, pozo y
+          distribución final de premios.
         </p>
 
         <div class="cta-row">
@@ -106,25 +97,137 @@ const sections = [
     <section class="rules-section">
       <div class="shell section-inner">
         <div class="rules-grid">
-          {sections.map((section) => (
-            <article class="rules-card">
-              <p class="eyebrow eyebrow--celeste">{section.eyebrow}</p>
-              <h2 class="display rules-card__title">{section.title}</h2>
-              <ul class="rules-list">
-                {section.items.map((item) => (
-                  <li>{item}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
+          <article class="rules-card">
+            <p class="eyebrow eyebrow--celeste">Participación</p>
+            <h2 class="display rules-card__title">Cómo entra un cartón</h2>
+            <ul class="rules-list">
+              <li>Cada cartón confirmado cuenta como una inscripción independiente dentro del ranking.</li>
+              <li>Las ventas se mantienen abiertas hasta el cierre definido para esa edición.</li>
+              <li>Las predicciones se pueden enviar hasta el deadline de la edición.</li>
+              <li>Partidos y ganadores pueden enviarse juntos o en dos pasos separados.</li>
+              <li>Una vez enviada una sección onchain, esa sección ya no se puede editar.</li>
+            </ul>
+          </article>
+
+          <article class="rules-card rules-card--wide">
+            <p class="eyebrow eyebrow--celeste">Puntaje por partido</p>
+            <h2 class="display rules-card__title">Cercanía al resultado exacto</h2>
+
+            <p class="rules-paragraph">
+              Cada partido se puntúa con esta fórmula:
+            </p>
+            <div class="rules-formula">
+              <code>max(0, 7 - error total de goles) + 3 si acertás local / empate / visitante</code>
+            </div>
+            <p class="rules-paragraph rules-paragraph--muted">
+              Donde el error total de goles es la suma de la diferencia absoluta entre tu marcador y
+              el marcador oficial de cada equipo.
+            </p>
+
+            <div class="rules-table" aria-label="Tabla de puntaje por partido">
+              {matchRows.map(([label, value]) => (
+                <div class="rules-table__row">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article class="rules-card rules-card--wide">
+            <p class="eyebrow eyebrow--celeste">Ejemplos</p>
+            <h2 class="display rules-card__title">Qué puntúa cada caso</h2>
+
+            <div class="rules-table" aria-label="Ejemplos de puntaje por partido">
+              {matchExamples.map(([label, value]) => (
+                <div class="rules-table__row">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+
+            <p class="rules-paragraph rules-paragraph--muted">
+              Los errores grandes no generan puntajes negativos: a partir de cierto desvío, el piso es
+              0 y sólo puede sobrevivir el bonus de resultado si acertaste local, empate o visitante.
+            </p>
+          </article>
+
+          <article class="rules-card">
+            <p class="eyebrow eyebrow--celeste">Ganadores</p>
+            <h2 class="display rules-card__title">Top 4 del torneo</h2>
+
+            <div class="rules-table" aria-label="Puntaje por ganadores del torneo">
+              {winnerRows.map(([label, value]) => (
+                <div class="rules-table__row">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+
+            <ul class="rules-list rules-list--compact">
+              <li>El campeón vale más que dos resultados exactos.</li>
+              <li>Tercer y cuarto puesto no exigen orden exacto entre sí.</li>
+              <li>Si no enviás ganadores, esa parte suma 0 puntos.</li>
+            </ul>
+          </article>
+
+          <article class="rules-card">
+            <p class="eyebrow eyebrow--celeste">Ranking</p>
+            <h2 class="display rules-card__title">Cómo se arma la tabla</h2>
+            <ul class="rules-list">
+              <li>El puntaje total de cada cartón es la suma de partidos resueltos más puntos de ganadores.</li>
+              <li>Mientras el torneo está en curso puede existir un ranking provisorio.</li>
+              <li>El ranking final se publica cuando ya están cargados todos los resultados oficiales, los 4 ganadores oficiales y las posiciones finales.</li>
+              <li>Ese ranking final, junto con sus desempates, es la referencia para premios y claims.</li>
+            </ul>
+          </article>
+
+          <article class="rules-card">
+            <p class="eyebrow eyebrow--celeste">Desempates</p>
+            <h2 class="display rules-card__title">Qué pasa si igualan en puntos</h2>
+            <ul class="rules-list">
+              <li>La tabla se ordena por puntaje total acumulado del cartón.</li>
+              <li>Si dos o más cartones empatan en puntos, queda arriba el que tenga más aciertos exactos de partidos.</li>
+              <li>Si el empate persiste después de ese criterio, comparten posición final con ranking estándar de competencia: por ejemplo, `1, 2, 2, 4`.</li>
+              <li>Si ese empate ocupa varias posiciones premiadas, se suman los premios de todos esos puestos y se reparten en partes iguales entre los empatados.</li>
+            </ul>
+          </article>
+
+          <article class="rules-card rules-card--wide">
+            <p class="eyebrow eyebrow--celeste">Premios</p>
+            <h2 class="display rules-card__title">Pozo, reparto y claims</h2>
+            <ul class="rules-list">
+              <li>El pozo depende de los cartones confirmados y del cierre económico de la edición.</li>
+              <li>No se prometen montos fijos mientras la inscripción siga abierta.</li>
+              <li>La cantidad de puestos premiados y la distribución exacta se publican antes del arranque.</li>
+              <li>Los premios se liquidan en USDC.</li>
+              <li>Si hay empate definitivo en puestos premiados, se suman los premios de los puestos alcanzados por ese empate y se reparten por partes iguales.</li>
+              <li>Los claims se habilitan recién cuando el torneo queda finalizado y el ranking final ya es definitivo.</li>
+            </ul>
+          </article>
+
+          <article class="rules-card rules-card--wide">
+            <p class="eyebrow eyebrow--celeste">Transparencia</p>
+            <h2 class="display rules-card__title">Qué queda público</h2>
+            <ul class="rules-list">
+              <li>Los resultados oficiales cargados, los ganadores oficiales y el ranking final quedan verificables públicamente.</li>
+              <li>Si hubiera cambios antes del arranque de una edición, se reflejan en esta misma página.</li>
+              <li>Una vez iniciado el torneo, la versión de reglas de esa edición queda cerrada.</li>
+            </ul>
+          </article>
         </div>
 
         <div class="rules-note-box">
-          <p class="eyebrow eyebrow--celeste">Importante</p>
+          <p class="eyebrow eyebrow--celeste">Resumen rápido</p>
           <p class="rules-note-box__body">
-            Mientras la inscripción siga abierta, no se prometen montos fijos ni un reparto cerrado.
-            Lo que sí se publica antes del arranque es la versión final de puntajes, desempates,
-            puestos premiados y distribución para esa edición.
+            Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón
+            vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás
+            la predicción de ganadores, esa parte suma 0. Si hay empate en puntos, manda primero la
+            cantidad de exactos; si sigue empatado, comparten posición con lógica `1, 2, 2, 4` y
+            reparten en partes iguales los premios de los puestos que ocuparon. El pozo y la
+            distribución exacta de una edición se anuncian antes de que arranque.
           </p>
         </div>
       </div>
@@ -156,8 +259,8 @@ const sections = [
         <div>
           <p class="eyebrow">Estado</p>
           <div class="footer-links">
-            <p class="footer-note">Documento vivo previo al lanzamiento.</p>
-            <p class="footer-note">Las reglas finales se publican antes del arranque.</p>
+            <p class="footer-note">Mecánica de puntaje publicada.</p>
+            <p class="footer-note">Pozo y reparto final se anuncian por edición.</p>
           </div>
         </div>
       </div>
