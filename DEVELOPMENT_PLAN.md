@@ -79,17 +79,19 @@ Completed in code and tests:
   - total points when official winners exist but a carton never submitted winner picks
 - `/reglas` in `landing/site` now reflects the current scoring definition
 
-Tie-break product decision locked:
+Payout / tie product decision locked (see `PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
 
-1. First tie-break: more exact score hits across all matches
-2. If still tied after that, cartones share the final position using standard competition ranking (`1, 2, 2, 4`)
-3. If that shared block covers prize positions, sum the prizes for all occupied positions and split them equally among the tied cartones
+1. Final ranking is ordered only by total points.
+2. If two or more cartones tie on points, they share the position using standard competition ranking (`1, 2, 2, 4`).
+3. There is no secondary tie-break by exact scores or any other metric.
+4. If a shared block covers prize positions, sum the occupied prizes and split them equally among the tied cartones.
+5. Prize model is a fixed 32-place pyramid over the prizeable pool, not a variable-ITM MTT structure.
 
 Next implementation follow-up:
 
-1. Reflect the tie-break rule in code and admin/final-ranking flow
+1. Reflect the shared-position rule in code and admin/final-ranking flow
 2. Ensure prize-claim logic supports shared ranking blocks like `1, 2, 2, 4`
-3. Re-run tie/distribution analysis with the final scoring + tie-break definition to estimate winner uniqueness for pools from `100` to `10,000` players
+3. Replace the old default payout assumptions with the fixed 32-place pyramid
 
 ### Recently Completed: USDC-Only Cleanup (Apr 2026)
 

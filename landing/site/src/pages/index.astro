@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro'
-import worldCupPoster from '../images/image_217bb8c0-803c-4772-9c18-18f1e677f831.webp'
+import worldCupPoster from '../images/poster-mundial-fifa-2026.webp'
 
 const waitlistAction = import.meta.env.PUBLIC_WAITLIST_ACTION || '/api/waitlist'
 
@@ -10,27 +10,27 @@ const page = {
     'Jugá al Prode Mundial 2026 con predicciones, ranking verificable, reglas públicas y premios reales. Sumate a la lista de espera de ProDefi.',
   waitlistAction,
   launchMessage: 'Dejá tu mail y te avisamos apenas abramos los cartones.',
-  targetDate: '2026-06-11T20:00:00-03:00',
+  targetDate: '2026-06-11T16:00:00-03:00',
   targetDateLabel: '11 de junio de 2026',
+  targetTimeLabel: '16:00 Buenos Aires',
 }
 
 const prizeCards = [
   {
     eyebrow: 'Pozo',
-    title: 'Pozo dinámico',
-    description: 'Se arma con los inscriptos confirmados antes del cierre.',
-    note: 'Se comunica antes del arranque.',
+    title: 'Pozo en aumento',
+    description: 'El 95% de lo recaudado por cartones integra el pozo premiable de esa edición.',
+    note: 'El 5% restante cubre infraestructura, mantenimiento y subsidio de gas.',
   },
   {
     eyebrow: 'Puestos',
-    title: 'Puestos premiados',
-    description: 'Se definen según el tamaño final del pozo y la cantidad de inscriptos.',
-    note: 'El reparto acompaña el pozo acumulado.',
+    title: '32 ganadores',
+    description: 'Del 1° al 32°: campeón, segundo, tercero, cuarto, cuartos, octavos y dieciseisavos  .',
   },
   {
     eyebrow: 'Reglas',
     title: 'Reglas públicas',
-    description: 'Puntajes, desempates y reparto ya están definidos para que sepas a qué jugás.',
+    description: 'La fórmula de puntaje, los premios y las reglas de empates quedan publicadas para que sepas a qué jugás.',
     note: '',
     href: '/reglas',
     cta: 'Ver reglas y criterios',
@@ -51,7 +51,7 @@ const steps = [
   {
     number: '03',
     title: 'Competí por premios',
-    description: 'Cada acierto suma. Si empatan en puntos, primero manda la cantidad de exactos.',
+    description: 'Cada acierto suma. Si hay empate en puntos, comparten posición y se divide el bloque de premios.',
   },
 ]
 
@@ -59,7 +59,7 @@ const faqItems = [
   {
     question: '¿Qué es ProDefi?',
     answer:
-      'ProDefi es un prode mundial 2026 onchain. Conseguís tu cartón, cargás predicciones de resultados y competís contra otros hinchas en un único ranking global.',
+      'ProDefi es un Prode Mundial 2026 con reglas onchain. Conseguís tu cartón, cargás predicciones de resultados y competís contra otros hinchas en un único ranking global.',
   },
   {
     question: '¿Cómo funciona?',
@@ -69,7 +69,7 @@ const faqItems = [
   {
     question: '¿Necesito saber de crypto para jugar?',
     answer:
-      'No hace falta ser experto. La experiencia está pensada para que la parte técnica no te frene. No trates de entenderla, disfrutala.',
+      'No hace falta ser experto. La experiencia está pensada para que la parte técnica no te frene. Como diría el Chiqui: "No trates de entenderla, disfrutala".',
   },
   {
     question: '¿Cómo participo?',
@@ -79,22 +79,22 @@ const faqItems = [
   {
     question: '¿Cómo se define el ranking?',
     answer:
-      'Primero manda el puntaje total. Si hay empate, queda arriba quien tenga más resultados exactos. Si persiste, comparten posición.',
+      'El ranking se ordena por puntaje total. Si dos o más cartones empatan, comparten posición con lógica de competencia estándar: 1, 2, 2, 4.',
   },
   {
     question: '¿Qué puedo ganar?',
     answer:
-      'Premios reales según tu posición final. En el flujo actual del producto, los premios se liquidan en USDC y el reparto final queda publicado en reglas.',
+      'Premios reales según tu posición final. Se cobran en USDC y alcanzan a los primeros 32 puestos con una pirámide fija de porcentajes sobre el pozo premiable.',
   },
   {
     question: '¿Cuándo se lanza?',
     answer:
-      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta del prode mundial la anunciamos por la lista de espera.',
+      'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la lista de espera.',
   },
   {
     question: '¿Qué significa que sea onchain?',
     answer:
-      'Que las reglas, los puntajes y los premios quedan verificables públicamente. No dependés de que alguien te diga que fue justo: podés comprobarlo.',
+      'Que las reglas, los puntajes y los premios quedan verificables públicamente. No dependés de que alguien te diga que fue justo: podés comprobarlo y cobrar tu premio sin intermediarios.',
   },
 ]
 
@@ -136,6 +136,7 @@ const year = new Date().getFullYear()
 
       <a class="chip-link chip-link--accent" href="#waitlist">Sumarme</a>
     </div>
+    <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
   </header>
 
   <main id="contenido">
@@ -154,7 +155,7 @@ const year = new Date().getFullYear()
           </h1>
 
           <p class="hero-lead">
-            ProDefi es tu <strong>prode mundial 2026</strong>: conseguí tu cartón, cargá predicciones de resultados y del top 4, y competí por <strong>premios reales</strong> en un ranking verificable.
+            Jugá el <strong>Prode Mundial 2026</strong>: conseguí tu cartón, cargá predicciones de resultados y del top 4, y competí por <strong>premios reales</strong> en un ranking verificable.
           </p>
 
           <div class="cta-row">
@@ -205,7 +206,7 @@ const year = new Date().getFullYear()
             <span class="kicker-line"></span>
             <p class="eyebrow eyebrow--celeste">Cuenta regresiva</p>
           </div>
-          <p class="microcopy">{page.targetDateLabel} · Buenos Aires</p>
+          <p class="microcopy countdown-microcopy">{page.targetDateLabel} · {page.targetTimeLabel}</p>
         </div>
 
         <h2 class="display section-title section-title--countdown">
@@ -255,9 +256,8 @@ const year = new Date().getFullYear()
             Más acertás<br /><span class="editorial">más te llevás</span>
           </h2>
           <p class="section-lead section-lead--ink">
-            El pozo, los puestos premiados y la distribución final se ajustan según la cantidad de
-            inscriptos. Lo importante no es prometer números fijos: es dejar claras las reglas con
-            las que se define todo.
+            El pozo crece hasta que se cierran las inscripciones. Treinta y dos cobran. El resto
+            mira desde abajo. ¿Te alcanza para entrar?
           </p>
         </div>
 
@@ -288,9 +288,9 @@ const year = new Date().getFullYear()
         </div>
 
         <div class="light-meta-strip">
-          <span>● Pozo dinámico</span>
+          <span>● Pozo único </span>
+          <span>● 32 premiados</span>
           <span>● Reglas públicas</span>
-          <span>● Sin letra chica</span>
         </div>
       </div>
       <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
@@ -332,7 +332,7 @@ const year = new Date().getFullYear()
         </p>
       </div>
     </section>
-
+    <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
     <section class="faq-section" id="faq">
       <div class="shell section-inner">
         <div class="kicker-row">
@@ -367,7 +367,10 @@ const year = new Date().getFullYear()
   <footer class="site-footer">
     <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
     <div class="shell footer-inner">
-      <p class="display footer-wordmark">PRODEFI</p>
+      <div class="footer-brand" aria-label="ProDefi">
+        <p class="display footer-wordmark">PRODEFI</p>
+        <span class="footer-brand-ball" aria-hidden="true">⚽</span>
+      </div>
 
       <div class="footer-grid">
         <div>
@@ -394,7 +397,7 @@ const year = new Date().getFullYear()
         <div>
           <p class="eyebrow">Estado</p>
           <div class="footer-links">
-            <p class="footer-note">Waitlist abierta. Reglas y desempates ya publicados.</p>
+            <p class="footer-note">Waitlist abierta. Reglas y estructura de premios ya publicadas.</p>
             <p class="footer-note">Hecho en Argentina, con la pelota en los pies.</p>
           </div>
         </div>

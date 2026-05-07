@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro'
 const page = {
   title: 'Reglas del Prode Mundial 2026 | Puntaje, ranking y premios | ProDefi',
   description:
-    'Consultá las reglas del Prode Mundial 2026: puntaje por partido, ranking, desempates, premios y criterios de ProDefi.',
+    'Consultá las reglas del Prode Mundial 2026: puntaje por partido, ranking, empates, pozo premiable y premios de ProDefi.',
 }
 
 const matchRows = [
@@ -19,6 +19,16 @@ const winnerRows = [
   ['Subcampeón', '18 puntos'],
   ['Tercer puesto', '10 puntos'],
   ['Cuarto puesto', '10 puntos'],
+]
+
+const payoutRows = [
+  ['1° puesto', '22% del pozo'],
+  ['2° puesto', '14% del pozo'],
+  ['3° puesto', '9% del pozo'],
+  ['4° puesto', '7% del pozo'],
+  ['5° al 8°', '4% cada uno'],
+  ['9° al 16°', '2% cada uno'],
+  ['17° al 32°', '1% cada uno'],
 ]
 
 const matchExamples = [
@@ -82,9 +92,9 @@ const breadcrumbStructuredData = {
 
         <p class="section-lead">
           Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking,
-          desempates, premios y condiciones con las que se publica el ranking final de ProDefi.
-          Cuando una edición esté abierta, esta misma página mostrará además su deadline, pozo y
-          distribución final de premios.
+          empates, premios y condiciones con las que se publica el ranking final de ProDefi. Cuando
+          una edición esté abierta, esta misma página mostrará además su fecha límite, pozo final y
+          distribución de premios en USDC.
         </p>
 
         <div class="cta-row">
@@ -103,7 +113,7 @@ const breadcrumbStructuredData = {
             <ul class="rules-list">
               <li>Cada cartón confirmado cuenta como una inscripción independiente dentro del ranking.</li>
               <li>Las ventas se mantienen abiertas hasta el cierre definido para esa edición.</li>
-              <li>Las predicciones se pueden enviar hasta el deadline de la edición.</li>
+              <li>Las predicciones se pueden enviar hasta la fecha límite de la edición.</li>
               <li>Partidos y ganadores pueden enviarse juntos o en dos pasos separados.</li>
               <li>Una vez enviada una sección onchain, esa sección ya no se puede editar.</li>
             </ul>
@@ -167,8 +177,6 @@ const breadcrumbStructuredData = {
             </div>
 
             <ul class="rules-list rules-list--compact">
-              <li>El campeón vale más que dos resultados exactos.</li>
-              <li>Tercer y cuarto puesto no exigen orden exacto entre sí.</li>
               <li>Si no enviás ganadores, esa parte suma 0 puntos.</li>
             </ul>
           </article>
@@ -180,32 +188,42 @@ const breadcrumbStructuredData = {
               <li>El puntaje total de cada cartón es la suma de partidos resueltos más puntos de ganadores.</li>
               <li>Mientras el torneo está en curso puede existir un ranking provisorio.</li>
               <li>El ranking final se publica cuando ya están cargados todos los resultados oficiales, los 4 ganadores oficiales y las posiciones finales.</li>
-              <li>Ese ranking final, junto con sus desempates, es la referencia para premios y claims.</li>
+              <li>Ese ranking final, junto con sus posiciones compartidas cuando corresponda, es la referencia para premios y cobros.</li>
             </ul>
           </article>
 
           <article class="rules-card">
-            <p class="eyebrow eyebrow--celeste">Desempates</p>
+            <p class="eyebrow eyebrow--celeste">Empates</p>
             <h2 class="display rules-card__title">Qué pasa si igualan en puntos</h2>
             <ul class="rules-list">
               <li>La tabla se ordena por puntaje total acumulado del cartón.</li>
-              <li>Si dos o más cartones empatan en puntos, queda arriba el que tenga más aciertos exactos de partidos.</li>
-              <li>Si el empate persiste después de ese criterio, comparten posición final con ranking estándar de competencia: por ejemplo, `1, 2, 2, 4`.</li>
+              <li>Si dos o más cartones empatan en puntos, comparten posición final con ranking estándar de competencia: por ejemplo, `1, 2, 2, 4`.</li>
+              <li>No existe un criterio adicional de desempate por cantidad de exactos ni por ningún otro dato secundario.</li>
               <li>Si ese empate ocupa varias posiciones premiadas, se suman los premios de todos esos puestos y se reparten en partes iguales entre los empatados.</li>
             </ul>
           </article>
 
           <article class="rules-card rules-card--wide">
             <p class="eyebrow eyebrow--celeste">Premios</p>
-            <h2 class="display rules-card__title">Pozo, reparto y claims</h2>
+            <h2 class="display rules-card__title">Pozo, reparto y cobros</h2>
             <ul class="rules-list">
-              <li>El pozo depende de los cartones confirmados y del cierre económico de la edición.</li>
-              <li>No se prometen montos fijos mientras la inscripción siga abierta.</li>
-              <li>La cantidad de puestos premiados y la distribución exacta se publican antes del arranque.</li>
+              <li>El 95% de lo recaudado por cartones integra el pozo premiable de esa edición.</li>
+              <li>El 5% restante queda fuera del pozo para infraestructura, mantenimiento y subsidio de gas.</li>
+              <li>Los primeros 32 puestos del ranking final son premiados.</li>
+              <li>La cantidad de premiados no cambia con el tamaño del field: cambian los montos según el pozo final.</li>
               <li>Los premios se liquidan en USDC.</li>
               <li>Si hay empate definitivo en puestos premiados, se suman los premios de los puestos alcanzados por ese empate y se reparten por partes iguales.</li>
-              <li>Los claims se habilitan recién cuando el torneo queda finalizado y el ranking final ya es definitivo.</li>
+              <li>Los cobros se habilitan recién cuando el torneo queda finalizado y el ranking final ya es definitivo.</li>
             </ul>
+
+            <div class="rules-table" aria-label="Pirámide de premios del torneo">
+              {payoutRows.map(([label, value]) => (
+                <div class="rules-table__row">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
           </article>
 
           <article class="rules-card rules-card--wide">
@@ -224,10 +242,11 @@ const breadcrumbStructuredData = {
           <p class="rules-note-box__body">
             Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón
             vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás
-            la predicción de ganadores, esa parte suma 0. Si hay empate en puntos, manda primero la
-            cantidad de exactos; si sigue empatado, comparten posición con lógica `1, 2, 2, 4` y
-            reparten en partes iguales los premios de los puestos que ocuparon. El pozo y la
-            distribución exacta de una edición se anuncian antes de que arranque.
+            la predicción de ganadores, esa parte suma 0. El 95% de lo recaudado integra el pozo
+            premiable y el 5% restante cubre infraestructura, mantenimiento y subsidio de gas. Los
+            primeros 32 puestos cobran con una pirámide fija de porcentajes. Si hay empate en
+            puntos, comparten posición con lógica `1, 2, 2, 4` y reparten en partes iguales los
+            premios de los puestos que ocuparon.
           </p>
         </div>
       </div>
@@ -237,7 +256,10 @@ const breadcrumbStructuredData = {
   <footer class="site-footer">
     <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
     <div class="shell footer-inner">
-      <p class="display footer-wordmark">PRODEFI</p>
+      <div class="footer-brand" aria-label="ProDefi">
+        <p class="display footer-wordmark">PRODEFI</p>
+        <span class="footer-brand-ball" aria-hidden="true">⚽</span>
+      </div>
 
       <div class="footer-grid">
         <div>
@@ -259,8 +281,8 @@ const breadcrumbStructuredData = {
         <div>
           <p class="eyebrow">Estado</p>
           <div class="footer-links">
-            <p class="footer-note">Mecánica de puntaje publicada.</p>
-            <p class="footer-note">Pozo y reparto final se anuncian por edición.</p>
+            <p class="footer-note">Mecánica de puntaje y empates publicada.</p>
+            <p class="footer-note">Pozo 95/5 y pirámide de 32 premiados definidos.</p>
           </div>
         </div>
       </div>
