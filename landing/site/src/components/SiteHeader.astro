@@ -1,0 +1,51 @@
+---
+interface NavLink {
+  href: string
+  label: string
+}
+
+interface LanguageLink {
+  href: string
+  label: string
+  isCurrent: boolean
+}
+
+interface Props {
+  locale: 'es' | 'en'
+  brandHref: string
+  brandAriaLabel: string
+  nav: NavLink[]
+  ctaHref: string
+  ctaLabel: string
+  languageLinks: LanguageLink[]
+}
+
+const { locale, brandHref, brandAriaLabel, nav, ctaHref, ctaLabel, languageLinks } = Astro.props
+---
+
+<header class="site-header">
+  <div class="shell header-inner">
+    <a class="brand" href={brandHref} aria-label={brandAriaLabel}>
+      <span class="brand-wordmark">PRODEFI</span>
+      <span class="brand-ball" aria-hidden="true">⚽</span>
+    </a>
+
+    <nav class="header-nav" aria-label={locale === 'es' ? 'Navegación principal' : 'Main navigation'}>
+      {nav.map((link) => <a href={link.href}>{link.label}</a>)}
+    </nav>
+
+    <div class="header-actions">
+      <div class="language-switch" aria-label={locale === 'es' ? 'Selector de idioma' : 'Language switcher'}>
+        {languageLinks.map((link, index) => (
+          <>
+            {index > 0 && <span class="language-switch__divider" aria-hidden="true">/</span>}
+            <a href={link.href} aria-current={link.isCurrent ? 'page' : undefined}>{link.label}</a>
+          </>
+        ))}
+      </div>
+
+      <a class="chip-link chip-link--accent" href={ctaHref}>{ctaLabel}</a>
+    </div>
+  </div>
+  <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+</header>

@@ -1,5 +1,7 @@
 ---
 import worldCupPoster from '../images/poster-mundial-fifa-2026.webp'
+import SiteFooter from './SiteFooter.astro'
+import SiteHeader from './SiteHeader.astro'
 import type { LandingContent } from '../data/landing-content'
 
 interface Props {
@@ -9,29 +11,25 @@ interface Props {
 }
 
 const { content, waitlistAction, rulesHref } = Astro.props
-const year = new Date().getFullYear()
-const activeSocialLinks: Array<{ href: string; label: string }> = []
+const site = Astro.site ? new URL(Astro.site) : new URL('https://prodefi.online')
+const shareUrl = new URL(Astro.url.pathname, site).toString()
+const languageLinks = [
+  { href: '/', label: 'ES', isCurrent: content.locale === 'es' },
+  { href: '/en/', label: 'EN', isCurrent: content.locale === 'en' },
+]
 ---
 
 <a class="skip-link" href="#contenido">{content.locale === 'es' ? 'Saltar al contenido' : 'Skip to content'}</a>
 
-<header class="site-header">
-  <div class="shell header-inner">
-    <a class="brand" href="#top" aria-label={content.header.brandAriaLabel}>
-      <span class="brand-wordmark">PRODEFI</span>
-      <span class="brand-ball" aria-hidden="true">⚽</span>
-    </a>
-
-    <nav class="header-nav" aria-label={content.locale === 'es' ? 'Navegación principal' : 'Main navigation'}>
-      {content.header.nav.map((link) => (
-        <a href={link.href}>{link.label}</a>
-      ))}
-    </nav>
-
-    <a class="chip-link chip-link--accent" href="#waitlist">{content.header.ctaLabel}</a>
-  </div>
-  <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
-</header>
+<SiteHeader
+  locale={content.locale}
+  brandHref="#top"
+  brandAriaLabel={content.header.brandAriaLabel}
+  nav={content.header.nav}
+  ctaHref="#waitlist"
+  ctaLabel={content.header.ctaLabel}
+  languageLinks={languageLinks}
+/>
 
 <main id="contenido">
   <section class="hero" id="top">
@@ -164,7 +162,7 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
             <h3 class="display prize-heading">{card.title}</h3>
             <p class:list={['prize-body', index === 2 && 'prize-body--muted']}>{card.description}</p>
             <p class="prize-note">{card.note}</p>
-            {card.href && card.cta && <a class="button button--outline" href={rulesHref}>{card.cta}</a>}
+            {card.href && card.cta && <a class="button button--outline" href={rulesHref} target="_blank" rel="noopener noreferrer">{card.cta}</a>}
           </article>
         ))}
       </div>
@@ -192,6 +190,11 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
       <p class="section-lead section-lead--center">{content.waitlist.lead}</p>
 
       <form class="waitlist-form" method="post" action={waitlistAction} data-waitlist-form novalidate>
+        <div class="honeypot-field" aria-hidden="true">
+          <label for="waitlist-company">Company</label>
+          <input id="waitlist-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+        <input type="hidden" name="startedAt" value="" data-waitlist-started-at />
         <label class="sr-only" for="waitlist-email">{content.waitlist.emailLabel}</label>
         <input
           id="waitlist-email"
@@ -242,47 +245,7 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
   </section>
 </main>
 
-<footer class="site-footer">
-  <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
-  <div class="shell footer-inner">
-    <div class="footer-brand" aria-label="ProDefi">
-      <p class="display footer-wordmark">PRODEFI</p>
-      <span class="footer-brand-ball" aria-hidden="true">⚽</span>
-    </div>
-
-    <div class="footer-grid">
-      <div>
-        <p class="eyebrow">{content.footer.sections.navigation.label}</p>
-        <div class="footer-links">
-          {content.footer.sections.navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
-        </div>
-      </div>
-
-      <div>
-        <p class="eyebrow">{content.footer.sections.community.label}</p>
-        <div class="footer-links">
-          {activeSocialLinks.length > 0 ? (
-            activeSocialLinks.map((link) => <a href={link.href}>{link.label}</a>)
-          ) : (
-            <p class="footer-note">{content.footer.sections.community.emptyText}</p>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <p class="eyebrow">{content.footer.sections.status.label}</p>
-        <div class="footer-links">
-          {content.footer.sections.status.lines.map((line) => <p class="footer-note">{line}</p>)}
-        </div>
-      </div>
-    </div>
-
-    <div class="footer-meta">
-      <span>© {year} {content.footer.meta[0]}</span>
-      <span>{content.footer.meta[1]}</span>
-    </div>
-  </div>
-</footer>
+<SiteFooter locale={content.locale} footer={content.footer} shareUrl={shareUrl} shareTitle={content.page.title} />
 
 <script is:inline>
   const countdownRoot = document.querySelector('[data-target-date]')
@@ -320,11 +283,19 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
   if (waitlistSection && waitlistForm && waitlistFeedback) {
     const endpoint = waitlistSection.dataset.waitlistAction || ''
     const emailInput = waitlistForm.querySelector('input[type="email"]')
+    const honeypotInput = waitlistForm.querySelector('input[name="company"]')
+    const startedAtInput = waitlistForm.querySelector('[data-waitlist-started-at]')
+
+    if (startedAtInput instanceof HTMLInputElement) {
+      startedAtInput.value = String(Date.now())
+    }
 
     waitlistForm.addEventListener('submit', async (event) => {
       if (!(emailInput instanceof HTMLInputElement)) return
 
       const email = emailInput.value.trim()
+      const company = honeypotInput instanceof HTMLInputElement ? honeypotInput.value.trim() : ''
+      const startedAt = startedAtInput instanceof HTMLInputElement ? startedAtInput.value : ''
       const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       if (!isValid) {
         event.preventDefault()
@@ -348,12 +319,25 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, company, startedAt }),
         })
 
-        if (!response.ok) throw new Error('bad response')
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          if (response.status === 429 || payload?.error === 'rate-limit-exceeded') {
+            waitlistFeedback.textContent = waitlistMessages.rateLimited
+            waitlistFeedback.dataset.state = 'error'
+            return
+          }
+
+          throw new Error('bad response')
+        }
 
         waitlistForm.reset()
+        if (startedAtInput instanceof HTMLInputElement) {
+          startedAtInput.value = String(Date.now())
+        }
         waitlistFeedback.textContent = waitlistMessages.success
         waitlistFeedback.dataset.state = 'success'
       } catch {

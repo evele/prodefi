@@ -25,6 +25,7 @@ const {
 } = Astro.props
 const site = Astro.site ? new URL(Astro.site) : new URL('https://prodefi.online')
 const canonical = new URL(Astro.url.pathname, site)
+const gaMeasurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-CVPJ7VDK9E'
 const schemaItems = [
   {
     '@context': 'https://schema.org',
@@ -72,6 +73,22 @@ const schemaItems = [
 
     <meta name="theme-color" content="#07090f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    {
+      gaMeasurementId && (
+        <>
+          <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}></script>
+          <script is:inline define:vars={{ gaMeasurementId }}>
+            window.dataLayer = window.dataLayer || []
+            function gtag() {
+              dataLayer.push(arguments)
+            }
+            gtag('js', new Date())
+            gtag('config', gaMeasurementId)
+          </script>
+        </>
+      )
+    }
 
     {alternates.map((alternate) => (
       <link rel="alternate" hreflang={alternate.hrefLang} href={new URL(alternate.href, site)} />

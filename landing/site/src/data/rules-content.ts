@@ -15,7 +15,6 @@ export interface RulesContent {
     titleEditorial: string
     lead: string
     primaryCtaLabel: string
-    secondaryCtaLabel: string
   }
   sections: {
     participation: {
@@ -75,10 +74,6 @@ export interface RulesContent {
         label: string
         links: Array<{ href: string; label: string }>
       }
-      community: {
-        label: string
-        emptyText: string
-      }
       status: {
         label: string
         lines: string[]
@@ -110,18 +105,16 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       lead:
         'Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking, empates, premios y condiciones con las que se publica el ranking final de ProDefi. Cuando una edición esté abierta, esta misma página mostrará además su fecha límite, pozo final y distribución de premios en USDC.',
       primaryCtaLabel: 'Sumarme a la lista de espera',
-      secondaryCtaLabel: 'Volver a la landing',
     },
     sections: {
       participation: {
         eyebrow: 'Participación',
-        title: 'Cómo entra un cartón',
+        title: 'Cómo participa un cartón',
         items: [
           'Cada cartón confirmado cuenta como una inscripción independiente dentro del ranking.',
-          'Las ventas se mantienen abiertas hasta el cierre definido para esa edición.',
+          'Las ventas se mantienen abiertas hasta el cierre definido para la copa.',
           'Las predicciones se pueden enviar hasta la fecha límite de la edición.',
-          'Partidos y ganadores pueden enviarse juntos o en dos pasos separados.',
-          'Una vez enviada una sección onchain, esa sección ya no se puede editar.',
+          'Una vez enviada una predicción, ya no se puede editar.',
         ],
       },
       matchScoring: {
@@ -152,14 +145,14 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       },
       winners: {
         eyebrow: 'Ganadores',
-        title: 'Top 4 del torneo',
+        title: 'Top 4 del mundial',
         rows: [
           ['Campeón', '25 puntos'],
           ['Subcampeón', '18 puntos'],
           ['Tercer puesto', '10 puntos'],
           ['Cuarto puesto', '10 puntos'],
         ],
-        items: ['Si no enviás ganadores, esa parte suma 0 puntos.'],
+        items: [],
       },
       ranking: {
         eyebrow: 'Ranking',
@@ -168,7 +161,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
           'El puntaje total de cada cartón es la suma de partidos resueltos más puntos de ganadores.',
           'Mientras el torneo está en curso puede existir un ranking provisorio.',
           'El ranking final se publica cuando ya están cargados todos los resultados oficiales, los 4 ganadores oficiales y las posiciones finales.',
-          'Ese ranking final, junto con sus posiciones compartidas cuando corresponda, es la referencia para premios y cobros.',
+          'El ranking final es la referencia para premios y cobros.',
         ],
       },
       ties: {
@@ -186,9 +179,9 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
         title: 'Pozo, reparto y cobros',
         items: [
           'El 95% de lo recaudado por cartones integra el pozo de esa edición.',
-          'El 5% restante queda fuera del pozo para infraestructura, mantenimiento y subsidio de gas.',
+          'El 5% restante queda fuera del pozo para infraestructura y mantenimiento.',
           'Los primeros 32 puestos del ranking final son premiados.',
-          'La cantidad de premiados no cambia con el tamaño del field: cambian los montos según el pozo final.',
+          'La cantidad de premiados no cambia con el tamaño de los inscriptos: cambian los montos según el pozo final.',
           'Los premios se liquidan en USDC.',
           'Si hay empate definitivo en puestos premiados, se suman los premios de los puestos alcanzados por ese empate y se reparten por partes iguales.',
           'Los cobros se habilitan recién cuando el torneo queda finalizado y el ranking final ya es definitivo.',
@@ -216,7 +209,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
     quickSummary: {
       eyebrow: 'Resumen rápido',
       body:
-        'Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás la predicción de ganadores, esa parte suma 0. El 95% de lo recaudado integra el pozo de esa edición y el 5% restante cubre infraestructura, mantenimiento y subsidio de gas. Los primeros 32 puestos cobran con una pirámide fija de porcentajes. Si hay empate en puntos, comparten posición con lógica `1, 2, 2, 4` y reparten en partes iguales los premios de los puestos que ocuparon.',
+        'Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás la predicción de ganadores, esa parte suma 0. El 95% de lo recaudado integra el pozo de esa edición y el 5% restante cubre infraestructura y mantenimiento. Los primeros 32 puestos cobran un porcentajes fijos del pozo. Si hay empate en puntos, comparten posición con lógica `1, 2, 2, 4` y reparten en partes iguales los premios de los puestos que ocuparon.',
     },
     footer: {
       sections: {
@@ -228,13 +221,9 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
             { href: '/reglas', label: 'Reglas' },
           ],
         },
-        community: {
-          label: 'Comunidad',
-          emptyText: 'Canales oficiales en camino.',
-        },
         status: {
           label: 'Estado',
-          lines: ['Mecánica de puntaje y empates publicada.', 'Pozo 95/5 y pirámide de 32 premiados definidos.'],
+          lines: ['Waitlist abierta. Reglas y estructura de premios ya publicadas','Hecho en Argentina, con la pelota en los pies.'],
         },
       },
     },
@@ -261,7 +250,6 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       lead:
         'This page gathers the rules for World Cup Predictions 2026: match scoring, leaderboard, ties, prizes and the conditions used to publish ProDefi\'s final standings. Once an edition is open, this page will also show its submission deadline, final pool and USDC prize amounts.',
       primaryCtaLabel: 'Join the waitlist',
-      secondaryCtaLabel: 'Back to landing',
     },
     sections: {
       participation: {
@@ -269,10 +257,9 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
         title: 'How an entry gets in',
         items: [
           'Each confirmed entry counts as one independent position in the leaderboard.',
-          'Sales stay open until the closing point set for that edition.',
+          'Sales stay open until the deadline set for the world cup.',
           'Predictions can be submitted until the edition deadline.',
-          'Match picks and final-four picks can be submitted together or in two separate steps.',
-          'Once an onchain section is submitted, that section can no longer be edited.',
+          'Once an onchain prediction is submitted, that prediction can no longer be edited.',
         ],
       },
       matchScoring: {
@@ -303,14 +290,14 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       },
       winners: {
         eyebrow: 'Winners',
-        title: 'Tournament top four',
+        title: 'Wordlcup winners',
         rows: [
           ['Champion', '25 points'],
           ['Runner-up', '18 points'],
           ['Third place', '10 points'],
           ['Fourth place', '10 points'],
         ],
-        items: ['If you do not submit winner picks, that section scores 0 points.'],
+        items: [''],
       },
       ranking: {
         eyebrow: 'Leaderboard',
@@ -319,7 +306,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
           'Each entry\'s total score is the sum of resolved match points plus winner-pick points.',
           'A provisional leaderboard may exist while the tournament is still being played.',
           'The final leaderboard is published once all official match results, the official top four and final placings are loaded.',
-          'That final leaderboard, including shared positions when they apply, is the reference for prizes and payouts.',
+          'The final leaderboard is the reference for prizes and payouts.',
         ],
       },
       ties: {
@@ -337,7 +324,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
         title: 'Pool, payouts and claiming',
         items: [
           '95% of all entry revenue goes into that edition\'s prize pool.',
-          'The remaining 5% stays outside the pool to cover infrastructure, maintenance and gas subsidy.',
+          'The remaining 5% stays outside the pool to cover infrastructure and maintenance.',
           'The first 32 places on the final leaderboard are paid.',
           'The number of paid places does not scale with field size: only the prize amounts grow with the final pool.',
           'Prizes are paid in USDC.',
@@ -367,7 +354,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
     quickSummary: {
       eyebrow: 'Quick summary',
       body:
-        'Match scoring ranges from 0 to 10. You never lose points for a bad miss. The champion is worth 25, the runner-up 18, and third and fourth are worth 10 each. If you do not submit winner picks, that section scores 0. 95% of revenue goes into the edition pool and the remaining 5% covers infrastructure, maintenance and gas subsidy. The top 32 places get paid through a fixed payout pyramid. If entries tie on points, they share the position using `1, 2, 2, 4` logic and split the affected prize block equally.',
+        'Match scoring ranges from 0 to 10. You never lose points for a bad miss. The champion is worth 25, the runner-up 18, and third and fourth are worth 10 each. If you do not submit winner picks, that section scores 0. 95% of revenue goes into the edition pool and the remaining 5% covers infrastructure and maintenance. The top 32 places get paid through a fixed percentual payout scheme. If entries tie on points, they share the position using `1, 2, 2, 4` logic and split the affected prize block equally.',
     },
     footer: {
       sections: {
@@ -379,13 +366,9 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
             { href: '/en/rules', label: 'Rules' },
           ],
         },
-        community: {
-          label: 'Community',
-          emptyText: 'Official channels coming soon.',
-        },
         status: {
           label: 'Status',
-          lines: ['Scoring and tie rules published.', '95/5 pool split and 32-winner payout pyramid locked in.'],
+          lines: ['Waitlist is open. Rules and prize structure are already published.', 'Built in Argentina, with the ball at our feet.'],
         },
       },
     },
