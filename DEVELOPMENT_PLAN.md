@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: May 6, 2026*
+*Last updated: May 7, 2026*
 
 ---
 
@@ -132,6 +132,11 @@ Tomorrow's priorities:
    - After full submit, show a clearer "done / waiting for results" state
 3. Surface claimable prizes earlier from `/` and `/leaderboard`
 4. Do a mobile cleanup pass on dense screens after the state polish lands
+5. Before putting the landing fully online, add lightweight anti-spam protection to the waitlist
+   - hidden honeypot field
+   - server-side rate limiting
+   - duplicate email protection / normalization
+   - optional Turnstile if basic protections are not enough
 
 Verification for the next frontend pass:
 
