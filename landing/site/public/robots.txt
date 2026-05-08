@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://prodefi.com/sitemap-index.xml
+Sitemap: https://prodefi.online/sitemap-index.xml

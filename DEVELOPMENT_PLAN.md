@@ -3,13 +3,13 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: May 5, 2026*
+*Last updated: May 7, 2026*
 
 ---
 
 ## Current Status
 
-### Smart Contracts: COMPLETE (116 tests passing)
+### Smart Contracts: COMPLETE (127 tests passing)
 
 | Contract | Tests | Status |
 |---|---|---|
@@ -59,29 +59,39 @@ All critical bugs fixed. All dead code cleaned up:
 
 ### Scoring Follow-up (May 2026)
 
-Product decision kept:
+Decision locked:
 
 - Keep the current scoring philosophy where closeness to the exact score matters, not only `local / empate / visitante`
 - Keep the current `7`-based score curve concept for match predictions
-- Increase the outcome bonus from `+2` to `+3` so exact results cap at `10` instead of `9`
+- Match scoring is now `max(0, 7 - diffTotal) + 3` when `local / empate / visitante` is correct
+- Exact match predictions now cap at `10` points per game, with a per-game floor of `0`
+- Winner scoring is now `25 / 18 / 10 / 10` for `1st / 2nd / 3rd / 4th`
 
-Implementation issue identified:
+Completed in code and tests:
 
-- `Predictions.sol::calculatePoints()` is currently implemented as `abs(7 - diffTotal)` instead of the intended non-negative clamp behavior
-- Intended behavior for the base score is effectively `max(0, 7 - diffTotal)`, not absolute value after crossing zero
-- In other words, when `diffTotal > 7`, the base score should floor at `0` instead of climbing again
+- Fixed the old `Predictions.sol::calculatePoints()` bug where `abs(7 - diffTotal)` caused points to rise again after `diffTotal > 7`
+- Added/updated contract tests for:
+  - exact result -> `10`
+  - close miss (e.g. `6-5` vs `5-5`)
+  - sign-only hit with large miss (e.g. `6-5` vs `1-0`)
+  - large miss where `diffTotal > 7` -> base `0`
+  - updated winner weights `25 / 18 / 10 / 10`
+  - total points when official winners exist but a carton never submitted winner picks
+- `/reglas` in `landing/site` now reflects the current scoring definition
 
-Tasks to resolve next:
+Payout / tie product decision locked (see `PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
 
-1. Update `Predictions.sol::calculatePoints()` so the base score is clamped at `0` once total goal-difference error exceeds `7`
-2. Change the `local / empate / visitante` bonus from `+2` to `+3`
-3. Add/adjust contract tests to cover:
-   - exact result -> `10`
-   - close miss (e.g. `6-5` vs `5-5`)
-   - sign-only hit (e.g. `6-5` vs `1-0`)
-   - large miss where `diffTotal > 7` -> base `0`
-4. Re-run tie/distribution analysis after the formula change to estimate uniqueness of winners for pools from `100` to `10,000` players
-5. Only after the formula is locked, write the final scoring language into `/reglas`
+1. Final ranking is ordered only by total points.
+2. If two or more cartones tie on points, they share the position using standard competition ranking (`1, 2, 2, 4`).
+3. There is no secondary tie-break by exact scores or any other metric.
+4. If a shared block covers prize positions, sum the occupied prizes and split them equally among the tied cartones.
+5. Prize model is a fixed 32-place pyramid over the prizeable pool, not a variable-ITM MTT structure.
+
+Next implementation follow-up:
+
+1. Reflect the shared-position rule in code and admin/final-ranking flow
+2. Ensure prize-claim logic supports shared ranking blocks like `1, 2, 2, 4`
+3. Replace the old default payout assumptions with the fixed 32-place pyramid
 
 ### Recently Completed: USDC-Only Cleanup (Apr 2026)
 
@@ -122,6 +132,11 @@ Tomorrow's priorities:
    - After full submit, show a clearer "done / waiting for results" state
 3. Surface claimable prizes earlier from `/` and `/leaderboard`
 4. Do a mobile cleanup pass on dense screens after the state polish lands
+5. Before putting the landing fully online, add lightweight anti-spam protection to the waitlist
+   - hidden honeypot field
+   - server-side rate limiting
+   - duplicate email protection / normalization
+   - optional Turnstile if basic protections are not enough
 
 Verification for the next frontend pass:
 

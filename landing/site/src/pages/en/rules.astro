@@ -1,9 +1,9 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro'
-import RulesPage from '../components/RulesPage.astro'
-import { rulesContent } from '../data/rules-content'
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import RulesPage from '../../components/RulesPage.astro'
+import { rulesContent } from '../../data/rules-content'
 
-const content = rulesContent.es
+const content = rulesContent.en
 
 const breadcrumbStructuredData = {
   '@context': 'https://schema.org',
@@ -12,14 +12,14 @@ const breadcrumbStructuredData = {
     {
       '@type': 'ListItem',
       position: 1,
-      name: 'Inicio',
-      item: 'https://prodefi.online/',
+      name: 'Home',
+      item: 'https://prodefi.online/en/',
     },
     {
       '@type': 'ListItem',
       position: 2,
       name: content.hero.eyebrow,
-      item: 'https://prodefi.online/reglas/',
+      item: 'https://prodefi.online/en/rules/',
     },
   ],
 }
@@ -35,8 +35,8 @@ const alternates = [
   title={content.page.title}
   description={content.page.description}
   structuredData={breadcrumbStructuredData}
-  lang="es"
-  ogLocale="es_AR"
+  lang="en"
+  ogLocale="en_US"
   alternates={alternates}
 >
   <RulesPage content={content} />
