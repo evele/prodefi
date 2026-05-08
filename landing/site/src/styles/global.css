@@ -268,6 +268,13 @@ input {
   padding-top: 0.08em;
 }
 
+@media (max-width: 420px) {
+  .hero-title--en {
+    font-size: clamp(3.5rem, 14vw, 4.5rem);
+    line-height: 1;
+  }
+}
+
 .hero-title .editorial {
   color: var(--celeste);
 }
@@ -538,10 +545,6 @@ input {
   font-size: clamp(2.8rem, 12vw, 5rem);
 }
 
-.section-title--countdown {
-  max-width: 56rem;
-}
-
 .section-title .editorial {
   color: var(--celeste);
 }
@@ -760,6 +763,8 @@ input {
 }
 
 .rules-card {
+  display: grid;
+  align-content: start;
   background: var(--ink-2);
   padding: 1.6rem 1.35rem;
 }
@@ -768,10 +773,55 @@ input {
   grid-column: auto;
 }
 
+.rules-card--wide-md-only {
+  grid-column: auto;
+}
+
 .rules-card__title {
   margin: 0.35rem 0 0;
   font-size: clamp(1.8rem, 9vw, 3.2rem);
   line-height: 0.98;
+}
+
+.rules-card--mascots {
+  display: none;
+  overflow: hidden;
+}
+
+.rules-mascots {
+  display: grid;
+  height: 100%;
+  gap: 1px;
+  background: var(--line);
+}
+
+.rules-mascot-frame {
+  min-height: 11rem;
+  background: linear-gradient(180deg, rgba(116, 172, 223, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.rules-card__media {
+  margin-top: 1.2rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(116, 172, 223, 0.08), rgba(255, 255, 255, 0.02));
+  overflow: hidden;
+}
+
+.rules-card__media--standalone {
+  margin-top: 0;
+}
+
+.rules-card__media img,
+.rules-mascot-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.rules-card__media img {
+  display: block;
+  min-height: 13rem;
 }
 
 .rules-paragraph {
@@ -1105,6 +1155,18 @@ input {
     display: flex;
   }
 
+  .rules-card--mobile-mascot {
+    display: none;
+  }
+
+  .rules-card--wide-md-only {
+    grid-column: span 2;
+  }
+
+  .rules-card--mascots {
+    display: block;
+  }
+
   .rules-card--wide {
     grid-column: span 2;
   }
@@ -1212,7 +1274,7 @@ input {
 
 @media (min-width: 1024px) {
   .section-title {
-    font-size: clamp(4.5rem, 7vw, 7rem);
+    font-size: clamp(4.5rem, 7vw, 6rem);
   }
 
   .section-lead,
@@ -1226,5 +1288,25 @@ input {
 
   .rules-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rules-card--wide-md-only {
+    grid-column: auto;
+  }
+
+  .rules-card--bottom-media {
+    grid-template-rows: auto auto 1fr auto;
+  }
+
+  .rules-card--bottom-media .rules-list {
+    align-content: start;
+  }
+
+  .rules-card--bottom-media .rules-card__media {
+    align-self: end;
+  }
+
+  .prizes-headline {
+    display: flex;
   }
 }

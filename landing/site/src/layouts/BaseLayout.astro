@@ -6,9 +6,23 @@ interface Props {
   description: string
   ogImage?: string
   structuredData?: object | object[]
+  lang?: string
+  ogLocale?: string
+  alternates?: Array<{
+    href: string
+    hrefLang: string
+  }>
 }
 
-const { title, description, ogImage = '/og-image.svg', structuredData } = Astro.props
+const {
+  title,
+  description,
+  ogImage = '/og-image.svg',
+  structuredData,
+  lang = 'es',
+  ogLocale = 'es_AR',
+  alternates = [],
+} = Astro.props
 const site = Astro.site ? new URL(Astro.site) : new URL('https://prodefi.online')
 const canonical = new URL(Astro.url.pathname, site)
 const schemaItems = [
@@ -23,7 +37,7 @@ const schemaItems = [
     '@type': 'WebSite',
     name: 'ProDefi',
     url: site.origin,
-    inLanguage: 'es',
+    inLanguage: lang,
   },
   ...(Array.isArray(structuredData)
     ? structuredData
@@ -34,7 +48,7 @@ const schemaItems = [
 ---
 
 <!doctype html>
-<html lang="es">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -44,7 +58,7 @@ const schemaItems = [
     <link rel="canonical" href={canonical} />
 
     <meta property="og:type" content="website" />
-    <meta property="og:locale" content="es_AR" />
+    <meta property="og:locale" content={ogLocale} />
     <meta property="og:site_name" content="ProDefi" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -58,6 +72,10 @@ const schemaItems = [
 
     <meta name="theme-color" content="#07090f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    {alternates.map((alternate) => (
+      <link rel="alternate" hreflang={alternate.hrefLang} href={new URL(alternate.href, site)} />
+    ))}
 
     {schemaItems.map((item) => (
       <script type="application/ld+json" set:html={JSON.stringify(item)} />
