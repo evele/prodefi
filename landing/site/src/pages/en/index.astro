@@ -1,10 +1,10 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro'
-import LandingPage from '../components/LandingPage.astro'
-import { landingContent } from '../data/landing-content'
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import LandingPage from '../../components/LandingPage.astro'
+import { landingContent } from '../../data/landing-content'
 
 const waitlistAction = import.meta.env.PUBLIC_WAITLIST_ACTION || '/api/waitlist'
-const content = landingContent.es
+const content = landingContent.en
 
 const faqStructuredData = {
   '@context': 'https://schema.org',
@@ -30,9 +30,9 @@ const alternates = [
   title={content.page.title}
   description={content.page.description}
   structuredData={faqStructuredData}
-  lang="es"
-  ogLocale="es_AR"
+  lang="en"
+  ogLocale="en_US"
   alternates={alternates}
 >
-  <LandingPage content={content} waitlistAction={waitlistAction} rulesHref="/reglas" />
+  <LandingPage content={content} waitlistAction={waitlistAction} rulesHref="/en/rules" />
 </BaseLayout>

@@ -1,0 +1,227 @@
+---
+import clutchMascot from '../images/Clutch.avif'
+import mapleMascot from '../images/Maple.avif'
+import zayuMascot from '../images/Zayu.avif'
+import type { RulesContent } from '../data/rules-content'
+
+interface Props {
+  content: RulesContent
+}
+
+const { content } = Astro.props
+---
+
+<a class="skip-link" href="#contenido">{content.locale === 'es' ? 'Saltar al contenido' : 'Skip to content'}</a>
+
+<header class="site-header">
+  <div class="shell header-inner">
+    <a class="brand" href={content.header.nav[0].href} aria-label={content.header.brandAriaLabel}>
+      <span class="brand-wordmark">PRODEFI</span>
+      <span class="brand-ball" aria-hidden="true">⚽</span>
+    </a>
+
+    <nav class="header-nav" aria-label={content.locale === 'es' ? 'Navegación principal' : 'Main navigation'}>
+      {content.header.nav.map((link) => <a href={link.href}>{link.label}</a>)}
+    </nav>
+
+    <a class="chip-link chip-link--accent" href={content.header.nav[2].href}>{content.header.ctaLabel}</a>
+  </div>
+  <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+</header>
+
+<main id="contenido" class="rules-page">
+  <section class="rules-hero">
+    <div class="shell section-inner rules-hero__inner">
+      <div class="kicker-row">
+        <span class="kicker-line"></span>
+        <p class="eyebrow eyebrow--celeste">{content.hero.eyebrow}</p>
+      </div>
+
+      <h1 class="display section-title">
+        {content.hero.titlePrimary}<br /><span class="editorial">{content.hero.titleEditorial}</span>
+      </h1>
+
+      <p class="section-lead">{content.hero.lead}</p>
+
+      <div class="cta-row">
+        <a class="button button--accent" href={content.header.nav[2].href}>{content.hero.primaryCtaLabel}</a>
+        <a class="button button--ghost" href={content.header.nav[0].href}>{content.hero.secondaryCtaLabel}</a>
+      </div>
+    </div>
+    <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+  </section>
+
+  <section class="rules-section">
+    <div class="shell section-inner">
+      <div class="rules-grid">
+        <article class="rules-card rules-card--wide-md-only">
+          <p class="eyebrow eyebrow--celeste">{content.sections.participation.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.participation.title}</h2>
+          <ul class="rules-list">
+            {content.sections.participation.items.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+
+        <article class="rules-card rules-card--wide">
+          <p class="eyebrow eyebrow--celeste">{content.sections.matchScoring.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.matchScoring.title}</h2>
+
+          <p class="rules-paragraph">{content.sections.matchScoring.intro}</p>
+          <div class="rules-formula">
+            <code>{content.sections.matchScoring.formula}</code>
+          </div>
+          <p class="rules-paragraph rules-paragraph--muted">{content.sections.matchScoring.formulaDescription}</p>
+
+          <div class="rules-table" aria-label="Scoring table by match">
+            {content.sections.matchScoring.rows.map(([label, value]) => (
+              <div class="rules-table__row">
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article class="rules-card rules-card--mobile-mascot" aria-hidden="true">
+          <div class="rules-card__media rules-card__media--standalone">
+            <img src={mapleMascot.src} alt="" loading="lazy" decoding="async" />
+          </div>
+        </article>
+
+        <article class="rules-card rules-card--wide">
+          <p class="eyebrow eyebrow--celeste">{content.sections.examples.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.examples.title}</h2>
+
+          <div class="rules-table" aria-label="Scoring examples by match">
+            {content.sections.examples.rows.map(([label, value]) => (
+              <div class="rules-table__row">
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <p class="rules-paragraph rules-paragraph--muted">{content.sections.examples.note}</p>
+        </article>
+
+        <article class="rules-card">
+          <p class="eyebrow eyebrow--celeste">{content.sections.winners.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.winners.title}</h2>
+
+          <div class="rules-table" aria-label="Scoring for tournament winners">
+            {content.sections.winners.rows.map(([label, value]) => (
+              <div class="rules-table__row">
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <ul class="rules-list rules-list--compact">
+            {content.sections.winners.items.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+
+        <article class="rules-card">
+          <p class="eyebrow eyebrow--celeste">{content.sections.ranking.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.ranking.title}</h2>
+          <ul class="rules-list">
+            {content.sections.ranking.items.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+
+        <article class="rules-card rules-card--mobile-mascot" aria-hidden="true">
+          <div class="rules-card__media rules-card__media--standalone">
+            <img src={clutchMascot.src} alt="" loading="lazy" decoding="async" />
+          </div>
+        </article>
+
+        <article class="rules-card">
+          <p class="eyebrow eyebrow--celeste">{content.sections.ties.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.ties.title}</h2>
+          <ul class="rules-list">
+            {content.sections.ties.items.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+
+        <article class="rules-card rules-card--mascots" aria-hidden="true">
+          <div class="rules-mascots">
+            <div class="rules-mascot-frame">
+              <img src={mapleMascot.src} alt="" loading="lazy" decoding="async" />
+            </div>
+            <div class="rules-mascot-frame">
+              <img src={clutchMascot.src} alt="" loading="lazy" decoding="async" />
+            </div>
+          </div>
+        </article>
+
+        <article class="rules-card rules-card--wide">
+          <p class="eyebrow eyebrow--celeste">{content.sections.prizes.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.prizes.title}</h2>
+          <ul class="rules-list">
+            {content.sections.prizes.items.map((item) => <li>{item}</li>)}
+          </ul>
+
+          <div class="rules-table" aria-label="Tournament payout pyramid">
+            {content.sections.prizes.payoutRows.map(([label, value]) => (
+              <div class="rules-table__row">
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article class="rules-card rules-card--wide-md-only rules-card--bottom-media">
+          <p class="eyebrow eyebrow--celeste">{content.sections.transparency.eyebrow}</p>
+          <h2 class="display rules-card__title">{content.sections.transparency.title}</h2>
+          <ul class="rules-list">
+            {content.sections.transparency.items.map((item) => <li>{item}</li>)}
+          </ul>
+
+          <div class="rules-card__media" aria-hidden="true">
+            <img src={zayuMascot.src} alt="" loading="lazy" decoding="async" />
+          </div>
+        </article>
+      </div>
+
+      <div class="rules-note-box">
+        <p class="eyebrow eyebrow--celeste">{content.quickSummary.eyebrow}</p>
+        <p class="rules-note-box__body">{content.quickSummary.body}</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+  <div class="shell footer-inner">
+    <div class="footer-brand" aria-label="ProDefi">
+      <p class="display footer-wordmark">PRODEFI</p>
+      <span class="footer-brand-ball" aria-hidden="true">⚽</span>
+    </div>
+
+    <div class="footer-grid">
+      <div>
+        <p class="eyebrow">{content.footer.sections.navigation.label}</p>
+        <div class="footer-links">
+          {content.footer.sections.navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
+        </div>
+      </div>
+
+      <div>
+        <p class="eyebrow">{content.footer.sections.community.label}</p>
+        <div class="footer-links">
+          <p class="footer-note">{content.footer.sections.community.emptyText}</p>
+        </div>
+      </div>
+
+      <div>
+        <p class="eyebrow">{content.footer.sections.status.label}</p>
+        <div class="footer-links">
+          {content.footer.sections.status.lines.map((line) => <p class="footer-note">{line}</p>)}
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
