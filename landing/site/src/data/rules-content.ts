@@ -15,7 +15,6 @@ export interface RulesContent {
     titleEditorial: string
     lead: string
     primaryCtaLabel: string
-    secondaryCtaLabel: string
   }
   sections: {
     participation: {
@@ -75,10 +74,6 @@ export interface RulesContent {
         label: string
         links: Array<{ href: string; label: string }>
       }
-      community: {
-        label: string
-        emptyText: string
-      }
       status: {
         label: string
         lines: string[]
@@ -110,7 +105,6 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       lead:
         'Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking, empates, premios y condiciones con las que se publica el ranking final de ProDefi. Cuando una edición esté abierta, esta misma página mostrará además su fecha límite, pozo final y distribución de premios en USDC.',
       primaryCtaLabel: 'Sumarme a la lista de espera',
-      secondaryCtaLabel: 'Volver a la landing',
     },
     sections: {
       participation: {
@@ -187,7 +181,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
           'El 95% de lo recaudado por cartones integra el pozo de esa edición.',
           'El 5% restante queda fuera del pozo para infraestructura y mantenimiento.',
           'Los primeros 32 puestos del ranking final son premiados.',
-          'La cantidad de premiados no cambia con el tamaño del field: cambian los montos según el pozo final.',
+          'La cantidad de premiados no cambia con el tamaño de los inscriptos: cambian los montos según el pozo final.',
           'Los premios se liquidan en USDC.',
           'Si hay empate definitivo en puestos premiados, se suman los premios de los puestos alcanzados por ese empate y se reparten por partes iguales.',
           'Los cobros se habilitan recién cuando el torneo queda finalizado y el ranking final ya es definitivo.',
@@ -227,10 +221,6 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
             { href: '/reglas', label: 'Reglas' },
           ],
         },
-        community: {
-          label: 'Comunidad',
-          emptyText: 'Canales oficiales en camino.',
-        },
         status: {
           label: 'Estado',
           lines: ['Waitlist abierta. Reglas y estructura de premios ya publicadas','Hecho en Argentina, con la pelota en los pies.'],
@@ -260,7 +250,6 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       lead:
         'This page gathers the rules for World Cup Predictions 2026: match scoring, leaderboard, ties, prizes and the conditions used to publish ProDefi\'s final standings. Once an edition is open, this page will also show its submission deadline, final pool and USDC prize amounts.',
       primaryCtaLabel: 'Join the waitlist',
-      secondaryCtaLabel: 'Back to landing',
     },
     sections: {
       participation: {
@@ -376,10 +365,6 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
             { href: '/en/#waitlist', label: 'Waitlist' },
             { href: '/en/rules', label: 'Rules' },
           ],
-        },
-        community: {
-          label: 'Community',
-          emptyText: 'Official channels coming soon.',
         },
         status: {
           label: 'Status',

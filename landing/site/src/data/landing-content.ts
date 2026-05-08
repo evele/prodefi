@@ -98,10 +98,6 @@ export interface LandingContent {
         label: string
         links: LandingNavLink[]
       }
-      community: {
-        label: string
-        emptyText: string
-      }
       status: {
         label: string
         lines: string[]
@@ -277,10 +273,6 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
             { href: '/reglas', label: 'Reglas' },
           ],
         },
-        community: {
-          label: 'Comunidad',
-          emptyText: 'Canales oficiales en camino.',
-        },
         status: {
           label: 'Estado',
           lines: [
@@ -455,10 +447,6 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
             { href: '#faq', label: 'FAQ' },
             { href: '/en/rules', label: 'Rules' },
           ],
-        },
-        community: {
-          label: 'Community',
-          emptyText: 'Official channels coming soon.',
         },
         status: {
           label: 'Status',
