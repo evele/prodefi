@@ -192,6 +192,11 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
       <p class="section-lead section-lead--center">{content.waitlist.lead}</p>
 
       <form class="waitlist-form" method="post" action={waitlistAction} data-waitlist-form novalidate>
+        <div class="honeypot-field" aria-hidden="true">
+          <label for="waitlist-company">Company</label>
+          <input id="waitlist-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+        <input type="hidden" name="startedAt" value="" data-waitlist-started-at />
         <label class="sr-only" for="waitlist-email">{content.waitlist.emailLabel}</label>
         <input
           id="waitlist-email"
@@ -320,11 +325,19 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
   if (waitlistSection && waitlistForm && waitlistFeedback) {
     const endpoint = waitlistSection.dataset.waitlistAction || ''
     const emailInput = waitlistForm.querySelector('input[type="email"]')
+    const honeypotInput = waitlistForm.querySelector('input[name="company"]')
+    const startedAtInput = waitlistForm.querySelector('[data-waitlist-started-at]')
+
+    if (startedAtInput instanceof HTMLInputElement) {
+      startedAtInput.value = String(Date.now())
+    }
 
     waitlistForm.addEventListener('submit', async (event) => {
       if (!(emailInput instanceof HTMLInputElement)) return
 
       const email = emailInput.value.trim()
+      const company = honeypotInput instanceof HTMLInputElement ? honeypotInput.value.trim() : ''
+      const startedAt = startedAtInput instanceof HTMLInputElement ? startedAtInput.value : ''
       const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       if (!isValid) {
         event.preventDefault()
@@ -348,12 +361,25 @@ const activeSocialLinks: Array<{ href: string; label: string }> = []
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, company, startedAt }),
         })
 
-        if (!response.ok) throw new Error('bad response')
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          if (response.status === 429 || payload?.error === 'rate-limit-exceeded') {
+            waitlistFeedback.textContent = waitlistMessages.rateLimited
+            waitlistFeedback.dataset.state = 'error'
+            return
+          }
+
+          throw new Error('bad response')
+        }
 
         waitlistForm.reset()
+        if (startedAtInput instanceof HTMLInputElement) {
+          startedAtInput.value = String(Date.now())
+        }
         waitlistFeedback.textContent = waitlistMessages.success
         waitlistFeedback.dataset.state = 'success'
       } catch {

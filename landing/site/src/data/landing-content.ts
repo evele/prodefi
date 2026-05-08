@@ -82,6 +82,7 @@ export interface LandingContent {
       noEndpoint: string
       sending: string
       success: string
+      rateLimited: string
       error: string
     }
   }
@@ -196,7 +197,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
       {
         number: '02',
         title: 'Hacé tus predicciones',
-        description: 'Cargá resultados exactos y tu top 4 del torneo. La lectura de partido corre por tu cuenta.',
+        description: 'Cargá resultados exactos y tu top 4 del torneo.',
       },
       {
         number: '03',
@@ -217,6 +218,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         noEndpoint: 'La lista de espera abre pronto. Volvé en un rato para dejar tu mail.',
         sending: 'Enviando...',
         success: 'Estás adentro. Te avisamos apenas abramos los cartones.',
+        rateLimited: 'Estamos recibiendo muchos intentos desde esa conexión. Esperá un poco y probá de nuevo.',
         error: 'No pudimos guardar tu mail. Probá de nuevo en un rato.',
       },
     },
@@ -252,7 +254,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         {
           question: '¿Qué puedo ganar?',
           answer:
-            'Premios reales según tu posición final. Se cobran en USDC y alcanzan a los primeros 32 puestos con una pirámide fija de porcentajes sobre el pozo premiable.',
+            'Premios reales según tu posición final. Se cobran en USDC y alcanzan a los primeros 32 puestos con porcentajes fijos sobre el pozo premiable.',
         },
         {
           question: '¿Cuándo se lanza?',
@@ -374,7 +376,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
       {
         number: '02',
         title: 'Make your picks',
-        description: 'Submit exact scorelines and your tournament top four. The football read is up to you.',
+        description: 'Submit exact scorelines and your tournament top four.',
       },
       {
         number: '03',
@@ -395,6 +397,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         noEndpoint: 'The waitlist will open soon. Check back in a bit to leave your email.',
         sending: 'Sending...',
         success: 'You are in. We will let you know as soon as entries open.',
+        rateLimited: 'Too many attempts are coming from this connection. Wait a bit and try again.',
         error: 'We could not save your email. Please try again in a bit.',
       },
     },
@@ -430,7 +433,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         {
           question: 'What can I win?',
           answer:
-            'Real prizes based on your final position. They are paid in USDC across the top 32 places using a fixed payout pyramid on the final pool.',
+            'Real prizes based on your final position. They are paid in USDC across the top 32 places using a fixed payout on the final pool.',
         },
         {
           question: 'When does it launch?',

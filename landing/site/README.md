@@ -1,6 +1,6 @@
 # ProDefi Landing
 
-Landing estática en Astro para `prodefi.com`.
+Landing estatica en Astro para `prodefi.com`.
 
 ## Comandos
 
@@ -11,9 +11,9 @@ npm run build
 npm run preview
 ```
 
-## Configuración rápida
+## Configuracion rapida
 
-Editá `src/pages/index.astro` para cambiar:
+Edita `src/pages/index.astro` para cambiar:
 
 - `appUrl`
 - `targetDate`
@@ -24,18 +24,32 @@ Editá `src/pages/index.astro` para cambiar:
 
 ## Waitlist
 
-La landing ya tiene el formulario y la validación cliente. Para activarlo de verdad:
+La landing ya tiene el formulario y la validacion cliente. Para activarlo de verdad:
 
-1. Por defecto la landing envía a `/api/waitlist`.
-2. Si necesitás otro destino, definí `PUBLIC_WAITLIST_ACTION`.
-3. El endpoint debe aceptar `POST` JSON con `{ email }`.
-4. Si responde `2xx`, el frontend muestra estado de éxito.
+1. Por defecto la landing envia a `/api/waitlist`.
+2. Si necesitas otro destino, defini `PUBLIC_WAITLIST_ACTION`.
+3. El endpoint debe aceptar `POST` JSON con `{ email, company, startedAt }`.
+4. Si responde `2xx`, el frontend muestra estado de exito.
+
+Protecciones anti-spam implementadas:
+
+- campo honeypot (`company`)
+- tiempo minimo de envio (`startedAt`)
+- rate limiting server-side por IP hash
+- dedupe por email normalizado
 
 Con Firebase Hosting + Functions, `/api/waitlist` queda resuelto con el rewrite de `firebase.json`.
 
+## Analytics
+
+La landing carga GA4 directo desde `BaseLayout.astro`.
+
+- `PUBLIC_GA_MEASUREMENT_ID` permite sobreescribir el measurement id
+- por defecto queda `G-CVPJ7VDK9E`
+
 ## Deploy
 
-La salida estática se genera en `dist/`.
+La salida estatica se genera en `dist/`.
 
 Pensado para:
 

@@ -779,7 +779,7 @@ input {
 
 .rules-card__title {
   margin: 0.35rem 0 0;
-  font-size: clamp(1.8rem, 9vw, 3.2rem);
+  font-size: clamp(1.8rem, 9vw, 3rem);
   line-height: 0.98;
 }
 
@@ -933,6 +933,14 @@ input {
   gap: 0.75rem;
   margin: 1.8rem auto 0;
   max-width: 34rem;
+}
+
+.honeypot-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
 }
 
 .waitlist-form input {
