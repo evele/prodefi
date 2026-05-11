@@ -9,18 +9,12 @@ import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
+import { PRIZE_BANDS } from '../lib/prize-payout'
 import { Ticket } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
 })
-
-const POSITION_META = [
-  { label: '1° Lugar', icon: '🥇', position: 1 },
-  { label: '2° Lugar', icon: '🥈', position: 2 },
-  { label: '3° Lugar', icon: '🥉', position: 3 },
-  { label: '4° Lugar', icon: '4°',  position: 4 },
-] as const
 
 function HomePage() {
   const navigate = useNavigate()
@@ -121,13 +115,21 @@ function HomePage() {
     query: { enabled: tournamentId > 0n },
   })
 
+  const { data: usdcReservePool } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'getReservePool',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n },
+  })
+
   const prizeContracts = useMemo(() => {
     if (tournamentId === 0n) return []
-    return POSITION_META.map((meta) => ({
+    return PRIZE_BANDS.map((band) => ({
       address: CONTRACT_ADDRESSES.TREASURY,
       abi: TREASURY_ABI,
       functionName: 'getUserPrizeAmount',
-      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
+      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(band.start)],
     }) as const)
   }, [tournamentId])
 
@@ -136,7 +138,7 @@ function HomePage() {
     query: { enabled: prizeContracts.length > 0 },
   })
 
-  const usdcPositionAmounts = POSITION_META.map((_, index) => {
+  const usdcBandAmounts = PRIZE_BANDS.map((_, index) => {
     const entry = prizeAmounts?.[index]
     return (entry?.result as bigint | undefined) ?? 0n
   })
@@ -231,6 +233,14 @@ function HomePage() {
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
     : '—'
 
+  const usdcReserveDisplay = usdcReservePool !== undefined
+    ? `${Number(formatUnits(usdcReservePool, 6)).toFixed(2)} USDC`
+    : '—'
+
+  const grossSalesDisplay = usdcPrizePool !== undefined && usdcReservePool !== undefined
+    ? `${Number(formatUnits(usdcPrizePool + usdcReservePool, 6)).toFixed(2)} USDC`
+    : '—'
+
   const cartonStatusContracts = useMemo(() => {
     if (!cartonsUser?.length) return []
 
@@ -302,7 +312,7 @@ function HomePage() {
     if (!nextActionableCarton.winnersSubmitted) {
       return {
         title: `Carton #${nextActionableCarton.tokenId.toString()} casi listo`,
-        description: 'Ya enviaste los partidos. Solo falta elegir los 4 ganadores del torneo.',
+        description: 'Ya enviaste los partidos. Solo falta definir el top 4 del torneo.',
         cta: 'Continuar prediccion',
       }
     }
@@ -343,7 +353,7 @@ function HomePage() {
             className="text-xs font-medium uppercase tracking-widest"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Prize Pool
+            Pool premiable
           </p>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span
@@ -353,6 +363,12 @@ function HomePage() {
               {usdcPoolDisplay}
             </span>
           </div>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Ventas brutas: {grossSalesDisplay} · Reserva onchain: {usdcReserveDisplay}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Se premia sobre el 95% de las ventas. El resto queda en reserva y remanentes.
+          </p>
         </section>
       )}
 
@@ -530,29 +546,29 @@ function HomePage() {
                 className="px-4 py-2.5 flex justify-between text-xs font-medium"
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
-                <span className="uppercase tracking-wider">Pool USDC</span>
+                <span className="uppercase tracking-wider">Bandas de premios</span>
                 <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
                   {usdcPoolDisplay}
                 </span>
               </div>
-              {POSITION_META.map((meta, idx) => (
+              {PRIZE_BANDS.map((band, idx) => (
                 <div
-                  key={`usdc-${meta.position}`}
+                  key={`usdc-${band.start}`}
                   className="px-4 py-2.5 flex items-center justify-between text-sm"
                   style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
                 >
                   <span className="flex items-center gap-2">
-                    <span>{meta.icon}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{meta.label}</span>
+                    <span>{band.icon}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{band.label}</span>
                   </span>
                   <span
                     style={{
                       fontFamily: 'var(--font-mono-custom)',
                       fontWeight: 600,
-                      color: meta.position === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
+                      color: band.start === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
                     }}
                   >
-                    {formatAssetValue(usdcPositionAmounts[idx])}
+                    {formatAssetValue(usdcBandAmounts[idx])}
                   </span>
                 </div>
               ))}

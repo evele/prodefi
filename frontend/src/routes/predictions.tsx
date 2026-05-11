@@ -19,7 +19,7 @@ import type { Game } from '../lib/types'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { useUserBalance } from '../hooks/useBalance'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
-import { mapCombinedPredictionErrorToMessage, mapPredictionErrorToMessage, mapWinnersErrorToMessage } from '../lib/transaction-errors'
+import { mapCombinedPredictionErrorToMessage } from '../lib/transaction-errors'
 
 function normalizeCartonParam(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -58,6 +58,22 @@ function normalizeSubmittedWinners(value: unknown): [number, number, number, num
   if (!Array.isArray(value)) return [0, 0, 0, 0]
 
   return [0, 1, 2, 3].map((index) => Number(value[index] ?? 0)) as [number, number, number, number]
+}
+
+function normalizeOfficialGameMeta(value: unknown): { id: number; set: boolean } | null {
+  if (Array.isArray(value)) {
+    const gameId = Number(value[0])
+    const isSet = Boolean(value[1])
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  if (typeof value === 'object' && value !== null && 'id' in value && 'set' in value) {
+    const gameId = Number((value as { id?: unknown }).id)
+    const isSet = Boolean((value as { set?: unknown }).set)
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  return null
 }
 
 function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired') {
@@ -143,9 +159,7 @@ export const Route = createFileRoute('/predictions')({
 
 const DEADLINE_NOT_SET_MESSAGE =
   'El deadline de envío no está configurado. Pide al admin que lo configure en /admin/dev.'
-const PREDICTION_REVERT_MESSAGE = 'Las predicciones de partidos fueron rechazadas en cadena.'
 const COMBINED_REVERT_MESSAGE = 'La predicción completa fue rechazada en cadena.'
-const WINNERS_REVERT_MESSAGE = 'Las predicciones de ganadores fueron rechazadas en cadena.'
 const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 
 function PredictionsPage() {
@@ -159,7 +173,6 @@ function PredictionsPage() {
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isImprobableScoresModalOpen, setIsImprobableScoresModalOpen] = useState(false)
-  const [pendingGameSubmitMode, setPendingGameSubmitMode] = useState<'games' | 'combined'>('games')
 
   useEffect(() => {
     if (groups.length > 0 && selectedGroup === null) {
@@ -174,7 +187,6 @@ function PredictionsPage() {
       setGameState(buildAllGroupGames())
       setSelectedGroup(null)
       setIsImprobableScoresModalOpen(false)
-      setPendingGameSubmitMode('games')
     }
     if (resetWinners) {
       setWinnerPrediction(EMPTY_WINNER_PREDICTION)
@@ -284,37 +296,12 @@ function PredictionsPage() {
     })
   }
 
-  const predictionWrite = useSimulatedContractWrite()
   const combinedWrite = useSimulatedContractWrite()
-  const winnersWrite = useSimulatedContractWrite()
   const predictionsPayload = useMemo(() => games.map((g) => ({ gameId: g.id, result: g.result })), [games])
 
   useEffect(() => {
     resetPredictionDraft()
   }, [tokenId])
-
-  const submitPrediction = () => {
-    if (!tokenId) return
-    if (predictionSubmitBlockedMessage) {
-      toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
-      return
-    }
-    void predictionWrite.simulateAndSend(
-      { address: CONTRACT_ADDRESSES.PREDICTIONS, abi: PREDICTIONS_ABI, functionName: 'submitPrediction', args: [tokenId, predictionsPayload] },
-      {
-        toastId: 'submit-prediction',
-        pendingMessage: 'Esperando confirmación…',
-        successMessage: '¡Predicciones de partidos enviadas!',
-        revertedMessage: PREDICTION_REVERT_MESSAGE,
-        mapError: mapPredictionErrorToMessage,
-        onSuccess: async () => {
-          resetPredictionDraft({ games: true, winners: false })
-          await Promise.all([refetchCartonUsedState(), refetchSubmittedGames()])
-        },
-        logLabel: 'Submit game predictions',
-      },
-    )
-  }
 
   const submitPredictionAndWinners = () => {
     if (!tokenId) return
@@ -356,21 +343,6 @@ function PredictionsPage() {
       .map((game) => `${teamsById[game.team1]} ${game.result[0] ?? '?'}-${game.result[1] ?? '?'} ${teamsById[game.team2]}`)
   }, [games])
 
-  const handleSubmitPredictionClick = () => {
-    if (predictionSubmitBlockedMessage) {
-      toast.error(predictionSubmitBlockedMessage, { id: 'submit-prediction' })
-      return
-    }
-
-    if (improbableScoreSummaries.length > 0) {
-      setPendingGameSubmitMode('games')
-      setIsImprobableScoresModalOpen(true)
-      return
-    }
-
-    submitPrediction()
-  }
-
   const handleSubmitCombinedClick = () => {
     if (combinedSubmitBlockedMessage) {
       toast.error(combinedSubmitBlockedMessage, { id: 'submit-combined-prediction' })
@@ -378,35 +350,11 @@ function PredictionsPage() {
     }
 
     if (improbableScoreSummaries.length > 0) {
-      setPendingGameSubmitMode('combined')
       setIsImprobableScoresModalOpen(true)
       return
     }
 
     submitPredictionAndWinners()
-  }
-
-  const submitWinners = () => {
-    if (!tokenId) return
-    if (winnersSubmitBlockedMessage) {
-      toast.error(winnersSubmitBlockedMessage, { id: 'submit-winners' })
-      return
-    }
-    void winnersWrite.simulateAndSend(
-      { address: CONTRACT_ADDRESSES.PREDICTIONS, abi: PREDICTIONS_ABI, functionName: 'predictWinners', args: [tokenId, winnerPrediction] },
-      {
-        toastId: 'submit-winners',
-        pendingMessage: 'Esperando confirmación…',
-        successMessage: '¡Predicciones de ganadores enviadas!',
-        revertedMessage: WINNERS_REVERT_MESSAGE,
-        mapError: mapWinnersErrorToMessage,
-        onSuccess: async () => {
-          resetPredictionDraft({ games: false, winners: true })
-          await Promise.all([refetchCartonWinnersState(), refetchSubmittedWinners()])
-        },
-        logLabel: 'Submit winner predictions',
-      },
-    )
   }
 
   const { data: deadline } = useReadContract({
@@ -439,6 +387,73 @@ function PredictionsPage() {
   const selectedCartonWinnersSubmitted = hasWinnersPrediction(cartonWinnersState)
   const normalizedSubmittedGames = useMemo(() => normalizeSubmittedGames(submittedGames), [submittedGames])
   const normalizedSubmittedWinners = useMemo(() => normalizeSubmittedWinners(submittedWinners), [submittedWinners])
+  const submittedOfficialGameContracts = useMemo(
+    () =>
+      normalizedSubmittedGames.map((entry) => ({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'games' as const,
+        args: [entry.gameId] as const,
+      })),
+    [normalizedSubmittedGames],
+  )
+  const { data: submittedOfficialGamesData } = useReadContracts({
+    contracts: submittedOfficialGameContracts,
+    query: {
+      enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedOfficialGameContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+  const submittedScoredGameEntries = useMemo(
+    () =>
+      normalizedSubmittedGames
+        .map((entry, index) => ({
+          gameId: entry.gameId,
+          predictionIndex: index,
+          officialGame: normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result),
+        }))
+        .filter((entry) => Boolean(entry.officialGame?.set)),
+    [normalizedSubmittedGames, submittedOfficialGamesData],
+  )
+  const submittedGamePointsContracts = useMemo(() => {
+    if (!tokenId || !cartonGroupsState) return []
+
+    return submittedScoredGameEntries.map((entry) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'calculatePoints' as const,
+      args: [tokenId, entry.predictionIndex] as const,
+    }))
+  }, [cartonGroupsState, submittedScoredGameEntries, tokenId])
+  const { data: submittedGamePointsData } = useReadContracts({
+    contracts: submittedGamePointsContracts,
+    query: {
+      enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedGamePointsContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+  const { data: selectedCartonTotalPoints } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'calculateTotalPoints',
+    args: [tokenId ?? 0n],
+    query: {
+      enabled: tokenId !== undefined && Boolean(cartonGroupsState),
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+  const submittedPointsByGameId = useMemo(() => {
+    const next: Record<number, bigint> = {}
+
+    submittedScoredGameEntries.forEach((entry, index) => {
+      next[entry.gameId] = (submittedGamePointsData?.[index]?.result as bigint | undefined) ?? 0n
+    })
+
+    return next
+  }, [submittedGamePointsData, submittedScoredGameEntries])
   const submittedGameState = useMemo(() => {
     if (!normalizedSubmittedGames.length) return null
 
@@ -463,13 +478,15 @@ function PredictionsPage() {
   const displayGames = displayGameState.games
   const displayGroups = displayGameState.groups
   const displayWinnerPrediction = selectedCartonWinnersSubmitted ? normalizedSubmittedWinners : winnerPrediction
+  const hasPartialSubmission = (selectedCartonGamesSubmitted || selectedCartonWinnersSubmitted)
+    && !(selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted)
   const selectedCartonStatus = getPredictionStatus({
     gamesSubmitted: selectedCartonGamesSubmitted,
     winnersSubmitted: selectedCartonWinnersSubmitted,
     deadline: deadlineValue,
     now,
   })
-  const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired)
+  const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired && !hasPartialSubmission)
   const completedGamesCount = useMemo(
     () => games.filter((game) => game.result[0] !== null && game.result[1] !== null).length,
     [games],
@@ -591,56 +608,19 @@ function PredictionsPage() {
     },
     {
       key: 'winners',
-      label: 'Elige 4 ganadores distintos',
+      label: 'Elige a los 4 primeros',
       done: selectedCartonWinnersSubmitted || hasValidWinners,
       detail: !tokenId || !selectedCartonIsOwned
         ? 'Primero selecciona un carton valido'
         : !tournamentReadyForSubmission
           ? 'Esperando configuracion completa del torneo'
           : selectedCartonWinnersSubmitted
-            ? 'Ganadores ya enviados onchain'
+            ? 'Top 4 ya enviado onchain'
             : hasValidWinners
-              ? 'Ganadores listos para enviar'
-              : 'Faltan tus 4 ganadores del torneo',
+              ? 'Top 4 listo para enviar'
+              : 'Falta elegir 1°, 2°, 3° y 4° puesto',
     },
   ] as const
-
-  const predictionSubmitBlockedMessage = (() => {
-    if (!isConnected) return 'Conecta tu wallet para enviar predicciones de partidos.'
-    if (!hasOwnedCartons) return 'Compra un cartón antes de enviar predicciones.'
-    if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
-    if (!selectedCartonIsOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
-    if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
-    if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
-    if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
-    if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
-    if (totalGamesMismatch) return `Desincronización de partidos — cadena espera ${String(totalGames)}, UI tiene ${games.length}.`
-    if (selectedCartonGamesSubmitted) return 'Las predicciones de partidos ya fueron enviadas para este cartón.'
-    if (!hasCompleteGamePredictions) {
-      return `Completa los ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} restante${remainingGamesCount === 1 ? '' : 's'} antes de enviar.`
-    }
-    if (predictionWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
-    if (predictionWrite.isPending) return 'Confirma la transacción en tu wallet.'
-    if (predictionWrite.isConfirming) return 'Confirmando en cadena…'
-    return null
-  })()
-
-  const winnersSubmitBlockedMessage = (() => {
-    if (!isConnected) return 'Conecta tu wallet para enviar predicciones de ganadores.'
-    if (!hasOwnedCartons) return 'Compra un cartón antes de enviar predicciones.'
-    if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
-    if (!selectedCartonIsOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
-    if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
-    if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
-    if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
-    if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
-    if (!hasValidWinners) return 'Elige 4 equipos distintos antes de enviar.'
-    if (selectedCartonWinnersSubmitted) return 'Las predicciones de ganadores ya fueron enviadas para este cartón.'
-    if (winnersWrite.isSimulating) return 'Verificando predicciones contra el contrato…'
-    if (winnersWrite.isPending) return 'Confirma la transacción en tu wallet.'
-    if (winnersWrite.isConfirming) return 'Confirmando en cadena…'
-    return null
-  })()
 
   const combinedSubmitBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para enviar la predicción completa.'
@@ -653,20 +633,18 @@ function PredictionsPage() {
     if (teamsHashStatus === 'mismatch') return 'La configuración de equipos está desincronizada.'
     if (totalGamesMismatch) return `Desincronización de partidos — cadena espera ${String(totalGames)}, UI tiene ${games.length}.`
     if (selectedCartonGamesSubmitted) return 'Las predicciones de partidos ya fueron enviadas para este cartón.'
-    if (selectedCartonWinnersSubmitted) return 'Las predicciones de ganadores ya fueron enviadas para este cartón.'
+    if (selectedCartonWinnersSubmitted) return 'El top 4 ya fue enviado para este cartón.'
     if (!hasCompleteGamePredictions) {
       return `Completa los ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} restante${remainingGamesCount === 1 ? '' : 's'} antes de enviar todo.`
     }
-    if (!hasValidWinners) return 'Elige 4 equipos distintos antes de enviar todo.'
+    if (!hasValidWinners) return 'Elige 4 equipos distintos para 1°, 2°, 3° y 4° antes de enviar.'
     if (combinedWrite.isSimulating) return 'Verificando predicción completa contra el contrato…'
     if (combinedWrite.isPending) return 'Confirma la transacción en tu wallet.'
     if (combinedWrite.isConfirming) return 'Confirmando en cadena…'
     return null
   })()
 
-  const canSubmitGames = predictionSubmitBlockedMessage === null
   const canSubmitCombined = combinedSubmitBlockedMessage === null
-  const canSubmitWinners = winnersSubmitBlockedMessage === null
   const adminActionTo = import.meta.env.DEV ? '/admin/dev' as const : undefined
 
   const blockingState: BlockingStateCard | null = (() => {
@@ -683,7 +661,7 @@ function PredictionsPage() {
       return {
         eyebrow: 'Sin cartones',
         title: 'Esta wallet todavia no tiene cartones.',
-        detail: 'Compra uno primero y luego vuelve aqui para completar partidos y ganadores.',
+        detail: 'Compra uno primero y luego vuelve aquí para completar partidos y top 4.',
         tone: 'neutral',
         actionLabel: 'Ir al inicio',
         actionTo: '/',
@@ -767,7 +745,7 @@ function PredictionsPage() {
       return {
         eyebrow: 'Sin cartones',
         title: 'Todavia no tienes cartones para completar.',
-        detail: 'Cuando compres uno, esta pantalla te llevara por el flujo de partidos y ganadores.',
+        detail: 'Cuando compres uno, esta pantalla te llevará por el flujo de partidos y top 4.',
         tone: 'neutral',
       }
     }
@@ -805,8 +783,17 @@ function PredictionsPage() {
         title: 'Tu carton ya quedo confirmado onchain.',
         detail: 'No tienes mas acciones pendientes aqui. Solo queda esperar resultados y luego revisar premios.',
         tone: 'success',
-        ctaLabel: 'Revisar ganadores',
+        ctaLabel: 'Revisar top 4',
         ctaTarget: 'winners-panel',
+      }
+    }
+
+    if (hasPartialSubmission) {
+      return {
+        eyebrow: 'Estado parcial',
+        title: 'Este cartón quedó en un estado intermedio que ya no forma parte del flujo principal.',
+        detail: 'Para nuevos cartones la app solo admite el envío completo en una sola transacción.',
+        tone: 'warning',
       }
     }
 
@@ -819,22 +806,11 @@ function PredictionsPage() {
       }
     }
 
-    if (selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted) {
-      return {
-        eyebrow: 'Siguiente paso',
-        title: 'Partidos confirmados. Solo faltan los 4 ganadores.',
-        detail: 'Baja a la siguiente seccion y cierra el carton con tus puestos del torneo.',
-        tone: 'success',
-        ctaLabel: 'Ir a ganadores',
-        ctaTarget: 'winners-panel',
-      }
-    }
-
     if (canAttemptCombinedSubmit && canSubmitCombined) {
       return {
         eyebrow: 'Listo para enviar',
         title: 'Ya puedes cerrar la prediccion completa en una sola transaccion.',
-        detail: 'Tus partidos y tus 4 ganadores ya estan completos. Revisa una vez mas y envia todo junto.',
+        detail: 'Tus partidos y tu top 4 ya están completos. Revisa una vez más y envía todo junto.',
         tone: 'success',
         ctaLabel: 'Revisar envio',
         ctaTarget: 'winners-panel',
@@ -844,10 +820,10 @@ function PredictionsPage() {
     if (hasCompleteGamePredictions) {
       return {
         eyebrow: 'Partidos completos',
-        title: 'Tus resultados ya estan listos para enviarse.',
-        detail: 'Puedes mandar solo partidos o aprovechar y completar ganadores para cerrar todo junto.',
+        title: 'Tus resultados ya están listos.',
+        detail: 'Ahora elige a los 4 primeros para habilitar el envío completo del cartón.',
         tone: 'neutral',
-        ctaLabel: 'Ir a ganadores',
+        ctaLabel: 'Ir al top 4',
         ctaTarget: 'winners-panel',
       }
     }
@@ -855,7 +831,7 @@ function PredictionsPage() {
     return {
       eyebrow: 'Empieza aqui',
       title: 'Completa primero los resultados de partidos.',
-      detail: 'Cuando cierres esa parte, la pantalla te va a empujar hacia los ganadores del torneo.',
+      detail: 'Cuando cierres esa parte, la pantalla te empuja al top 4 del torneo para luego enviar todo junto.',
       tone: 'neutral',
       ctaLabel: 'Ir a partidos',
       ctaTarget: 'games-panel',
@@ -891,18 +867,24 @@ function PredictionsPage() {
   const blockingStateStyles = blockingState ? getFlowCalloutToneStyles(blockingState.tone) : null
   const checklistToneStyles = blockingState ? blockingStateStyles : null
   const passivePanelTone = !isConnected || !hasOwnedCartons || !tokenId ? 'neutral' : 'warning'
-  const gamesPanelNoticeTone = canSubmitGames ? 'success' : passivePanelTone
-  const winnersPanelNoticeTone = (canAttemptCombinedSubmit ? canSubmitCombined : canSubmitWinners) ? 'success' : passivePanelTone
+  const gamesPanelNoticeTone = hasCompleteGamePredictions ? 'success' : passivePanelTone
+  const winnersPanelNoticeTone = canSubmitCombined ? 'success' : passivePanelTone
   const gamesPanelNoticeStyles = getFlowCalloutToneStyles(gamesPanelNoticeTone)
   const winnersPanelNoticeStyles = getFlowCalloutToneStyles(winnersPanelNoticeTone)
   const gamesPanelNotice = selectedCartonGamesSubmitted
     ? null
-    : predictionSubmitBlockedMessage ?? 'Tus resultados estan completos. Ya puedes enviarlos cuando quieras.'
+    : hasPartialSubmission
+      ? 'Este cartón quedó en un estado parcial inesperado y ya no puede seguir editándose desde esta UI.'
+    : !tokenId || !selectedCartonIsOwned
+      ? 'Selecciona un cartón válido para empezar a completar esta parte.'
+      : !hasCompleteGamePredictions
+        ? `Completa los ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} restante${remainingGamesCount === 1 ? '' : 's'}.`
+        : 'Partidos completos. Sigue con el top 4 para habilitar el envío completo.'
   const winnersPanelNotice = selectedCartonWinnersSubmitted
     ? null
-    : canAttemptCombinedSubmit
-      ? combinedSubmitBlockedMessage ?? 'Recomendado: envia partidos y ganadores juntos en una sola transaccion.'
-      : winnersSubmitBlockedMessage ?? 'Tus 4 ganadores ya estan listos para enviarse.'
+    : hasPartialSubmission
+      ? 'Este cartón quedó en un estado parcial inesperado y ya no puede seguir editándose desde esta UI.'
+    : combinedSubmitBlockedMessage ?? 'El top 4 está listo. Cuando revises todo, envía la predicción completa en una sola transacción.'
 
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
@@ -922,7 +904,7 @@ function PredictionsPage() {
           Predicciones
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-          Predice resultados y ganadores del torneo
+          Predice resultados y el top 4 del torneo
         </p>
       </div>
 
@@ -1065,7 +1047,7 @@ function PredictionsPage() {
                 Esta wallet no tiene cartones aun.
               </p>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                El flujo de predicciones empieza cuando compras uno. Despues vuelves aqui para completar partidos y ganadores.
+                El flujo de predicciones empieza cuando compras uno. Después vuelves aquí para completar partidos y top 4.
               </p>
             </div>
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleRouteNavigation('/')}>
@@ -1092,17 +1074,36 @@ function PredictionsPage() {
               </p>
             )}
             {tokenId !== undefined && selectedCartonIsOwned && selectedCartonEntry && (
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <TokenStatusBadge status={selectedCartonStatus} />
-                <span style={{ color: 'var(--text-secondary)' }}>
-                  {!selectedCartonEntry.gamesSubmitted
-                    ? 'Siguiente paso: enviar los partidos.'
-                    : !selectedCartonEntry.winnersSubmitted
-                      ? 'Siguiente paso: elegir los 4 ganadores.'
-                      : selectedCartonStatus === 'expired'
-                        ? 'Este carton quedo incompleto al cerrar el plazo.'
-                        : 'Este carton ya esta completo.'}
-                </span>
+              <div
+                className="flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <TokenStatusBadge status={selectedCartonStatus} />
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {selectedCartonEntry.gamesSubmitted && selectedCartonEntry.winnersSubmitted
+                      ? 'Este carton ya esta completo.'
+                      : selectedCartonEntry.gamesSubmitted || selectedCartonEntry.winnersSubmitted
+                        ? 'Este cartón quedó en un estado parcial fuera del flujo principal.'
+                        : 'Siguiente paso: completar partidos y elegir a los 4 primeros.'}
+                  </span>
+                </div>
+                {selectedCartonEntry.gamesSubmitted && selectedCartonTotalPoints !== undefined && (
+                  <div className="self-start rounded-md px-3 py-2 sm:self-auto sm:text-right" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: 'var(--text-secondary)' }}>
+                      Puntaje actual
+                    </p>
+                    <p
+                      className="font-display text-2xl font-black leading-none tabular-nums"
+                      style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono-custom)' }}
+                    >
+                      {selectedCartonTotalPoints.toString()}
+                      <span className="ml-1 text-sm font-sans font-medium" style={{ color: 'var(--text-secondary)' }}>
+                        pts
+                      </span>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -1153,11 +1154,11 @@ function PredictionsPage() {
                 ? blockingState.title
                 : selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted
                   ? 'Este carton ya no tiene pasos pendientes; abajo puedes revisar lo enviado.'
-                  : selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted
-                    ? 'Partidos cerrados. Ahora falta elegir y enviar los 4 ganadores.'
+                  : selectedCartonGamesSubmitted || selectedCartonWinnersSubmitted
+                    ? 'Este cartón quedó en un estado parcial fuera del flujo principal de la app.'
                     : canAttemptCombinedSubmit && canSubmitCombined
-                      ? 'Ya puedes enviar todo en una sola transacción.'
-                      : 'Completa estos 3 puntos antes de cerrar la predicción completa.'}
+                      ? 'Ya puedes enviar la predicción completa en una sola transacción.'
+                      : 'Completa estos 3 puntos antes de enviar la predicción completa.'}
             </p>
             {blockingState && (
               <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
@@ -1271,6 +1272,7 @@ function PredictionsPage() {
             readOnlyAppearance={selectedCartonGamesSubmitted}
             onScoreChange={updateGameScore}
             selectedGroup={selectedGroup}
+            pointsByGameId={selectedCartonGamesSubmitted ? submittedPointsByGameId : undefined}
           />
         </div>
 
@@ -1283,31 +1285,12 @@ function PredictionsPage() {
             <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
               {selectedCartonWinnersSubmitted
                 ? 'Partidos confirmados. Este carton ya quedo cerrado y aqui solo ves el resumen enviado.'
-                : 'Partidos confirmados. El siguiente paso es bajar a Ganadores para completar el carton.'}
+                : 'Partidos confirmados. Este cartón quedó en un estado parcial que la app ya no promueve.'}
             </p>
           ) : (
-            <>
-              <Button
-                className="w-full h-11 text-base font-semibold"
-                disabled={!canSubmitGames}
-                onClick={handleSubmitPredictionClick}
-              >
-                {predictionWrite.isSimulating
-                  ? 'Verificando…'
-                  : predictionWrite.isPending
-                    ? 'Confirmando…'
-                    : predictionWrite.isConfirming
-                      ? 'Procesando…'
-                      : canAttemptCombinedSubmit
-                        ? 'Enviar solo partidos'
-                        : 'Enviar Predicciones de Partidos'}
-              </Button>
-              {predictionSubmitBlockedMessage && (
-                <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-                  {predictionSubmitBlockedMessage}
-                </p>
-              )}
-            </>
+            <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+              Los partidos forman parte del envío completo. Revisa esta sección y luego cierra todo desde el panel del top 4.
+            </p>
           )}
         </div>
       </div>
@@ -1317,9 +1300,9 @@ function PredictionsPage() {
         onClose={() => setIsImprobableScoresModalOpen(false)}
         title="Confirmar marcadores poco habituales"
         message={`Tenes ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} con resultados de goleada historica: ${improbableScoreSummaries.join(', ')}. ¿Confirmas que queres enviar estas predicciones?`}
-        confirmLabel={pendingGameSubmitMode === 'combined' ? 'Sí, enviar todo' : 'Sí, enviar partidos'}
+        confirmLabel="Sí, enviar la predicción completa"
         variant="warning"
-        onConfirm={pendingGameSubmitMode === 'combined' ? submitPredictionAndWinners : submitPrediction}
+        onConfirm={submitPredictionAndWinners}
       />
 
       {/* ─── Winner Predictions ─── */}
@@ -1333,12 +1316,12 @@ function PredictionsPage() {
           style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
         >
           <div>
-            <p className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
-              Ganadores del Torneo
-            </p>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Predice los 4 finalistas
-            </p>
+              <p className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+              Top 4 del Torneo
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Elige 1°, 2°, 3° y 4° puesto
+              </p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
               {winnersPanelMeta.detail}
             </p>
@@ -1376,10 +1359,14 @@ function PredictionsPage() {
           {selectedCartonWinnersSubmitted ? (
             <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
               {selectedCartonGamesSubmitted
-                ? 'Ganadores confirmados. Este carton ya no requiere mas acciones y queda a la espera de resultados.'
-                : 'Ganadores confirmados. Puedes revisar arriba los equipos que quedaron guardados.'}
+                ? 'Top 4 confirmado. Este carton ya no requiere mas acciones y queda a la espera de resultados.'
+                : 'Top 4 confirmado. Puedes revisar arriba los equipos que quedaron guardados.'}
             </p>
-          ) : canAttemptCombinedSubmit ? (
+          ) : selectedCartonGamesSubmitted || selectedCartonWinnersSubmitted ? (
+            <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+              Este cartón quedó en un estado parcial inesperado. El flujo principal de la app ahora exige envío completo en una sola transacción.
+            </p>
+          ) : (
             <>
               <Button
                 className="w-full h-11 text-base font-semibold"
@@ -1391,28 +1378,13 @@ function PredictionsPage() {
                   ? 'Verificando…'
                   : combinedWrite.isPending
                     ? 'Confirmando…'
-                    : combinedWrite.isConfirming
-                      ? 'Procesando…'
-                      : 'Enviar todo en 1 transacción'}
+                  : combinedWrite.isConfirming
+                    ? 'Procesando…'
+                      : 'Enviar predicción'}
               </Button>
               <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-                {combinedSubmitBlockedMessage ?? 'Este es el camino recomendado: partidos + ganadores juntos.'}
+                {combinedSubmitBlockedMessage ?? 'Este es el único camino del producto: partidos + top 4 en una sola transacción.'}
               </p>
-            </>
-          ) : (
-            <>
-              <Button
-                className="w-full h-11 text-base font-semibold"
-                disabled={!canSubmitWinners}
-                onClick={submitWinners}
-              >
-                {winnersWrite.isSimulating ? 'Verificando…' : winnersWrite.isPending ? 'Confirmando…' : winnersWrite.isConfirming ? 'Procesando…' : 'Enviar Predicciones de Ganadores'}
-              </Button>
-              {winnersSubmitBlockedMessage && (
-                <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-                  {winnersSubmitBlockedMessage}
-                </p>
-              )}
             </>
           )}
         </div>

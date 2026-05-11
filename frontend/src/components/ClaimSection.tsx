@@ -57,9 +57,9 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
   const { data: usdcPrize } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
-    functionName: 'getUserPrizeAmount',
-    args: rank !== null && tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(rank)] : undefined,
-    query: { enabled: rank !== null && Boolean(tournamentFinalized), refetchInterval: 10_000 },
+    functionName: 'getClaimablePrizeAmount',
+    args: tournamentId > 0n ? [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: usdcClaimed, refetch: refetchUsdcClaimed } = useReadContract({

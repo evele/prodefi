@@ -290,7 +290,7 @@ contract CartonTest is BaseTest {
     // ========== TREASURY INTEGRATION TESTS ==========
 
     function testSetTreasuryAddress() public {
-        treasury = new Treasury(admin, address(carton), address(predictions));
+        treasury = new Treasury(admin, address(carton), address(predictions), 500);
 
         vm.prank(admin);
         carton.setTreasuryAddress(address(treasury));
@@ -299,7 +299,7 @@ contract CartonTest is BaseTest {
     }
 
     function testSetTreasuryAddress_OnlyAdmin() public {
-        treasury = new Treasury(admin, address(carton), address(predictions));
+        treasury = new Treasury(admin, address(carton), address(predictions), 500);
 
         vm.prank(user);
         vm.expectRevert();
@@ -333,7 +333,7 @@ contract CartonTest is BaseTest {
 
     function testBuyCartonWithEthRevertsEvenWithTreasuryConfigured() public {
         // Setup Treasury
-        treasury = new Treasury(admin, address(carton), address(predictions));
+        treasury = new Treasury(admin, address(carton), address(predictions), 500);
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(treasury));
@@ -355,7 +355,7 @@ contract CartonTest is BaseTest {
 
     function testBuyCartonWithToken_WithTreasuryIntegration() public {
         // Setup Treasury
-        treasury = new Treasury(admin, address(carton), address(predictions));
+        treasury = new Treasury(admin, address(carton), address(predictions), 500);
 
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
@@ -378,14 +378,15 @@ contract CartonTest is BaseTest {
         // Verify carton was minted
         assertEq(carton.balanceOf(user, 1), 1);
 
-        // Verify USDC went to Treasury
-        assertEq(treasury.prizePools(1, address(USDC)), 1000000);
+        // Verify USDC was split between prize pool and reserve inside Treasury
+        assertEq(treasury.prizePools(1, address(USDC)), 950000);
+        assertEq(treasury.reservePools(1, address(USDC)), 50000);
         assertEq(USDC.balanceOf(address(carton)), 0); // Carton should have 0 balance
         assertEq(USDC.balanceOf(address(treasury)), 1000000); // Treasury should have the tokens
     }
 
     function testBuyCartonWithToken_RevertsAfterSalesClose() public {
-        treasury = new Treasury(admin, address(carton), address(predictions));
+        treasury = new Treasury(admin, address(carton), address(predictions), 500);
 
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);

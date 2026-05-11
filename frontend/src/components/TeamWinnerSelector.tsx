@@ -1,6 +1,8 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { Team } from "../lib/types"
 import { teamsFlagById } from "../lib/teams"
+import { Button } from './ui/button'
+import { Input } from './ui/input'
 
 const POSITION_ICONS = ['🥇', '🥈', '🥉', '4°'] as const
 
@@ -21,12 +23,77 @@ export function TeamWinnerSelector({
   readOnlyAppearance?: boolean
   onChange: (teamId: number) => void
 }) {
-  const availableTeams = teams.filter(
-    (team) => !selectedTeams.includes(team.id) || team.id === selectedTeams[currentPosition - 1]
+  const datalistId = useId()
+  const availableTeams = useMemo(
+    () => teams
+      .filter((team) => !selectedTeams.includes(team.id) || team.id === selectedTeams[currentPosition - 1])
+      .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })),
+    [currentPosition, selectedTeams, teams],
   )
   const icon = POSITION_ICONS[currentPosition - 1]
   const selectedTeamId = selectedTeams[currentPosition - 1]
   const selectedTeam = teams.find((team) => team.id === selectedTeamId)
+  const [searchValue, setSearchValue] = useState(selectedTeam?.name ?? '')
+
+  useEffect(() => {
+    setSearchValue(selectedTeam?.name ?? '')
+  }, [selectedTeam])
+
+  const optionLabelById = useMemo(() => {
+    const entries = availableTeams.map((team) => [team.id, team.name] as const)
+    return new Map(entries)
+  }, [availableTeams])
+
+  const normalizedTeamEntries = useMemo(
+    () => availableTeams.map((team) => ({
+      team,
+      label: optionLabelById.get(team.id) ?? team.name,
+      searchText: team.name.toLowerCase(),
+    })),
+    [availableTeams, optionLabelById],
+  )
+
+  const filteredTeamEntries = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+    if (!query) return normalizedTeamEntries
+    return normalizedTeamEntries.filter((entry) => entry.searchText.includes(query) || entry.label.toLowerCase().includes(query))
+  }, [normalizedTeamEntries, searchValue])
+
+  const commitSelection = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      onChange(0)
+      setSearchValue('')
+      return
+    }
+
+    const exactLabelMatch = normalizedTeamEntries.find((entry) => entry.label.toLowerCase() === trimmed.toLowerCase())
+    if (exactLabelMatch) {
+      onChange(exactLabelMatch.team.id)
+      setSearchValue(exactLabelMatch.label)
+      return
+    }
+
+    if (selectedTeam) {
+      setSearchValue(selectedTeam.name)
+    } else {
+      setSearchValue('')
+    }
+  }
+
+  const handleInputChange = (value: string) => {
+    setSearchValue(value)
+
+    const exactLabelMatch = normalizedTeamEntries.find((entry) => entry.label.toLowerCase() === value.trim().toLowerCase())
+    if (exactLabelMatch) {
+      onChange(exactLabelMatch.team.id)
+    }
+  }
+
+  const clearSelection = () => {
+    onChange(0)
+    setSearchValue('')
+  }
 
   if (readOnlyAppearance) {
     return (
@@ -77,24 +144,44 @@ export function TeamWinnerSelector({
           {label}
         </span>
       </div>
-      <Select
-        disabled={disabled}
-        onValueChange={(value) => onChange(Number(value))}
-        value={selectedTeams[currentPosition - 1] !== 0 ? selectedTeams[currentPosition - 1].toString() : undefined}
-      >
-        <SelectTrigger className={`flex-1 ${readOnlyAppearance ? 'disabled:opacity-100' : ''}`}>
-          <SelectValue placeholder={`Seleccionar equipo…`} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="0">— Sin seleccionar —</SelectItem>
-          {availableTeams.map((team) => (
-            <SelectItem key={team.id} value={team.id.toString()}>
-              <span className={`fi fi-${teamsFlagById[team.id]} mr-2`} />
-              {team.name}
-            </SelectItem>
+      <div className="flex-1 space-y-2">
+        <div className="flex items-center gap-2">
+          <Input
+            list={datalistId}
+            disabled={disabled}
+            value={searchValue}
+            onChange={(event) => handleInputChange(event.target.value)}
+            onBlur={() => commitSelection(searchValue)}
+            placeholder="Buscar país…"
+            className={readOnlyAppearance ? 'disabled:opacity-100' : ''}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={clearSelection}
+            disabled={disabled || (!selectedTeam && searchValue.length === 0)}
+            aria-label={`Limpiar ${label}`}
+            title={`Limpiar ${label}`}
+          >
+            ×
+          </Button>
+        </div>
+        <datalist id={datalistId}>
+          {filteredTeamEntries.map((entry) => (
+            <option key={entry.team.id} value={entry.label} />
           ))}
-        </SelectContent>
-      </Select>
+        </datalist>
+        <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+          <span>Escribí para filtrar países.</span>
+          {selectedTeam && (
+            <span className="flex items-center gap-1">
+              <span className={`fi fi-${teamsFlagById[selectedTeam.id]}`} />
+              {selectedTeam.name}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

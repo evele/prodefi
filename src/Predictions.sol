@@ -174,10 +174,18 @@ contract Predictions is Ownable {
         uint256 newVersion = positionsVersion + 1;
         positionsVersion = newVersion;
         uint256 maxPoints = type(uint256).max;
+        uint256 currentRank = 0;
+        uint256 previousPoints = type(uint256).max;
 
         for (uint256 i = 0; i < _predictionPoints.length; i++) {
             if (maxPoints < _predictionPoints[i]) revert PointsNotOrdered();
-            tokenPositions[_predictionIds[i]] = i + 1;
+
+            if (i == 0 || _predictionPoints[i] < previousPoints) {
+                currentRank = i + 1;
+                previousPoints = _predictionPoints[i];
+            }
+
+            tokenPositions[_predictionIds[i]] = currentRank;
             tokenPositionsVersion[_predictionIds[i]] = newVersion;
             maxPoints = _predictionPoints[i];
         }

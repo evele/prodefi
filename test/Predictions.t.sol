@@ -486,6 +486,32 @@ contract PredictionsTest is Test {
         preds.getCartonPosition(TOKEN_ID);
     }
 
+    function testSetPositions_SharedRanks() public {
+        uint256 tokenId2 = cart.mint(user, 1, "");
+        uint256 tokenId3 = cart.mint(user, 1, "");
+        uint256 tokenId4 = cart.mint(user, 1, "");
+
+        uint256[] memory ids = new uint256[](4);
+        uint256[] memory points = new uint256[](4);
+
+        ids[0] = TOKEN_ID;
+        ids[1] = tokenId2;
+        ids[2] = tokenId3;
+        ids[3] = tokenId4;
+
+        points[0] = 100;
+        points[1] = 90;
+        points[2] = 90;
+        points[3] = 80;
+
+        preds.setPositions(ids, points);
+
+        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
+        assertEq(preds.getCartonPosition(tokenId2), 2);
+        assertEq(preds.getCartonPosition(tokenId3), 2);
+        assertEq(preds.getCartonPosition(tokenId4), 4);
+    }
+
     function testSetResults() public {
         // Only owner can set results
         vm.prank(address(0xDEAD));
@@ -551,7 +577,7 @@ contract PredictionsTest is Test {
     }
 
     function testUpdateResultsRevertsWhenTournamentClosed() public {
-        Treasury treasury = new Treasury(address(this), address(cart), address(preds));
+        Treasury treasury = new Treasury(address(this), address(cart), address(preds), 500);
         cart.setTreasuryAddress(address(treasury));
         cart.setActiveTournament(1);
 
@@ -573,6 +599,11 @@ contract PredictionsTest is Test {
         uint256[] memory points = new uint256[](1);
         points[0] = 100;
         preds.setPositions(tokenIds, points);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = treasury.getPrizePool(1, address(0));
+        treasury.setFinalPrizeAmounts(1, address(0), tokenIds, amounts);
+        treasury.sealFinalPrizeAmounts(1, address(0));
 
         treasury.finalizeTournament(1);
 

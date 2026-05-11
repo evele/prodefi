@@ -19,6 +19,33 @@ function withPreviewStandings(rows: StandingRow[]): StandingRow[] {
   }))
 }
 
+function normalizeOfficialGameMeta(value: unknown): { id: number; set: boolean } | null {
+  if (Array.isArray(value)) {
+    const gameId = Number(value[0])
+    const isSet = Boolean(value[1])
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  if (typeof value === 'object' && value !== null && 'id' in value && 'set' in value) {
+    const gameId = Number((value as { id?: unknown }).id)
+    const isSet = Boolean((value as { set?: unknown }).set)
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  return null
+}
+
+function normalizeGameResult(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) return null
+
+  const team1Goals = Number(value[0])
+  const team2Goals = Number(value[1])
+
+  return Number.isFinite(team1Goals) && Number.isFinite(team2Goals)
+    ? [team1Goals, team2Goals]
+    : null
+}
+
 type FixtureMatchProps = {
   game: Game
   officialResult?: [number, number]
@@ -95,7 +122,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
   const [viewMode, setViewMode] = useState<'matches' | 'standings'>('matches')
   const allGames = useMemo(() => groups.flatMap((g) => g.games), [groups])
   
-  const { data: officialGamesData, isLoading } = useReadContracts({
+  const { data: officialGamesMetaData, isLoading: isLoadingGameMeta } = useReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
@@ -106,20 +133,36 @@ export function FixturesView({ groups }: FixturesViewProps) {
       refetchInterval: 30000,
     }
   })
+  const { data: officialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
+    contracts: allGames.map((g) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'getGameResults',
+      args: [g.id],
+    })),
+    query: {
+      refetchInterval: 30000,
+    }
+  })
 
   const officialResultsMap = useMemo(() => {
     const map = new Map<number, { result: [number, number]; set: boolean }>()
-    if (!officialGamesData) return map
+    if (!officialGamesMetaData) return map
     
-    officialGamesData.forEach((res, idx) => {
-      if (res.status === 'success' && res.result && Array.isArray(res.result)) {
-        // res.result is [id, [score1, score2], set]
-        const data = res.result as unknown as [number, [number, number], boolean]
-        map.set(allGames[idx].id, { result: [data[1][0], data[1][1]], set: data[2] })
-      }
+    officialGamesMetaData.forEach((res, idx) => {
+      if (res.status !== 'success') return
+
+      const meta = normalizeOfficialGameMeta(res.result)
+      const result = normalizeGameResult(officialGameResultsData?.[idx]?.status === 'success' ? officialGameResultsData[idx].result : undefined)
+
+      if (!meta || !result) return
+
+      map.set(allGames[idx].id, { result, set: meta.set })
     })
     return map
-  }, [officialGamesData, allGames])
+  }, [officialGameResultsData, officialGamesMetaData, allGames])
+
+  const isLoading = isLoadingGameMeta || isLoadingGameResults
 
   if (isLoading) {
     return (

@@ -190,7 +190,7 @@ export function mapCombinedPredictionErrorToMessage(error: unknown): string {
     return 'Some match results were already published, so this carton can no longer submit game predictions.'
   }
   if (message.includes('duplicate team id')) {
-    return 'Choose 4 different teams before submitting winners.'
+    return 'Choose 4 different teams for 1st, 2nd, 3rd, and 4th place.'
   }
   if (message.includes('invalid team id')) {
     return 'One or more selected teams are invalid. Refresh and try again.'
@@ -214,7 +214,7 @@ export function mapWinnersErrorToMessage(error: unknown): string {
     return 'Winner predictions were already submitted for this carton.'
   }
   if (message.includes('duplicate team id')) {
-    return 'Choose 4 different teams before submitting winners.'
+    return 'Choose 4 different teams for 1st, 2nd, 3rd, and 4th place.'
   }
   if (message.includes('invalid team id')) {
     return 'One or more selected teams are invalid. Refresh and try again.'
@@ -316,7 +316,25 @@ export function mapAdminError(error: unknown): string {
     return 'Tournament must be finalized before this action.'
   }
   if (includesAny(message, ['tournamentnotreadyforfinalization', 'tournament not ready for finalization'])) {
-    return 'Finalize requires closed sales, prize distribution, all results, official winners, and final positions.'
+    return 'Finalize requires closed sales, prize distribution, sealed final prize amounts, all results, official winners, and final positions.'
+  }
+  if (includesAny(message, ['finalprizeamountsalreadyloaded', 'final prize amounts already loaded'])) {
+    return 'Prize distribution can no longer be changed after loading final prize amounts.'
+  }
+  if (includesAny(message, ['finalprizeamountsalreadysealed', 'final prize amounts already sealed'])) {
+    return 'Final prize amounts are already sealed for this asset.'
+  }
+  if (includesAny(message, ['finalprizeamountsnotsealed', 'final prize amounts not sealed'])) {
+    return 'Load and seal the final prize amounts before finalizing the tournament.'
+  }
+  if (includesAny(message, ['finalprizeamountsexceedprizepool', 'final prize amounts exceed prize pool'])) {
+    return 'Final prize amounts exceed the current prizeable pool.'
+  }
+  if (includesAny(message, ['noprizerecipientsprovided', 'no prize recipients provided'])) {
+    return 'There are no winning cartones to save yet.'
+  }
+  if (includesAny(message, ['prizearraylengthmismatch', 'prize array length mismatch'])) {
+    return 'Final prize token and amount arrays must have the same length.'
   }
   if (message.includes('no prize pool')) {
     return 'This tournament has no prize pool to finalize yet.'

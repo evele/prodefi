@@ -8,9 +8,10 @@ type MatchProps = {
   disabled: boolean
   readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
+  pointsEarned?: bigint
 }
 
-export function Match({ game, disabled, readOnlyAppearance = false, onScoreChange }: MatchProps) {
+export function Match({ game, disabled, readOnlyAppearance = false, onScoreChange, pointsEarned }: MatchProps) {
   const team1Score = game.result[0]
   const team2Score = game.result[1]
   const team1Name = teamsById[game.team1] ?? `#${game.team1}`
@@ -106,6 +107,21 @@ export function Match({ game, disabled, readOnlyAppearance = false, onScoreChang
         <p className="text-xs text-center" style={{ color: 'var(--accent-gold)' }}>
           Resultado poco creible. Pegale una ultima mirada por las dudas.
         </p>
+      )}
+
+      {pointsEarned !== undefined && (
+        <div className="flex justify-center">
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            style={{
+              color: pointsEarned > 0n ? 'var(--accent-green)' : 'var(--text-secondary)',
+              background: pointsEarned > 0n ? 'rgba(0,230,118,0.08)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${pointsEarned > 0n ? 'rgba(0,230,118,0.18)' : 'rgba(255,255,255,0.08)'}`,
+            }}
+          >
+            {pointsEarned.toString()} pts
+          </span>
+        </div>
       )}
     </div>
   )

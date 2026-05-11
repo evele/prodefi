@@ -7,9 +7,10 @@ type GroupMatchesProps = {
   disabled: boolean
   readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
+  pointsByGameId?: Record<number, bigint>
 }
 
-export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange }: GroupMatchesProps) {
+export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange, pointsByGameId }: GroupMatchesProps) {
   return (
     <div
       className="rounded-xl px-3 py-3 sm:px-4"
@@ -34,6 +35,7 @@ export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance =
             disabled={disabled}
             readOnlyAppearance={readOnlyAppearance}
             onScoreChange={onScoreChange}
+            pointsEarned={pointsByGameId?.[game.id]}
           />
         ))}
       </div>
