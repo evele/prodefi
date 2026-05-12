@@ -170,6 +170,13 @@ function PredictionsPage() {
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
 
+  const { data: activeTournamentId } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'activeTournamentId',
+    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
+  })
+
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isImprobableScoresModalOpen, setIsImprobableScoresModalOpen] = useState(false)
@@ -218,11 +225,45 @@ function PredictionsPage() {
     },
   })
 
-  const selectedCartonIsOwned = useMemo(
+  const ownedCartonTournamentContracts = useMemo(
+    () =>
+      (ownedCartons ?? []).map((ownedTokenId) => ({
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'tokenTournamentId' as const,
+        args: [ownedTokenId] as const,
+      })),
+    [ownedCartons],
+  )
+
+  const { data: ownedCartonTournamentResults } = useReadContracts({
+    contracts: ownedCartonTournamentContracts,
+    query: {
+      enabled: ownedCartonTournamentContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const activeTournamentOwnedCartons = useMemo(() => {
+    if (!ownedCartons?.length || activeTournamentId === undefined) return []
+
+    return ownedCartons.filter(
+      (_, index) => ((ownedCartonTournamentResults?.[index]?.result as bigint | undefined) ?? 0n) === activeTournamentId,
+    )
+  }, [activeTournamentId, ownedCartons, ownedCartonTournamentResults])
+
+  const selectedCartonIsWalletOwned = useMemo(
     () => tokenId !== undefined && (ownedCartons?.some((id) => id === tokenId) ?? false),
     [ownedCartons, tokenId],
   )
-  const hasOwnedCartons = (ownedCartons?.length ?? 0) > 0
+
+  const selectedCartonIsOwned = useMemo(
+    () => tokenId !== undefined && activeTournamentOwnedCartons.some((id) => id === tokenId),
+    [activeTournamentOwnedCartons, tokenId],
+  )
+  const hasAnyOwnedCartons = (ownedCartons?.length ?? 0) > 0
+  const hasOwnedCartons = activeTournamentOwnedCartons.length > 0
 
   const { data: cartonGroupsState, refetch: refetchCartonUsedState } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -502,9 +543,9 @@ function PredictionsPage() {
   const canAttemptCombinedSubmit = tokenId !== undefined && selectedCartonIsOwned && !selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted
 
   const ownedCartonStatusContracts = useMemo(() => {
-    if (!ownedCartons?.length) return []
+    if (!activeTournamentOwnedCartons.length) return []
 
-    return ownedCartons.flatMap((ownedTokenId) => [
+    return activeTournamentOwnedCartons.flatMap((ownedTokenId) => [
       {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
@@ -518,7 +559,7 @@ function PredictionsPage() {
         args: [ownedTokenId],
       } as const,
     ])
-  }, [ownedCartons])
+  }, [activeTournamentOwnedCartons])
 
   const { data: ownedCartonStatusResults } = useReadContracts({
     contracts: ownedCartonStatusContracts,
@@ -530,16 +571,16 @@ function PredictionsPage() {
   })
 
   const ownedCartonEntries = useMemo(() => {
-    if (!ownedCartons?.length) return []
+    if (!activeTournamentOwnedCartons.length) return []
 
-    return ownedCartons.map((ownedTokenId, index) => {
+    return activeTournamentOwnedCartons.map((ownedTokenId, index) => {
       const gamesSubmitted = Boolean(ownedCartonStatusResults?.[index * 2]?.result)
       const winnersSubmitted = hasWinnersPrediction(ownedCartonStatusResults?.[index * 2 + 1]?.result)
       const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue, now })
 
       return { tokenId: ownedTokenId, status, gamesSubmitted, winnersSubmitted }
     })
-  }, [deadlineValue, now, ownedCartons, ownedCartonStatusResults])
+  }, [activeTournamentOwnedCartons, deadlineValue, now, ownedCartonStatusResults])
 
   const orderedOwnedCartons = useMemo(() => {
     return [...ownedCartonEntries].sort((a, b) => {
@@ -624,9 +665,14 @@ function PredictionsPage() {
 
   const combinedSubmitBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para enviar la predicción completa.'
-    if (!hasOwnedCartons) return 'Compra un cartón antes de enviar predicciones.'
+    if (!hasOwnedCartons) {
+      return hasAnyOwnedCartons
+        ? 'Esta wallet no tiene cartones del torneo activo.'
+        : 'Compra un cartón antes de enviar predicciones.'
+    }
     if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
-    if (!selectedCartonIsOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
+    if (!selectedCartonIsWalletOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
+    if (!selectedCartonIsOwned) return 'El cartón seleccionado pertenece a otro torneo y no puede editarse desde este motor activo.'
     if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
     if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
     if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
@@ -659,20 +705,31 @@ function PredictionsPage() {
 
     if (!hasOwnedCartons) {
       return {
-        eyebrow: 'Sin cartones',
-        title: 'Esta wallet todavia no tiene cartones.',
-        detail: 'Compra uno primero y luego vuelve aquí para completar partidos y top 4.',
+        eyebrow: hasAnyOwnedCartons ? 'Otro torneo activo' : 'Sin cartones',
+        title: hasAnyOwnedCartons ? 'Esta wallet no tiene cartones del torneo activo.' : 'Esta wallet todavia no tiene cartones.',
+        detail: hasAnyOwnedCartons
+          ? 'Tus cartones existentes pertenecen a otro torneo. Esta pantalla solo edita el torneo activo expuesto por el frontend.'
+          : 'Compra uno primero y luego vuelve aquí para completar partidos y top 4.',
         tone: 'neutral',
         actionLabel: 'Ir al inicio',
         actionTo: '/',
       }
     }
 
-    if (tokenId !== undefined && !selectedCartonIsOwned) {
+    if (tokenId !== undefined && !selectedCartonIsWalletOwned) {
       return {
         eyebrow: 'Carton invalido',
         title: 'El carton seleccionado no pertenece a esta wallet.',
         detail: 'Cambia a un carton propio para volver a editar o revisar una prediccion valida.',
+        tone: 'warning',
+      }
+    }
+
+    if (tokenId !== undefined && !selectedCartonIsOwned) {
+      return {
+        eyebrow: 'Otro torneo',
+        title: 'El cartón seleccionado no pertenece al torneo activo.',
+        detail: 'Puedes reclamar premios si corresponde, pero esta pantalla solo permite editar cartones del torneo actualmente conectado al motor de predicciones.',
         tone: 'warning',
       }
     }
@@ -1044,10 +1101,12 @@ function PredictionsPage() {
           >
             <div className="space-y-1">
               <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Esta wallet no tiene cartones aun.
+                {hasAnyOwnedCartons ? 'No tienes cartones para este torneo activo.' : 'Esta wallet no tiene cartones aun.'}
               </p>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                El flujo de predicciones empieza cuando compras uno. Después vuelves aquí para completar partidos y top 4.
+                {hasAnyOwnedCartons
+                  ? 'Tus otros cartones pertenecen a torneos anteriores o distintos. Compra uno del torneo activo para usar esta pantalla de predicciones.'
+                  : 'El flujo de predicciones empieza cuando compras uno. Después vuelves aquí para completar partidos y top 4.'}
               </p>
             </div>
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleRouteNavigation('/')}>
@@ -1068,9 +1127,14 @@ function PredictionsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {tokenId !== undefined && !selectedCartonIsOwned && (
+            {tokenId !== undefined && !selectedCartonIsWalletOwned && (
               <p className="text-sm" style={{ color: 'var(--accent-red)' }}>
                 Este cartón no pertenece a la wallet conectada.
+              </p>
+            )}
+            {tokenId !== undefined && selectedCartonIsWalletOwned && !selectedCartonIsOwned && (
+              <p className="text-sm" style={{ color: 'var(--accent-gold)' }}>
+                Este cartón pertenece a otro torneo. Aquí solo se edita el torneo activo.
               </p>
             )}
             {tokenId !== undefined && selectedCartonIsOwned && selectedCartonEntry && (

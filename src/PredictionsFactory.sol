@@ -19,7 +19,8 @@ contract PredictionsFactory {
         external
         returns (address predictions)
     {
-        Predictions p = new Predictions(cartones);
+        uint256 id = nextTournamentId++;
+        Predictions p = new Predictions(cartones, id);
 
         if (teamsHash != bytes32(0)) {
             p.setTeamsHash(teamsHash);
@@ -29,7 +30,6 @@ contract PredictionsFactory {
             p.transferOwnership(owner);
         }
 
-        uint256 id = nextTournamentId++;
         tournaments[id] = address(p);
 
         emit TournamentCreated(id, address(p), cartones, teamsHash, owner);

@@ -26,16 +26,18 @@ contract DeployScript is Script {
         Carton carton = new Carton(deployer, deployer, deployer);
         console.log("Carton deployed at:", address(carton));
 
-        // Deploy Predictions - ahora solo address del carton; teamsHash via setter si aplica
-        Predictions predictions = new Predictions(address(carton));
+        uint256 tournamentId = 1; // Primer torneo
+
+        // Deploy Predictions scoped to a single tournament; teamsHash via setter si aplica
+        Predictions predictions = new Predictions(address(carton), tournamentId);
         console.log("Predictions deployed at:", address(predictions));
         if (teamsHash != bytes32(0)) {
             predictions.setTeamsHash(teamsHash);
             console.log("Teams hash set:", uint256(teamsHash));
         }
 
-        // Deploy Treasury - necesita 3 parámetros: admin, carton, predictions
-        Treasury treasury = new Treasury(deployer, address(carton), address(predictions), 500);
+        // Deploy Treasury - shared multi-tournament accounting layer
+        Treasury treasury = new Treasury(deployer, address(carton), 500);
         console.log("Treasury deployed at:", address(treasury));
 
         // Deploy MockUSDC (6 decimals like real USDC)
@@ -46,17 +48,16 @@ contract DeployScript is Script {
         // Configure USDC in Carton
         console.log("\nConfiguring USDC support...");
         carton.setAcceptedToken(address(usdc), true);
-        carton.setTokenPrice(address(usdc), 10 ** 6); // 1 USDC = 10^6
         console.log("USDC accepted with price: 1 USDC");
 
         // Setup inicial
         console.log("\nSetting up contracts...");
 
-        uint256 tournamentId = 1; // Primer torneo
-
         // Configure Treasury integration
         carton.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(tournamentId, address(predictions));
         carton.setActiveTournament(tournamentId);
+        carton.setTokenPrice(tournamentId, address(usdc), 10 ** 6); // 1 USDC = 10^6
         console.log("Carton configured with Treasury and active tournament:", tournamentId);
 
         // Grant FUND_DEPOSITOR_ROLE to Carton contract

@@ -672,7 +672,7 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
         address: predictions,
         abi: PREDICTIONS_ABI,
         functionName: 'beginPositionsUpdate',
-        args: [tournamentId, BigInt(entries.length)],
+        args: [BigInt(entries.length)],
       },
       {
         toastId: 'admin-begin-positions-update',
@@ -915,8 +915,8 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   const { data: reservePool } = useReadContract({
     address: treasury,
     abi: TREASURY_ABI,
-    functionName: 'getReservePool',
-    args: [parsedTournamentId, tokenAddress],
+    functionName: 'getGlobalReserve',
+    args: [tokenAddress],
     query: { refetchInterval: 10_000 },
   })
 
@@ -1112,10 +1112,6 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     ? `${Number(formatUnits(reservePool, 6)).toFixed(2)} USDC`
     : '—'
 
-  const grossSalesDisplay = prizePool !== undefined && reservePool !== undefined
-    ? `${Number(formatUnits(prizePool + reservePool, 6)).toFixed(2)} USDC`
-    : '—'
-
   const finalTotalDisplay = finalAmountTotal !== undefined
     ? `${Number(formatUnits(finalAmountTotal, 6)).toFixed(2)} USDC`
     : '—'
@@ -1148,9 +1144,8 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
           <div className="text-sm space-y-1">
             <div><span className="font-medium">Asset:</span> USDC</div>
-            <div><span className="font-medium">Gross Sales:</span> {grossSalesDisplay}</div>
             <div><span className="font-medium">Prizeable Pool:</span> {poolDisplay}</div>
-            <div><span className="font-medium">Reserve:</span> {reserveDisplay}</div>
+            <div><span className="font-medium">Global Reserve:</span> {reserveDisplay}</div>
             <div><span className="font-medium">Final Prize Total:</span> {finalTotalDisplay}</div>
             <div>
               <span className="font-medium">Sales Closed:</span>{' '}
@@ -1213,7 +1208,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
               <div className="space-y-1 text-sm">
                 <div><span className="font-medium">Shared-rank preview:</span> {leaderboardEntries.length} ranked cartones</div>
                 <div><span className="font-medium">Tokens overwritten on load:</span> {candidateTokenIds.length}</div>
-                <div><span className="font-medium">Current reserve + dust after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
                 <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(payoutPreview.totalAssigned, 6)).toFixed(2)} USDC</div>
                 <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
               </div>

@@ -6,6 +6,11 @@
         "name": "_cartones",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "_tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
@@ -83,11 +88,6 @@
     "type": "function",
     "name": "beginPositionsUpdate",
     "inputs": [
-      {
-        "name": "tournamentId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
       {
         "name": "expectedEntries",
         "type": "uint256",
@@ -888,6 +888,19 @@
         "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tournamentId",
+    "inputs": [],
     "outputs": [
       {
         "name": "",

@@ -109,6 +109,14 @@ export function mapBuyCartonError(error: unknown): string {
     return 'Carton sales are already closed for this tournament.'
   }
 
+  if (includesAny(message, ['tournamentnotregistered', 'tournament not registered'])) {
+    return 'This tournament is not registered in Treasury yet.'
+  }
+
+  if (includesAny(message, ['zerotournamentid', 'invalidtournamentid', 'invalid tournament id'])) {
+    return 'Select a valid active tournament before buying.'
+  }
+
   if (includesAny(message, ['erc20insufficientallowance', 'insufficient allowance'])) {
     return 'Approve USDC before buying.'
   }
@@ -246,6 +254,9 @@ export function mapClaimError(error: unknown): string {
   if (message.includes('no prize available')) {
     return 'No USDC prize is available for this carton.'
   }
+  if (includesAny(message, ['tokentournamentmismatch', 'token tournament mismatch'])) {
+    return 'This carton does not belong to the selected tournament.'
+  }
 
   return 'Could not claim the USDC prize. Please try again.'
 }
@@ -339,6 +350,9 @@ export function mapAdminError(error: unknown): string {
   if (includesAny(message, ['salesalreadyclosed', 'sales already closed'])) {
     return 'Sales are already closed for this tournament.'
   }
+  if (includesAny(message, ['tournamentnotregistered', 'tournament not registered'])) {
+    return 'Register the tournament and its engine before using this flow.'
+  }
   if (includesAny(message, ['salesnotclosed', 'sales not closed'])) {
     return 'Close sales before this action.'
   }
@@ -366,6 +380,9 @@ export function mapAdminError(error: unknown): string {
   if (includesAny(message, ['prizearraylengthmismatch', 'prize array length mismatch'])) {
     return 'Final prize token and amount arrays must have the same length.'
   }
+  if (includesAny(message, ['tokentournamentmismatch', 'token tournament mismatch'])) {
+    return 'One or more cartones do not belong to the selected tournament.'
+  }
   if (message.includes('no prize pool')) {
     return 'This tournament has no prize pool to finalize yet.'
   }
@@ -374,6 +391,9 @@ export function mapAdminError(error: unknown): string {
   }
   if (includesAny(message, ['invalidpercentage', 'invalid percentage'])) {
     return 'Prize distribution percentages must be between 0 and 100 and sum to at most 100.'
+  }
+  if (includesAny(message, ['insufficientglobalreserve', 'insufficient global reserve'])) {
+    return 'Global reserve does not have enough balance for this action.'
   }
 
   return 'Admin action failed. Review the inputs and try again.'

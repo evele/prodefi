@@ -34,8 +34,9 @@ function HomePage() {
   const { data: usdcPrice, isLoading: usdcPriceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
-    functionName: 'tokenPrices',
-    args: [CONTRACT_ADDRESSES.USDC],
+    functionName: 'tokenPricesByTournament',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n },
   })
 
   const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
@@ -118,9 +119,8 @@ function HomePage() {
   const { data: usdcReservePool } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
-    functionName: 'getReservePool',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n },
+    functionName: 'getGlobalReserve',
+    args: [CONTRACT_ADDRESSES.USDC],
   })
 
   const prizeContracts = useMemo(() => {
@@ -151,7 +151,12 @@ function HomePage() {
   const buyCartonWithUsdc = () => {
     if (!usdcPriceValue) return
     void purchaseWrite.simulateAndSend(
-      { address: CONTRACT_ADDRESSES.CARTON, abi: CARTON_ABI, functionName: 'buyCartonWithToken', args: [CONTRACT_ADDRESSES.USDC] },
+      {
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'buyCartonWithToken',
+        args: [tournamentId, CONTRACT_ADDRESSES.USDC],
+      },
       {
         toastId: 'buy-carton-usdc',
         pendingMessage: 'Esperando confirmación de compra…',
@@ -206,6 +211,34 @@ function HomePage() {
     },
   })
 
+  const tokenTournamentContracts = useMemo(
+    () =>
+      (cartonsUser ?? []).map((tokenId) => ({
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'tokenTournamentId' as const,
+        args: [tokenId] as const,
+      })),
+    [cartonsUser],
+  )
+
+  const { data: tokenTournamentResults } = useReadContracts({
+    contracts: tokenTournamentContracts,
+    query: {
+      enabled: tokenTournamentContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const activeTournamentCartons = useMemo(() => {
+    if (!cartonsUser?.length || tournamentId === 0n) return []
+
+    return cartonsUser.filter(
+      (_, index) => ((tokenTournamentResults?.[index]?.result as bigint | undefined) ?? 0n) === tournamentId,
+    )
+  }, [cartonsUser, tokenTournamentResults, tournamentId])
+
   const { data: deadline } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -237,14 +270,10 @@ function HomePage() {
     ? `${Number(formatUnits(usdcReservePool, 6)).toFixed(2)} USDC`
     : '—'
 
-  const grossSalesDisplay = usdcPrizePool !== undefined && usdcReservePool !== undefined
-    ? `${Number(formatUnits(usdcPrizePool + usdcReservePool, 6)).toFixed(2)} USDC`
-    : '—'
-
   const cartonStatusContracts = useMemo(() => {
-    if (!cartonsUser?.length) return []
+    if (!activeTournamentCartons.length) return []
 
-    return cartonsUser.flatMap((tokenId) => [
+    return activeTournamentCartons.flatMap((tokenId) => [
       {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
@@ -258,7 +287,7 @@ function HomePage() {
         args: [tokenId],
       } as const,
     ])
-  }, [cartonsUser])
+  }, [activeTournamentCartons])
 
   const { data: cartonStatusResults } = useReadContracts({
     contracts: cartonStatusContracts,
@@ -270,18 +299,18 @@ function HomePage() {
   })
 
   const cartonEntries = useMemo(() => {
-    if (!cartonsUser?.length) return []
+    if (!activeTournamentCartons.length) return []
 
     const deadlineValue = deadline ? Number(deadline) : undefined
 
-    return cartonsUser.map((tokenId, index) => {
+    return activeTournamentCartons.map((tokenId, index) => {
       const gamesSubmitted = Boolean(cartonStatusResults?.[index * 2]?.result)
       const winnersSubmitted = hasWinnersPrediction(cartonStatusResults?.[index * 2 + 1]?.result)
       const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue })
 
       return { tokenId, status, gamesSubmitted, winnersSubmitted }
     })
-  }, [cartonsUser, cartonStatusResults, deadline])
+  }, [activeTournamentCartons, cartonStatusResults, deadline])
 
   const orderedCartonEntries = useMemo(() => {
     return [...cartonEntries].sort((a, b) => {
@@ -364,7 +393,7 @@ function HomePage() {
             </span>
           </div>
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            Ventas brutas: {grossSalesDisplay} · Reserva onchain: {usdcReserveDisplay}
+            Reserva global onchain: {usdcReserveDisplay}
           </p>
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
             Se premia sobre el 95% de las ventas. El resto queda en reserva y remanentes.
@@ -466,12 +495,12 @@ function HomePage() {
             >
               Mis Cartones
             </p>
-            {cartonsUser && cartonsUser.length > 0 && (
+            {activeTournamentCartons.length > 0 && (
               <span
                 className="text-xs font-mono px-1.5 py-0.5 rounded-full"
                 style={{ background: 'rgba(0,230,118,0.12)', color: 'var(--accent-green)' }}
               >
-                {cartonsUser.length}
+                {activeTournamentCartons.length}
               </span>
             )}
           </div>
@@ -509,14 +538,16 @@ function HomePage() {
               </p>
             </div>
           )}
-          {!cartonsUser || cartonsUser.length === 0 ? (
+          {activeTournamentCartons.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <Ticket className="w-8 h-8 opacity-30" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm font-medium" style={{ color: 'var(--text-disabled)' }}>
-                Sin cartones todavía
+                {cartonsUser && cartonsUser.length > 0 ? 'Sin cartones en el torneo activo' : 'Sin cartones todavía'}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
-                Comprá el primero para empezar a predecir
+                {cartonsUser && cartonsUser.length > 0
+                  ? 'Tus otros cartones pertenecen a otro torneo. Compra uno del torneo activo para predecir aquí.'
+                  : 'Comprá el primero para empezar a predecir'}
               </p>
             </div>
           ) : (

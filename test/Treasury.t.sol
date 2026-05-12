@@ -5,12 +5,25 @@ import "./BaseTest.sol";
 import "../src/Treasury.sol";
 import "./mocks/MockERC20.sol";
 
+contract MockCompetitionEngine {
+    bool public ready;
+
+    function setReady(bool newReady) external {
+        ready = newReady;
+    }
+
+    function isReadyForFinalization() external view returns (bool) {
+        return ready;
+    }
+}
+
 /// @title Treasury Contract Test Suite
 /// @notice Comprehensive tests for Treasury prize pool management
 contract TreasuryTest is BaseTest {
     // ========== ADDITIONAL CONTRACTS ==========
     Treasury public treasury;
     MockERC20 public USDC;
+    MockCompetitionEngine public tournament2Engine;
 
     // ========== ADDITIONAL ADDRESSES ==========
     address public fundDepositor = address(0x5);
@@ -31,7 +44,12 @@ contract TreasuryTest is BaseTest {
         carton = new Carton(admin, pauser, minter);
 
         vm.prank(admin);
-        predictions = new Predictions(address(carton));
+        carton.setActiveTournament(TOURNAMENT_ID_1);
+
+        vm.prank(admin);
+        predictions = new Predictions(address(carton), TOURNAMENT_ID_1);
+
+        tournament2Engine = new MockCompetitionEngine();
 
         _setupRoles();
 
@@ -45,8 +63,19 @@ contract TreasuryTest is BaseTest {
     }
 
     function _deployTreasury() internal {
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = new Treasury(admin, address(carton), 500);
         USDC = new MockERC20("USDC", "USDC", 6);
+
+        vm.startPrank(admin);
+        carton.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(TOURNAMENT_ID_1, address(predictions));
+        treasury.registerTournament(TOURNAMENT_ID_2, address(tournament2Engine));
+        vm.stopPrank();
+    }
+
+    function _mintTournamentToken(address to, uint256 tournamentId) internal returns (uint256) {
+        vm.prank(minter);
+        return carton.mintForTournament(to, tournamentId, 1, "");
     }
 
     function _setupTreasuryRoles() internal {
@@ -220,7 +249,7 @@ contract TreasuryTest is BaseTest {
         _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
 
         assertEq(treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN), initialBalance + _prizeableAmount(INITIAL_DEPOSIT));
-        assertEq(treasury.reservePools(TOURNAMENT_ID_1, ETH_TOKEN), _reserveAmount(INITIAL_DEPOSIT));
+        assertEq(treasury.globalReserve(ETH_TOKEN), _reserveAmount(INITIAL_DEPOSIT));
     }
 
     function test_DepositFromSales_MultipleDeposits() public {
@@ -435,7 +464,7 @@ contract TreasuryTest is BaseTest {
         uint256 initialBalance = user1.balance;
 
         vm.expectEmit(true, true, true, true);
-        emit Treasury.ClaimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, user1, ETH_TOKEN, 1, expectedPrize);
+        emit Treasury.ClaimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, user1, ETH_TOKEN, 0, expectedPrize);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
@@ -553,7 +582,7 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN), sharedFirstPlaceShare);
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN), sharedFirstPlaceShare);
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_3, ETH_TOKEN), thirdPlacePrize);
-        assertEq(treasury.getReservePool(TOURNAMENT_ID_1, ETH_TOKEN), expectedReserveAfterSeal);
+        assertEq(treasury.globalReserve(ETH_TOKEN), expectedReserveAfterSeal);
 
         vm.prank(tournamentManager);
         treasury.finalizeTournament(TOURNAMENT_ID_1);
@@ -621,10 +650,11 @@ contract TreasuryTest is BaseTest {
     function test_Integration_MultiTournamentSupport() public {
         _logTestInfo("Integration Multi Tournament Support");
 
-        // Setup two tournaments
         _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
 
-        // Tournament 2 with different distribution
+        uint256 tournament2Token1 = _mintTournamentToken(user1, TOURNAMENT_ID_2);
+        uint256 tournament2Token2 = _mintTournamentToken(user2, TOURNAMENT_ID_2);
+
         _depositFunds(TOURNAMENT_ID_2, 2 ether);
         uint8[] memory distribution2 = new uint8[](2);
         distribution2[0] = 80;
@@ -632,8 +662,8 @@ contract TreasuryTest is BaseTest {
         _setPrizeDistribution(TOURNAMENT_ID_2, distribution2);
 
         uint256[] memory tokenIds = new uint256[](2);
-        tokenIds[0] = TOKEN_ID_1;
-        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[0] = tournament2Token1;
+        tokenIds[1] = tournament2Token2;
 
         uint256 tournament2Pool = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
         uint256[] memory amounts = new uint256[](2);
@@ -641,23 +671,68 @@ contract TreasuryTest is BaseTest {
         amounts[1] = (tournament2Pool * 20) / 100;
         _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
-        // Close tournament 2
+        tournament2Engine.setReady(true);
+
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_2, ETH_TOKEN);
 
-        // Claims for tournament 1
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
 
-        // Verify isolation between tournaments
-        assertFalse(treasury.claimed(TOURNAMENT_ID_2, TOKEN_ID_1, ETH_TOKEN));
+        assertFalse(treasury.claimed(TOURNAMENT_ID_2, tournament2Token1, ETH_TOKEN));
 
-        // User can claim same token for different tournament
         vm.prank(user1);
-        treasury.claimPrize(TOURNAMENT_ID_2, TOKEN_ID_1, ETH_TOKEN);
+        treasury.claimPrize(TOURNAMENT_ID_2, tournament2Token1, ETH_TOKEN);
 
         assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN));
-        assertTrue(treasury.claimed(TOURNAMENT_ID_2, TOKEN_ID_1, ETH_TOKEN));
+        assertTrue(treasury.claimed(TOURNAMENT_ID_2, tournament2Token1, ETH_TOKEN));
+    }
+
+    function test_FinalizeTournament_UsesRegisteredEngineForEachTournament() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        vm.prank(tournamentManager);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
+
+        uint256 tournament2TokenId = _mintTournamentToken(user1, TOURNAMENT_ID_2);
+        _depositFunds(TOURNAMENT_ID_2, INITIAL_DEPOSIT);
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        _setPrizeDistribution(TOURNAMENT_ID_2, percentages);
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = tournament2TokenId;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
+        _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
+
+        vm.prank(tournamentManager);
+        vm.expectRevert(Treasury.TournamentNotReadyForFinalization.selector);
+        treasury.finalizeTournament(TOURNAMENT_ID_2);
+    }
+
+    function test_ClaimPrize_RevertsForWrongTournamentToken() public {
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+        uint256 tournament2TokenId = _mintTournamentToken(user1, TOURNAMENT_ID_2);
+
+        vm.prank(user1);
+        vm.expectRevert(Treasury.TokenTournamentMismatch.selector);
+        treasury.claimPrize(TOURNAMENT_ID_1, tournament2TokenId, ETH_TOKEN);
+    }
+
+    function test_SeedTournamentFromReserve_MovesFundsIntoPrizePool() public {
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        uint256 reserveAmount = _reserveAmount(INITIAL_DEPOSIT);
+
+        vm.prank(admin);
+        treasury.seedTournamentFromReserve(TOURNAMENT_ID_2, ETH_TOKEN, reserveAmount);
+
+        assertEq(treasury.globalReserve(ETH_TOKEN), 0);
+        assertEq(treasury.prizePools(TOURNAMENT_ID_2, ETH_TOKEN), reserveAmount);
     }
 
     // ========== EDGE CASES ==========
@@ -856,7 +931,7 @@ contract TreasuryTest is BaseTest {
         vm.stopPrank();
 
         assertEq(treasury.prizePools(TOURNAMENT_ID_1, address(USDC)), initialBalance + _prizeableAmount(depositAmount));
-        assertEq(treasury.reservePools(TOURNAMENT_ID_1, address(USDC)), _reserveAmount(depositAmount));
+        assertEq(treasury.globalReserve(address(USDC)), _reserveAmount(depositAmount));
         assertEq(USDC.balanceOf(address(treasury)), depositAmount);
     }
 
@@ -922,7 +997,7 @@ contract TreasuryTest is BaseTest {
         uint256 initialBalance = USDC.balanceOf(user1);
 
         vm.expectEmit(true, true, true, true);
-        emit Treasury.ClaimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, user1, address(USDC), 1, expectedPrize);
+        emit Treasury.ClaimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, user1, address(USDC), 0, expectedPrize);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, address(USDC));

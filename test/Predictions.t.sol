@@ -16,11 +16,12 @@ contract PredictionsTest is Test {
     function setUp() public {
         // 1) Deploy Carton and grant all roles to this test contract
         cart = new Carton(address(this), address(this), address(this));
+        cart.setActiveTournament(1);
         // 2) Mint a carton (ERC-1155) to user
         TOKEN_ID = cart.mint(user, 1, "");
 
         // 3) Deploy Predictions pointing to Carton
-        preds = new Predictions(address(cart));
+        preds = new Predictions(address(cart), 1);
 
         // 4) Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
@@ -543,7 +544,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId1);
         _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         assertTrue(preds.positionsUpdateInProgress());
         assertEq(preds.pendingTournamentId(), 1);
@@ -556,10 +557,10 @@ contract PredictionsTest is Test {
         uint256 tokenId = _mintTournamentToken(user, 1);
         _submitValidPrediction(user, tokenId);
 
-        preds.beginPositionsUpdate(1, 1);
+        preds.beginPositionsUpdate(1);
 
         vm.expectRevert(Predictions.PositionsUpdateAlreadyInProgress.selector);
-        preds.beginPositionsUpdate(1, 1);
+        preds.beginPositionsUpdate(1);
     }
 
     function testBeginPositionsUpdateRevertsOnExpectedEntriesMismatch() public {
@@ -567,7 +568,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId);
 
         vm.expectRevert(Predictions.ExpectedEntriesMismatch.selector);
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
     }
 
     function testAppendPositionsBatchAndFinalizeSingleBatch() public {
@@ -576,7 +577,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId1);
         _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         uint256[] memory ids = new uint256[](2);
         uint256[] memory points = new uint256[](2);
@@ -608,7 +609,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId3);
         _submitValidPrediction(user2, tokenId4);
 
-        preds.beginPositionsUpdate(1, 4);
+        preds.beginPositionsUpdate(4);
 
         uint256[] memory idsBatch1 = new uint256[](2);
         uint256[] memory pointsBatch1 = new uint256[](2);
@@ -638,9 +639,8 @@ contract PredictionsTest is Test {
         uint256 tokenId1 = _mintTournamentToken(user, 1);
         uint256 tokenId2 = _mintTournamentToken(user2, 2);
         _submitValidPrediction(user, tokenId1);
-        _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 1);
+        preds.beginPositionsUpdate(1);
 
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
@@ -651,12 +651,20 @@ contract PredictionsTest is Test {
         preds.appendPositionsBatch(ids, points);
     }
 
+    function testSubmitPredictionRevertsForWrongTournamentToken() public {
+        uint256 tokenId = _mintTournamentToken(user, 2);
+
+        vm.prank(user);
+        vm.expectRevert(Predictions.TokenNotEligibleForTournament.selector);
+        preds.submitPrediction(tokenId, _buildValidPredictions());
+    }
+
     function testAppendPositionsBatchRevertsForUnsubmittedToken() public {
         uint256 submittedTokenId = _mintTournamentToken(user2, 1);
         uint256 tokenId = _mintTournamentToken(user, 1);
         _submitValidPrediction(user2, submittedTokenId);
 
-        preds.beginPositionsUpdate(1, 1);
+        preds.beginPositionsUpdate(1);
 
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
@@ -673,7 +681,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId1);
         _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         uint256[] memory ids = new uint256[](2);
         uint256[] memory points = new uint256[](2);
@@ -694,7 +702,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user2, tokenId2);
         _submitValidPrediction(user, tokenId3);
 
-        preds.beginPositionsUpdate(1, 3);
+        preds.beginPositionsUpdate(3);
 
         uint256[] memory idsBatch1 = new uint256[](2);
         uint256[] memory pointsBatch1 = new uint256[](2);
@@ -719,7 +727,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId1);
         _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         uint256[] memory idsBatch1 = new uint256[](1);
         uint256[] memory pointsBatch1 = new uint256[](1);
@@ -742,7 +750,7 @@ contract PredictionsTest is Test {
         _submitValidPrediction(user, tokenId1);
         _submitValidPrediction(user2, tokenId2);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
@@ -768,7 +776,7 @@ contract PredictionsTest is Test {
         points[1] = 90;
         preds.setPositions(ids, points);
 
-        preds.beginPositionsUpdate(1, 2);
+        preds.beginPositionsUpdate(2);
 
         uint256[] memory updatedIds = new uint256[](2);
         uint256[] memory updatedPoints = new uint256[](2);
@@ -789,7 +797,7 @@ contract PredictionsTest is Test {
         uint256 tokenId = _mintTournamentToken(user, 1);
         _submitValidPrediction(user, tokenId);
 
-        preds.beginPositionsUpdate(1, 1);
+        preds.beginPositionsUpdate(1);
 
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
@@ -865,9 +873,9 @@ contract PredictionsTest is Test {
     }
 
     function testUpdateResultsRevertsWhenTournamentClosed() public {
-        Treasury treasury = new Treasury(address(this), address(cart), address(preds), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500);
         cart.setTreasuryAddress(address(treasury));
-        cart.setActiveTournament(1);
+        treasury.registerTournament(1, address(preds));
 
         treasury.depositFromSales{value: 1 ether}(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
@@ -894,6 +902,8 @@ contract PredictionsTest is Test {
         treasury.sealFinalPrizeAmounts(1, address(0));
 
         treasury.finalizeTournament(1);
+
+        cart.setActiveTournament(2);
 
         vm.expectRevert(Predictions.TournamentClosedForCorrections.selector);
         preds.updateResults(1, 3, 2);

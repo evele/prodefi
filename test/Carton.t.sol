@@ -16,6 +16,15 @@ contract CartonTest is BaseTest {
         USDC = new MockERC20("USDC", "USDC", 6);
     }
 
+    function _deployTreasuryAndRegister(uint256 tournamentId, address engine) internal returns (Treasury deployedTreasury) {
+        deployedTreasury = new Treasury(admin, address(carton), 500);
+
+        vm.startPrank(admin);
+        carton.setTreasuryAddress(address(deployedTreasury));
+        deployedTreasury.registerTournament(tournamentId, engine);
+        vm.stopPrank();
+    }
+
     function testMintBatchAndSupply() public {
         uint256[] memory ids = _createUint256Array(1, 2, 0);
         uint256[] memory amounts = _createUint256Array(3, 5, 0);
@@ -220,7 +229,7 @@ contract CartonTest is BaseTest {
         vm.prank(admin);
         uint256 price = 1000000;
         carton.setTokenPrice(address(USDC), price);
-        assertEq(carton.tokenPrices(address(USDC)), price);
+        assertEq(carton.tokenPricesByTournament(1, address(USDC)), price);
     }
 
     function testOnlyAdminCanSetPrice() public {
@@ -290,7 +299,7 @@ contract CartonTest is BaseTest {
     // ========== TREASURY INTEGRATION TESTS ==========
 
     function testSetTreasuryAddress() public {
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = new Treasury(admin, address(carton), 500);
 
         vm.prank(admin);
         carton.setTreasuryAddress(address(treasury));
@@ -299,7 +308,7 @@ contract CartonTest is BaseTest {
     }
 
     function testSetTreasuryAddress_OnlyAdmin() public {
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = new Treasury(admin, address(carton), 500);
 
         vm.prank(user);
         vm.expectRevert();
@@ -343,10 +352,9 @@ contract CartonTest is BaseTest {
 
     function testBuyCartonWithEthRevertsEvenWithTreasuryConfigured() public {
         // Setup Treasury
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
 
         vm.startPrank(admin);
-        carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(1);
 
         // Grant FUND_DEPOSITOR_ROLE to Carton
@@ -365,12 +373,11 @@ contract CartonTest is BaseTest {
 
     function testBuyCartonWithToken_WithTreasuryIntegration() public {
         // Setup Treasury
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
 
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(address(USDC), 1000000);
-        carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(1);
 
         // Grant FUND_DEPOSITOR_ROLE to Carton
@@ -391,18 +398,17 @@ contract CartonTest is BaseTest {
 
         // Verify USDC was split between prize pool and reserve inside Treasury
         assertEq(treasury.prizePools(1, address(USDC)), 950000);
-        assertEq(treasury.reservePools(1, address(USDC)), 50000);
+        assertEq(treasury.globalReserve(address(USDC)), 50000);
         assertEq(USDC.balanceOf(address(carton)), 0); // Carton should have 0 balance
         assertEq(USDC.balanceOf(address(treasury)), 1000000); // Treasury should have the tokens
     }
 
     function testBuyCartonWithToken_RevertsAfterSalesClose() public {
-        treasury = new Treasury(admin, address(carton), address(predictions), 500);
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
 
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(address(USDC), 1000000);
-        carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), admin);
         treasury.closeSales(1);
@@ -440,5 +446,54 @@ contract CartonTest is BaseTest {
 
         assertEq(carton.balanceOf(user, 1), 1);
         assertEq(USDC.balanceOf(address(carton)), 1000000); // Stays in Carton contract
+    }
+
+    function testMintForTournamentStoresExplicitTournamentId() public {
+        vm.prank(minter);
+        uint256 tokenId = carton.mintForTournament(user, 7, 1, "");
+
+        assertEq(carton.tokenTournamentId(tokenId), 7);
+    }
+
+    function testBuyCartonWithToken_ExplicitTournamentUsesTargetTournament() public {
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
+        Predictions predictionsTournament2 = new Predictions(address(carton), 2);
+
+        vm.startPrank(admin);
+        treasury.registerTournament(2, address(predictionsTournament2));
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(2, address(USDC), 2000000);
+        vm.stopPrank();
+
+        USDC.mint(user, 2000000);
+
+        vm.startPrank(user);
+        USDC.approve(address(carton), 2000000);
+        carton.buyCartonWithToken(2, address(USDC));
+        vm.stopPrank();
+
+        assertEq(carton.balanceOf(user, 1), 1);
+        assertEq(carton.tokenTournamentId(1), 2);
+        assertEq(treasury.prizePools(2, address(USDC)), 1900000);
+        assertEq(treasury.globalReserve(address(USDC)), 100000);
+    }
+
+    function testBuyCartonWithToken_RevertsForUnregisteredTournament() public {
+        treasury = new Treasury(admin, address(carton), 500);
+
+        vm.startPrank(admin);
+        carton.setTreasuryAddress(address(treasury));
+        carton.setAcceptedToken(address(USDC), true);
+        carton.setTokenPrice(2, address(USDC), 1000000);
+        vm.stopPrank();
+
+        USDC.mint(user, 1000000);
+
+        vm.startPrank(user);
+        USDC.approve(address(carton), 1000000);
+        vm.expectRevert(Carton.TournamentNotRegistered.selector);
+        carton.buyCartonWithToken(2, address(USDC));
+        vm.stopPrank();
     }
 }

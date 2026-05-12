@@ -13,11 +13,6 @@
         "internalType": "address"
       },
       {
-        "name": "predictionsAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
         "name": "reserveBps_",
         "type": "uint16",
         "internalType": "uint16"
@@ -199,6 +194,25 @@
   },
   {
     "type": "function",
+    "name": "competitionEngineByTournament",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "depositFromSales",
     "inputs": [
       {
@@ -354,6 +368,25 @@
   },
   {
     "type": "function",
+    "name": "getGlobalReserve",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPrizeDistributionTokenCount",
     "inputs": [
       {
@@ -397,24 +430,13 @@
   },
   {
     "type": "function",
-    "name": "getReservePool",
-    "inputs": [
-      {
-        "name": "tournamentId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
+    "name": "getRegisteredTournamentIds",
+    "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       }
     ],
     "stateMutability": "view"
@@ -456,6 +478,25 @@
         "name": "position",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "globalReserve",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -583,13 +624,19 @@
   },
   {
     "type": "function",
-    "name": "predictionsContract",
-    "inputs": [],
+    "name": "isTournamentRegistered",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "contract Predictions"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -697,6 +744,24 @@
   },
   {
     "type": "function",
+    "name": "registerTournament",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "engine",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "renounceRole",
     "inputs": [
       {
@@ -722,30 +787,6 @@
         "name": "",
         "type": "uint16",
         "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "reservePools",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -800,6 +841,29 @@
         "name": "token",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "seedTournamentFromReserve",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -878,6 +942,25 @@
   {
     "type": "function",
     "name": "tournamentFinalized",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tournamentRegistered",
     "inputs": [
       {
         "name": "",
@@ -1020,6 +1103,31 @@
         "type": "uint256[]",
         "indexed": false,
         "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReserveSeeded",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1176,6 +1284,25 @@
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "TournamentRegistered",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "engine",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AccessControlBadConfirmation",
     "inputs": []
@@ -1199,6 +1326,11 @@
   {
     "type": "error",
     "name": "AlreadyClaimed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CompetitionEngineAlreadyFrozen",
     "inputs": []
   },
   {
@@ -1228,6 +1360,16 @@
   },
   {
     "type": "error",
+    "name": "InsufficientGlobalReserve",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidCompetitionEngine",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidPercentage",
     "inputs": []
   },
@@ -1244,6 +1386,11 @@
   {
     "type": "error",
     "name": "InvalidReserveBps",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTournamentId",
     "inputs": []
   },
   {
@@ -1299,6 +1446,11 @@
   },
   {
     "type": "error",
+    "name": "TokenTournamentMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "TournamentAlreadyClosed",
     "inputs": []
   },
@@ -1315,6 +1467,11 @@
   {
     "type": "error",
     "name": "TournamentNotReadyForFinalization",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentNotRegistered",
     "inputs": []
   },
   {

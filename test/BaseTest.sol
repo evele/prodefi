@@ -53,7 +53,11 @@ abstract contract BaseTest is Test {
 
     function _deployContracts() internal {
         carton = new Carton(admin, pauser, minter);
-        predictions = new Predictions(address(carton));
+
+        vm.prank(admin);
+        carton.setActiveTournament(1);
+
+        predictions = new Predictions(address(carton), 1);
     }
 
     function _setupRoles() internal {

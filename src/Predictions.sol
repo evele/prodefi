@@ -5,7 +5,6 @@ import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICartonTournamentContext {
-    function activeTournamentId() external view returns (uint256);
     function treasury() external view returns (address);
 }
 
@@ -55,6 +54,7 @@ contract Predictions is Ownable {
     error PositionsUpdateIncomplete();
 
     IERC1155 public cartones;
+    uint256 public immutable tournamentId;
     /// @notice Anchor for off-chain teams config (id + name + groupId)
     /// @dev Set via setTeamsHash(); frontend verifies local config against this before submitting predictions
     bytes32 public teamsHash;
@@ -156,8 +156,10 @@ contract Predictions is Ownable {
     event PositionsUpdateCancelled(uint256 indexed tournamentId, uint256 indexed version);
 
     // Call Ownable(msg.sender) to assign the owner correctly
-    constructor(address _cartones) Ownable(msg.sender) {
+    constructor(address _cartones, uint256 _tournamentId) Ownable(msg.sender) {
+        if (_tournamentId == 0) revert InvalidTournamentId();
         cartones = IERC1155(_cartones);
+        tournamentId = _tournamentId;
     }
 
     // Allow owner to set teams metadata hash; can be frozen
@@ -229,9 +231,8 @@ contract Predictions is Ownable {
         return true;
     }
 
-    function beginPositionsUpdate(uint256 tournamentId, uint256 expectedEntries) external onlyOwner {
+    function beginPositionsUpdate(uint256 expectedEntries) external onlyOwner {
         if (positionsUpdateInProgress) revert PositionsUpdateAlreadyInProgress();
-        if (tournamentId == 0) revert InvalidTournamentId();
         if (expectedEntries == 0) revert InvalidExpectedEntries();
         if (submittedCountByTournament[tournamentId] != expectedEntries) revert ExpectedEntriesMismatch();
 
@@ -375,11 +376,12 @@ contract Predictions is Ownable {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (used[tokenId]) revert PredictionAlreadySubmitted();
         if (_prediction.length != totalGames) revert WrongPredictionCount();
+        if (_tokenTournamentId(tokenId) != tournamentId) revert TokenNotEligibleForTournament();
 
         bool[] memory usedGameId = new bool[](totalGames + 1);
 
         used[tokenId] = true;
-        submittedCountByTournament[_tokenTournamentId(tokenId)] += 1;
+        submittedCountByTournament[tournamentId] += 1;
         if (!predictionsStarted) predictionsStarted = true;
 
         for (uint256 i = 0; i < _prediction.length; i++) {
@@ -421,9 +423,6 @@ contract Predictions is Ownable {
 
     function _revertIfTournamentClosedForCorrections() internal view {
         ICartonTournamentContext carton = ICartonTournamentContext(address(cartones));
-        uint256 tournamentId = carton.activeTournamentId();
-        if (tournamentId == 0) return;
-
         address treasury = carton.treasury();
         if (treasury == address(0)) return;
 
@@ -497,6 +496,7 @@ contract Predictions is Ownable {
     function _predictWinners(address sender, uint256 tokenId, uint8[4] calldata teams) internal {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (winnersPredictions[tokenId].set) revert WinnersAlreadyPredicted();
+        if (_tokenTournamentId(tokenId) != tournamentId) revert TokenNotEligibleForTournament();
 
         if (!all_different(teams)) revert DuplicateTeamId();
 
