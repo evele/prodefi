@@ -512,6 +512,67 @@ contract TreasuryTest is BaseTest {
         assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN));
     }
 
+    function test_ClaimPrize_SharedFirstPlaceSplitsCombinedPayout() public {
+        _logTestInfo("ClaimPrize Shared First Place Split");
+
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = TOKEN_ID_1;
+        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[2] = TOKEN_ID_3;
+
+        uint256[] memory tiedPoints = new uint256[](3);
+        tiedPoints[0] = 100;
+        tiedPoints[1] = 100;
+        tiedPoints[2] = 80;
+
+        vm.prank(admin);
+        predictions.setPositions(tokenIds, tiedPoints);
+
+        assertEq(predictions.getCartonPosition(TOKEN_ID_1), 1);
+        assertEq(predictions.getCartonPosition(TOKEN_ID_2), 1);
+        assertEq(predictions.getCartonPosition(TOKEN_ID_3), 3);
+
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+
+        uint256 prizePool = treasury.getPrizePool(TOURNAMENT_ID_1, ETH_TOKEN);
+        uint256 sharedFirstPlacePrize = (prizePool * 80) / 100;
+        uint256 sharedFirstPlaceShare = sharedFirstPlacePrize / 2;
+        uint256 thirdPlacePrize = (prizePool * 15) / 100;
+
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = sharedFirstPlaceShare;
+        amounts[1] = sharedFirstPlaceShare;
+        amounts[2] = thirdPlacePrize;
+
+        _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_1, ETH_TOKEN, tokenIds, amounts);
+
+        uint256 expectedReserveAfterSeal =
+            _reserveAmount(INITIAL_DEPOSIT) + (prizePool - (sharedFirstPlaceShare * 2) - thirdPlacePrize);
+        assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN), sharedFirstPlaceShare);
+        assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN), sharedFirstPlaceShare);
+        assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_3, ETH_TOKEN), thirdPlacePrize);
+        assertEq(treasury.getReservePool(TOURNAMENT_ID_1, ETH_TOKEN), expectedReserveAfterSeal);
+
+        vm.prank(tournamentManager);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
+
+        uint256 user1InitialBalance = user1.balance;
+        uint256 user2InitialBalance = user2.balance;
+
+        vm.prank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
+
+        vm.prank(user2);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN);
+
+        assertEq(user1.balance, user1InitialBalance + sharedFirstPlaceShare);
+        assertEq(user2.balance, user2InitialBalance + sharedFirstPlaceShare);
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN));
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN));
+    }
+
     function test_ClaimPrize_TokenNotInLeaderboard() public {
         _logTestInfo("ClaimPrize Token Not In Leaderboard");
 

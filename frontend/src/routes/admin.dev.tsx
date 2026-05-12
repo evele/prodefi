@@ -404,10 +404,22 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
 
 // --- Set Positions Section ---
 
+const POSITION_BATCH_SIZE = 250
+
 function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
+  const [csvInput, setCsvInput] = useState('')
+  const [batchProgress, setBatchProgress] = useState<{ phase: 'idle' | 'begin' | 'append' | 'finalize'; current: number; total: number } | null>(null)
+
+  const { data: activeTournamentId } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'activeTournamentId',
+    query: { refetchInterval: 10_000 },
+  })
+  const tournamentId = activeTournamentId ?? 0n
 
   const { data: nextTokenId } = useReadContract({
     address: carton,
@@ -448,31 +460,249 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const [csvInput, setCsvInput] = useState('')
+  const { data: usedData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'used' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: tokenTournamentData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: carton,
+      abi: CARTON_ABI,
+      functionName: 'tokenTournamentId' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const tournamentScopedTokenIds = useMemo(
+    () => candidateTokenIds.filter((_, index) => (tokenTournamentData?.[index]?.result as bigint | undefined) === tournamentId),
+    [candidateTokenIds, tokenTournamentData, tournamentId],
+  )
+
+  const usedTokenIds = useMemo(
+    () =>
+      tournamentScopedTokenIds.filter((tokenId) => {
+        const candidateIndex = candidateTokenIds.findIndex((candidateTokenId) => candidateTokenId === tokenId)
+        return candidateIndex >= 0 && Boolean(usedData?.[candidateIndex]?.result)
+      }),
+    [candidateTokenIds, tournamentScopedTokenIds, usedData],
+  )
+
+  const onchainPointsContracts = useMemo(
+    () =>
+      usedTokenIds.map((tokenId) => ({
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'calculateTotalPoints' as const,
+        args: [tokenId] as const,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [usedTokenIds.map((tokenId) => tokenId.toString()).join(',')],
+  )
+
+  const { data: onchainPointsData } = useReadContracts({
+    contracts: onchainPointsContracts,
+    query: { enabled: onchainPointsContracts.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: submittedCount } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'submittedCountByTournament',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
+  })
+
+  const { data: positionsUpdateInProgress } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsUpdateInProgress',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingTournamentId } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingTournamentId',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingExpectedEntries } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingExpectedEntries',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingProcessedEntries } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingProcessedEntries',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const onchainPointEntries = useMemo(
+    () =>
+      usedTokenIds
+        .map((tokenId, index) => ({
+          tokenId,
+          points: (onchainPointsData?.[index]?.result as bigint | undefined) ?? 0n,
+        }))
+        .sort((a, b) => {
+          if (a.points !== b.points) return a.points > b.points ? -1 : 1
+          if (a.tokenId === b.tokenId) return 0
+          return a.tokenId < b.tokenId ? -1 : 1
+        }),
+    [onchainPointsData, usedTokenIds],
+  )
+
+  const canFillFromOnchain = tournamentId > 0n && usedTokenIds.length > 0 && onchainPointsData?.length === usedTokenIds.length
+  const activePendingUpdateMatchesTournament = Boolean(positionsUpdateInProgress && pendingTournamentId === tournamentId)
+
+  const fillFromOnchain = () => {
+    if (tournamentId === 0n) {
+      toast.error('Set an active tournament first.')
+      return
+    }
+
+    if (usedTokenIds.length === 0) {
+      toast.error('There are no submitted cartones for the active tournament yet.')
+      return
+    }
+
+    if (!canFillFromOnchain) {
+      toast.error('Still loading on-chain points. Try again in a moment.')
+      return
+    }
+
+    setCsvInput(onchainPointEntries.map((entry) => `${entry.tokenId.toString()},${entry.points.toString()}`).join('\n'))
+    toast.success(`Loaded ${onchainPointEntries.length} cartone${onchainPointEntries.length === 1 ? '' : 's'} from on-chain points.`)
+  }
 
   const submit = () => {
+    if (tournamentId === 0n) {
+      toast.error('Set an active tournament first.')
+      return
+    }
+
     const { entries, error } = parseLeaderboardCsv(csvInput)
     if (error) {
       toast.error(error)
       return
     }
 
-    const ids = entries.map((entry) => entry.tokenId)
-    const points = entries.map((entry) => entry.points)
+    if (entries.length === 0) {
+      toast.error('There are no leaderboard entries to upload.')
+      return
+    }
+
+    const expectedEntries = Number(submittedCount ?? 0n)
+    if (entries.length !== expectedEntries) {
+      toast.error(`The CSV contains ${entries.length} entries, but tournament ${tournamentId.toString()} has ${expectedEntries} submitted cartones.`)
+      return
+    }
+
+    const entryTokenIdSet = new Set(entries.map((entry) => entry.tokenId.toString()))
+    const missingTournamentToken = usedTokenIds.find((tokenId) => !entryTokenIdSet.has(tokenId.toString()))
+    if (missingTournamentToken) {
+      toast.error(`Carton #${missingTournamentToken.toString()} from the active tournament is missing from the CSV.`)
+      return
+    }
+
+    const chunks = Array.from({ length: Math.ceil(entries.length / POSITION_BATCH_SIZE) }, (_, index) =>
+      entries.slice(index * POSITION_BATCH_SIZE, (index + 1) * POSITION_BATCH_SIZE),
+    )
+
+    const uploadNextChunk = (chunkIndex: number) => {
+      if (chunkIndex >= chunks.length) {
+        setBatchProgress({ phase: 'finalize', current: chunks.length, total: chunks.length })
+        void execute(
+          {
+            address: predictions,
+            abi: PREDICTIONS_ABI,
+            functionName: 'finalizePositionsUpdate',
+          },
+          {
+            toastId: 'admin-finalize-positions-batch',
+            pendingMessage: 'Finalizing leaderboard version...',
+            successMessage: 'Leaderboard positions saved.',
+            revertedMessage: 'Leaderboard finalization was rejected on-chain.',
+            logLabel: 'Admin finalize positions update',
+            onSuccess: async () => {
+              setBatchProgress({ phase: 'idle', current: chunks.length, total: chunks.length })
+            },
+          },
+        )
+        return
+      }
+
+      const chunk = chunks[chunkIndex]
+      setBatchProgress({ phase: 'append', current: chunkIndex + 1, total: chunks.length })
+
+      void execute(
+        {
+          address: predictions,
+          abi: PREDICTIONS_ABI,
+          functionName: 'appendPositionsBatch',
+          args: [chunk.map((entry) => entry.tokenId), chunk.map((entry) => entry.points)],
+        },
+        {
+          toastId: `admin-set-positions-batch-${chunkIndex}`,
+          pendingMessage: `Uploading leaderboard batch ${chunkIndex + 1}/${chunks.length}...`,
+          successMessage: `Batch ${chunkIndex + 1}/${chunks.length} saved.`,
+          revertedMessage: 'Leaderboard batch was rejected on-chain.',
+          logLabel: 'Admin append positions batch',
+          onSuccess: async () => {
+            uploadNextChunk(chunkIndex + 1)
+          },
+        },
+      )
+    }
+
+    setBatchProgress({ phase: 'begin', current: 0, total: chunks.length })
 
     void execute(
       {
         address: predictions,
         abi: PREDICTIONS_ABI,
-        functionName: 'setPositions',
-        args: [ids, points],
+        functionName: 'beginPositionsUpdate',
+        args: [tournamentId, BigInt(entries.length)],
       },
       {
-        toastId: 'admin-set-positions',
-        pendingMessage: 'Waiting for leaderboard confirmation...',
-        successMessage: 'Leaderboard positions saved.',
-        revertedMessage: 'Leaderboard positions were rejected on-chain.',
-        logLabel: 'Admin set positions',
+        toastId: 'admin-begin-positions-update',
+        pendingMessage: 'Opening leaderboard draft...',
+        successMessage: 'Leaderboard draft opened.',
+        revertedMessage: 'Could not open leaderboard draft on-chain.',
+        logLabel: 'Admin begin positions update',
+        onSuccess: async () => {
+          uploadNextChunk(0)
+        },
+      },
+    )
+  }
+
+  const cancelPendingUpdate = () => {
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'cancelPositionsUpdate',
+      },
+      {
+        toastId: 'admin-cancel-positions-update',
+        pendingMessage: 'Cancelling leaderboard draft...',
+        successMessage: 'Leaderboard draft cancelled.',
+        revertedMessage: 'Could not cancel the leaderboard draft.',
+        logLabel: 'Admin cancel positions update',
+        onSuccess: async () => {
+          setBatchProgress({ phase: 'idle', current: 0, total: 0 })
+        },
       },
     )
   }
@@ -504,18 +734,56 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
     <Card>
       <CardHeader>
         <CardTitle>Set Positions</CardTitle>
-        <CardDescription>Set leaderboard: tokenId,points per line (descending by points)</CardDescription>
+        <CardDescription>Set the active tournament leaderboard in batches, or fill it automatically from on-chain totals.</CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-3 text-sm space-y-1">
+          <div><span className="font-medium">Active tournament:</span> {tournamentId > 0n ? tournamentId.toString() : '—'}</div>
+          <div><span className="font-medium">Tournament cartones:</span> {tournamentScopedTokenIds.length}</div>
+          <div><span className="font-medium">Submitted cartones:</span> {submittedCount?.toString() ?? '—'}</div>
+          <div><span className="font-medium">Draft in progress:</span> {String(Boolean(positionsUpdateInProgress))}</div>
+          {activePendingUpdateMatchesTournament && (
+            <div><span className="font-medium">Draft progress:</span> {(pendingProcessedEntries ?? 0n).toString()} / {(pendingExpectedEntries ?? 0n).toString()}</div>
+          )}
+        </div>
+
         <textarea
           className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
           placeholder={"1,150\n3,120\n2,120\n4,95"}
           value={csvInput}
           onChange={(e) => setCsvInput(e.target.value)}
         />
-        <Button className="mt-2" onClick={submit} disabled={!isOwner || isBusy}>
-          {isBusy ? 'Submitting...' : 'Set Positions'}
-        </Button>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!isOwner || isBusy || usedTokenIds.length === 0 || Boolean(positionsUpdateInProgress)}>
+            Fill Positions
+          </Button>
+          <Button onClick={submit} disabled={!isOwner || isBusy || Boolean(positionsUpdateInProgress)}>
+            {isBusy ? 'Submitting...' : 'Set Positions In Batches'}
+          </Button>
+          {activePendingUpdateMatchesTournament && (
+            <Button type="button" variant="outline" onClick={cancelPendingUpdate} disabled={!isOwner || isBusy}>
+              Cancel Pending Update
+            </Button>
+          )}
+        </div>
+
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          {usedTokenIds.length === 0
+            ? 'No hay cartones enviados todavía para el torneo activo.'
+            : canFillFromOnchain
+              ? `Fill Positions arma el CSV con ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
+              : 'Cargando puntos onchain para autocompletar el ranking...'}
+        </p>
+
+        {batchProgress && batchProgress.phase !== 'idle' && (
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {batchProgress.phase === 'begin'
+              ? `Abriendo draft del leaderboard (${batchProgress.total} batch${batchProgress.total === 1 ? '' : 'es'}).`
+              : batchProgress.phase === 'append'
+                ? `Subiendo batch ${batchProgress.current}/${batchProgress.total}.`
+                : 'Finalizando versión del leaderboard...'}
+          </p>
+        )}
 
         {parsedPreview.length > 0 && (
           <div className="mt-4">
@@ -530,7 +798,7 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
           </div>
         )}
 
-        {positionsArray && positionsArray.length > 0 && (
+        {positionsArray.length > 0 && (
           <div className="mt-4">
             <div className="text-sm font-medium mb-1">Current leaderboard:</div>
             <div className="text-xs text-gray-600 space-y-0.5">
@@ -698,10 +966,16 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     return computeFinalPrizeAmounts(leaderboardEntries, prizePool, parsedDistribution)
   }, [distributionIsValid, leaderboardEntries, parsedDistribution, prizePool])
 
-  const nonZeroPayouts = useMemo(
-    () => payoutPreview?.payouts.filter((entry) => entry.amount > 0n) ?? [],
-    [payoutPreview],
-  )
+  const finalPrizePayload = useMemo(() => {
+    if (!payoutPreview || candidateTokenIds.length === 0) return null
+
+    const amountByTokenId = new Map(payoutPreview.payouts.map((entry) => [entry.tokenId.toString(), entry.amount]))
+
+    return {
+      tokenIds: candidateTokenIds,
+      amounts: candidateTokenIds.map((tokenId) => amountByTokenId.get(tokenId.toString()) ?? 0n),
+    }
+  }, [candidateTokenIds, payoutPreview])
 
   const closeSales = () => {
     const tid = Number(tournamentId)
@@ -761,44 +1035,48 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       toast.error('Enter a valid tournament ID')
       return
     }
-    if (!payoutPreview || nonZeroPayouts.length === 0) {
+    if (!payoutPreview || !finalPrizePayload) {
       toast.error('Set final leaderboard positions first so the final prize amounts can be computed.')
       return
     }
-
-    const tokenIds = nonZeroPayouts.map((entry) => entry.tokenId)
-    const amounts = nonZeroPayouts.map((entry) => entry.amount)
 
     void execute(
       {
         address: treasury,
         abi: TREASURY_ABI,
         functionName: 'setFinalPrizeAmounts',
-        args: [BigInt(tid), tokenAddress, tokenIds, amounts],
+        args: [BigInt(tid), tokenAddress, finalPrizePayload.tokenIds, finalPrizePayload.amounts],
       },
       {
         toastId: `admin-final-prizes-${tid}-usdc`,
         pendingMessage: 'Saving final USDC prize amounts...',
-        successMessage: 'Final USDC prize amounts saved. Sealing now...',
+        successMessage: 'Final USDC prize amounts saved. Review them and seal when ready.',
         revertedMessage: 'Final USDC prize amounts were rejected on-chain.',
         logLabel: 'Admin set final prize amounts',
-        onSuccess: async () => {
-          await execute(
-            {
-              address: treasury,
-              abi: TREASURY_ABI,
-              functionName: 'sealFinalPrizeAmounts',
-              args: [BigInt(tid), tokenAddress],
-            },
-            {
-              toastId: `admin-seal-final-prizes-${tid}-usdc`,
-              pendingMessage: 'Sealing final USDC prize amounts...',
-              successMessage: 'Final USDC prize amounts sealed.',
-              revertedMessage: 'Sealing final USDC prize amounts was rejected on-chain.',
-              logLabel: 'Admin seal final prize amounts',
-            },
-          )
-        },
+      },
+    )
+  }
+
+  const sealFinalPrizes = () => {
+    const tid = Number(tournamentId)
+    if (isNaN(tid) || tid <= 0) {
+      toast.error('Enter a valid tournament ID')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'sealFinalPrizeAmounts',
+        args: [BigInt(tid), tokenAddress],
+      },
+      {
+        toastId: `admin-seal-final-prizes-${tid}-usdc`,
+        pendingMessage: 'Sealing final USDC prize amounts...',
+        successMessage: 'Final USDC prize amounts sealed.',
+        revertedMessage: 'Sealing final USDC prize amounts was rejected on-chain.',
+        logLabel: 'Admin seal final prize amounts',
       },
     )
   }
@@ -846,7 +1124,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     <Card>
       <CardHeader>
         <CardTitle>Tournament Lifecycle</CardTitle>
-        <CardDescription>Close sales, set the fixed 32-place pyramid, compute final split amounts, then finalize claims.</CardDescription>
+        <CardDescription>Close sales, set the fixed 32-place pyramid, load exact per-carton prizes, review/correct if needed, then seal and finalize claims.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -926,10 +1204,15 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             Default fixed pyramid: {FIXED_PRIZE_DISTRIBUTION_INPUT}
           </div>
 
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            `Load Final Prizes` can be rerun before sealing. It overwrites every minted token for this tournament context, including prizes that now become `0`.
+          </div>
+
           {payoutPreview && (
             <div className="rounded-lg border border-border p-3 space-y-3">
               <div className="space-y-1 text-sm">
                 <div><span className="font-medium">Shared-rank preview:</span> {leaderboardEntries.length} ranked cartones</div>
+                <div><span className="font-medium">Tokens overwritten on load:</span> {candidateTokenIds.length}</div>
                 <div><span className="font-medium">Current reserve + dust after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
                 <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(payoutPreview.totalAssigned, 6)).toFixed(2)} USDC</div>
                 <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
@@ -971,11 +1254,27 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
               || !usdcDistributionSet
               || Boolean(finalAmountsReady)
               || Boolean(tournamentFinalized)
-              || !payoutPreview
+              || !finalPrizePayload
               || isBusy
             }
           >
-            {isBusy ? 'Saving...' : 'Set Final Prizes'}
+            {isBusy ? 'Saving...' : 'Load Final Prizes'}
+          </Button>
+
+          <Button
+            onClick={sealFinalPrizes}
+            disabled={
+              !isOwner
+              || !hasManagerRole
+              || !salesClosed
+              || !usdcDistributionSet
+              || Boolean(finalAmountsReady)
+              || Boolean(tournamentFinalized)
+              || (finalAmountTotal ?? 0n) === 0n
+              || isBusy
+            }
+          >
+            {isBusy ? 'Sealing...' : 'Seal Final Prizes'}
           </Button>
 
           <Button

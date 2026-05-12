@@ -40,6 +40,13 @@ function LeaderboardPage() {
     query: { refetchInterval: 10_000 },
   })
 
+  const { data: positionsUpdateInProgress } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsUpdateInProgress',
+    query: { refetchInterval: 10_000 },
+  })
+
   const { data: positionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -196,7 +203,7 @@ function LeaderboardPage() {
     }))
   }, [pointsByTokenId, usedTokenIds, userTokenSet])
 
-  const isFinalLeaderboard = positionsArray.length > 0
+  const isFinalLeaderboard = positionsArray.length > 0 && !positionsUpdateInProgress
 
   const leaderboardRows = useMemo(
     () => (isFinalLeaderboard ? finalLeaderboardRows : provisionalLeaderboardRows),

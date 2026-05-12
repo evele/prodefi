@@ -285,6 +285,36 @@ export function mapAdminError(error: unknown): string {
   if (message.includes('points must be ordered')) {
     return 'Leaderboard points must be sorted from highest to lowest.'
   }
+  if (includesAny(message, ['invalidtournamentid', 'invalid tournament id'])) {
+    return 'Select a valid tournament before uploading positions.'
+  }
+  if (includesAny(message, ['invalidexpectedentries', 'invalid expected entries'])) {
+    return 'The leaderboard draft needs at least one submitted carton.'
+  }
+  if (includesAny(message, ['expectedentriesmismatch', 'expected entries mismatch'])) {
+    return 'The submitted count for this tournament no longer matches the leaderboard draft size.'
+  }
+  if (includesAny(message, ['positionsupdatealreadyinprogress', 'positions update already in progress'])) {
+    return 'There is already a leaderboard draft in progress.'
+  }
+  if (includesAny(message, ['positionsupdatenotinprogress', 'positions update not in progress'])) {
+    return 'There is no pending leaderboard draft to continue.'
+  }
+  if (includesAny(message, ['emptypositionsbatch', 'empty positions batch'])) {
+    return 'Each leaderboard batch must include at least one entry.'
+  }
+  if (includesAny(message, ['batchexceedsexpectedentries', 'batch exceeds expected entries'])) {
+    return 'This batch would exceed the expected number of leaderboard entries.'
+  }
+  if (includesAny(message, ['tokennoteligiblefortournament', 'token not eligible for tournament'])) {
+    return 'One or more cartones do not belong to this tournament or were never submitted.'
+  }
+  if (includesAny(message, ['duplicatepositiontoken', 'duplicate position token'])) {
+    return 'The same carton cannot appear twice in the leaderboard draft.'
+  }
+  if (includesAny(message, ['positionsupdateincomplete', 'positions update incomplete'])) {
+    return 'Upload every leaderboard batch before finalizing the positions.'
+  }
   if (message.includes('results already set for this game')) {
     return 'This game already has an official result.'
   }

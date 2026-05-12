@@ -85,8 +85,12 @@ contract Treasury is AccessControl {
         uint256 amount
     );
     event SetPrizeDistribution(uint256 indexed tournamentId, address indexed token, uint8[] percentages);
-    event FinalPrizeAmountsUpdated(uint256 indexed tournamentId, address indexed token, uint256[] tokenIds, uint256[] amounts);
-    event FinalPrizeAmountsSealed(uint256 indexed tournamentId, address indexed token, uint256 totalAssigned, uint256 reserveAdded);
+    event FinalPrizeAmountsUpdated(
+        uint256 indexed tournamentId, address indexed token, uint256[] tokenIds, uint256[] amounts
+    );
+    event FinalPrizeAmountsSealed(
+        uint256 indexed tournamentId, address indexed token, uint256 totalAssigned, uint256 reserveAdded
+    );
     event TournamentFinalized(uint256 indexed tournamentId);
     event TournamentClosed(uint256 indexed tournamentId, address indexed token, uint256 closedPrizePool);
 
@@ -273,7 +277,11 @@ contract Treasury is AccessControl {
         return (poolToUse * percentage_position) / 100;
     }
 
-    function getClaimablePrizeAmount(uint256 tournamentId, uint256 tokenId, address token) external view returns (uint256) {
+    function getClaimablePrizeAmount(uint256 tournamentId, uint256 tokenId, address token)
+        external
+        view
+        returns (uint256)
+    {
         return finalPrizeAmounts[tournamentId][tokenId][token];
     }
 

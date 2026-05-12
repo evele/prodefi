@@ -10,6 +10,7 @@ contract PredictionsTest is Test {
     Carton cart;
     Predictions preds;
     address user = address(0xABCD);
+    address user2 = address(0xBEEF);
     uint256 TOKEN_ID;
 
     function setUp() public {
@@ -33,6 +34,17 @@ contract PredictionsTest is Test {
         arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
         arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
         arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+    }
+
+    function _mintTournamentToken(address owner, uint256 tournamentId) internal returns (uint256) {
+        cart.setActiveTournament(tournamentId);
+        return cart.mint(owner, 1, "");
+    }
+
+    function _submitValidPrediction(address owner, uint256 tokenId) internal {
+        Predictions.Prediction[] memory arr = _buildValidPredictions();
+        vm.prank(owner);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testSubmitAndReadPicks() public {
@@ -510,6 +522,282 @@ contract PredictionsTest is Test {
         assertEq(preds.getCartonPosition(tokenId2), 2);
         assertEq(preds.getCartonPosition(tokenId3), 2);
         assertEq(preds.getCartonPosition(tokenId4), 4);
+    }
+
+    function testSubmittedCountByTournamentIncrementsOncePerToken() public {
+        uint256 tokenId = _mintTournamentToken(user, 1);
+
+        _submitValidPrediction(user, tokenId);
+        assertEq(preds.submittedCountByTournament(1), 1);
+
+        vm.prank(user);
+        vm.expectRevert(Predictions.PredictionAlreadySubmitted.selector);
+        preds.submitPrediction(tokenId, _buildValidPredictions());
+
+        assertEq(preds.submittedCountByTournament(1), 1);
+    }
+
+    function testBeginPositionsUpdate() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        assertTrue(preds.positionsUpdateInProgress());
+        assertEq(preds.pendingTournamentId(), 1);
+        assertEq(preds.pendingExpectedEntries(), 2);
+        assertEq(preds.pendingProcessedEntries(), 0);
+        assertEq(preds.positionsVersion(), 0);
+    }
+
+    function testBeginPositionsUpdateRevertsWhenAlreadyInProgress() public {
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user, tokenId);
+
+        preds.beginPositionsUpdate(1, 1);
+
+        vm.expectRevert(Predictions.PositionsUpdateAlreadyInProgress.selector);
+        preds.beginPositionsUpdate(1, 1);
+    }
+
+    function testBeginPositionsUpdateRevertsOnExpectedEntriesMismatch() public {
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user, tokenId);
+
+        vm.expectRevert(Predictions.ExpectedEntriesMismatch.selector);
+        preds.beginPositionsUpdate(1, 2);
+    }
+
+    function testAppendPositionsBatchAndFinalizeSingleBatch() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        uint256[] memory ids = new uint256[](2);
+        uint256[] memory points = new uint256[](2);
+        ids[0] = tokenId1;
+        ids[1] = tokenId2;
+        points[0] = 100;
+        points[1] = 90;
+
+        preds.appendPositionsBatch(ids, points);
+
+        vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
+        preds.getCartonPosition(tokenId1);
+
+        preds.finalizePositionsUpdate();
+
+        assertEq(preds.getCartonPosition(tokenId1), 1);
+        assertEq(preds.getCartonPosition(tokenId2), 2);
+        assertEq(preds.positionsVersion(), 1);
+        assertFalse(preds.positionsUpdateInProgress());
+    }
+
+    function testAppendPositionsBatchSharedRankAcrossBatches() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        uint256 tokenId3 = _mintTournamentToken(user, 1);
+        uint256 tokenId4 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+        _submitValidPrediction(user, tokenId3);
+        _submitValidPrediction(user2, tokenId4);
+
+        preds.beginPositionsUpdate(1, 4);
+
+        uint256[] memory idsBatch1 = new uint256[](2);
+        uint256[] memory pointsBatch1 = new uint256[](2);
+        idsBatch1[0] = tokenId1;
+        idsBatch1[1] = tokenId2;
+        pointsBatch1[0] = 100;
+        pointsBatch1[1] = 90;
+        preds.appendPositionsBatch(idsBatch1, pointsBatch1);
+
+        uint256[] memory idsBatch2 = new uint256[](2);
+        uint256[] memory pointsBatch2 = new uint256[](2);
+        idsBatch2[0] = tokenId3;
+        idsBatch2[1] = tokenId4;
+        pointsBatch2[0] = 90;
+        pointsBatch2[1] = 80;
+        preds.appendPositionsBatch(idsBatch2, pointsBatch2);
+
+        preds.finalizePositionsUpdate();
+
+        assertEq(preds.getCartonPosition(tokenId1), 1);
+        assertEq(preds.getCartonPosition(tokenId2), 2);
+        assertEq(preds.getCartonPosition(tokenId3), 2);
+        assertEq(preds.getCartonPosition(tokenId4), 4);
+    }
+
+    function testAppendPositionsBatchRevertsForWrongTournamentToken() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 2);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 1);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId2;
+        points[0] = 100;
+
+        vm.expectRevert(Predictions.TokenNotEligibleForTournament.selector);
+        preds.appendPositionsBatch(ids, points);
+    }
+
+    function testAppendPositionsBatchRevertsForUnsubmittedToken() public {
+        uint256 submittedTokenId = _mintTournamentToken(user2, 1);
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user2, submittedTokenId);
+
+        preds.beginPositionsUpdate(1, 1);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId;
+        points[0] = 100;
+
+        vm.expectRevert(Predictions.TokenNotEligibleForTournament.selector);
+        preds.appendPositionsBatch(ids, points);
+    }
+
+    function testAppendPositionsBatchRevertsForInvalidOrderingWithinBatch() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        uint256[] memory ids = new uint256[](2);
+        uint256[] memory points = new uint256[](2);
+        ids[0] = tokenId1;
+        ids[1] = tokenId2;
+        points[0] = 90;
+        points[1] = 100;
+
+        vm.expectRevert(Predictions.PointsNotOrdered.selector);
+        preds.appendPositionsBatch(ids, points);
+    }
+
+    function testAppendPositionsBatchRevertsForInvalidOrderingAcrossBatches() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        uint256 tokenId3 = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+        _submitValidPrediction(user, tokenId3);
+
+        preds.beginPositionsUpdate(1, 3);
+
+        uint256[] memory idsBatch1 = new uint256[](2);
+        uint256[] memory pointsBatch1 = new uint256[](2);
+        idsBatch1[0] = tokenId1;
+        idsBatch1[1] = tokenId2;
+        pointsBatch1[0] = 100;
+        pointsBatch1[1] = 90;
+        preds.appendPositionsBatch(idsBatch1, pointsBatch1);
+
+        uint256[] memory idsBatch2 = new uint256[](1);
+        uint256[] memory pointsBatch2 = new uint256[](1);
+        idsBatch2[0] = tokenId3;
+        pointsBatch2[0] = 95;
+
+        vm.expectRevert(Predictions.PointsNotOrdered.selector);
+        preds.appendPositionsBatch(idsBatch2, pointsBatch2);
+    }
+
+    function testAppendPositionsBatchRevertsForDuplicateAcrossBatches() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        uint256[] memory idsBatch1 = new uint256[](1);
+        uint256[] memory pointsBatch1 = new uint256[](1);
+        idsBatch1[0] = tokenId1;
+        pointsBatch1[0] = 100;
+        preds.appendPositionsBatch(idsBatch1, pointsBatch1);
+
+        uint256[] memory idsBatch2 = new uint256[](1);
+        uint256[] memory pointsBatch2 = new uint256[](1);
+        idsBatch2[0] = tokenId1;
+        pointsBatch2[0] = 90;
+
+        vm.expectRevert(Predictions.DuplicatePositionToken.selector);
+        preds.appendPositionsBatch(idsBatch2, pointsBatch2);
+    }
+
+    function testFinalizePositionsUpdateRevertsWhenIncomplete() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId1;
+        points[0] = 100;
+        preds.appendPositionsBatch(ids, points);
+
+        vm.expectRevert(Predictions.PositionsUpdateIncomplete.selector);
+        preds.finalizePositionsUpdate();
+    }
+
+    function testCancelPositionsUpdateKeepsPreviousLeaderboard() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        uint256[] memory ids = new uint256[](2);
+        uint256[] memory points = new uint256[](2);
+        ids[0] = tokenId1;
+        ids[1] = tokenId2;
+        points[0] = 100;
+        points[1] = 90;
+        preds.setPositions(ids, points);
+
+        preds.beginPositionsUpdate(1, 2);
+
+        uint256[] memory updatedIds = new uint256[](2);
+        uint256[] memory updatedPoints = new uint256[](2);
+        updatedIds[0] = tokenId2;
+        updatedIds[1] = tokenId1;
+        updatedPoints[0] = 110;
+        updatedPoints[1] = 100;
+        preds.appendPositionsBatch(updatedIds, updatedPoints);
+
+        preds.cancelPositionsUpdate();
+
+        assertEq(preds.getCartonPosition(tokenId1), 1);
+        assertEq(preds.getCartonPosition(tokenId2), 2);
+        assertFalse(preds.positionsUpdateInProgress());
+    }
+
+    function testLegacySetPositionsRevertsDuringPendingUpdate() public {
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user, tokenId);
+
+        preds.beginPositionsUpdate(1, 1);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId;
+        points[0] = 100;
+
+        vm.expectRevert(Predictions.PositionsUpdateAlreadyInProgress.selector);
+        preds.setPositions(ids, points);
     }
 
     function testSetResults() public {

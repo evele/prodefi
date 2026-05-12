@@ -9,6 +9,10 @@ interface ICartonTournamentContext {
     function treasury() external view returns (address);
 }
 
+interface ICartonTournamentTokenLookup {
+    function tokenTournamentId(uint256 tokenId) external view returns (uint256);
+}
+
 interface ITreasuryTournamentStatus {
     function isTournamentClosedAnyAsset(uint256 tournamentId) external view returns (bool);
 }
@@ -39,6 +43,16 @@ contract Predictions is Ownable {
     error NoPredictionForToken();
     error NoPredictionsSubmitted();
     error TournamentClosedForCorrections();
+    error InvalidTournamentId();
+    error InvalidExpectedEntries();
+    error ExpectedEntriesMismatch();
+    error PositionsUpdateAlreadyInProgress();
+    error PositionsUpdateNotInProgress();
+    error EmptyPositionsBatch();
+    error BatchExceedsExpectedEntries();
+    error TokenNotEligibleForTournament();
+    error DuplicatePositionToken();
+    error PositionsUpdateIncomplete();
 
     IERC1155 public cartones;
     /// @notice Anchor for off-chain teams config (id + name + groupId)
@@ -115,12 +129,31 @@ contract Predictions is Ownable {
     mapping(uint256 => Prediction[]) predictions; // token ID -> prediction (Prediction[])
 
     mapping(uint256 => bool) public used;
+    mapping(uint256 => uint256) public submittedCountByTournament;
     uint256 public positionsVersion;
+    uint256 public positionsUpdateNonce;
     mapping(uint256 => uint256) public tokenPositions; // tokenId => position (1-indexed)
     mapping(uint256 => uint256) public tokenPositionsVersion; // tokenId => leaderboard version
+    bool public positionsUpdateInProgress;
+    uint256 public pendingTournamentId;
+    uint256 public pendingPositionsVersion;
+    uint256 public pendingExpectedEntries;
+    uint256 public pendingProcessedEntries;
+    uint256 public pendingLastPoints;
+    bool public pendingHasLastPoints;
+    uint256 public pendingCurrentRank;
+    mapping(uint256 => uint256) public tokenPendingVersion;
+    mapping(uint256 => uint256) private tokenPositionBackup;
+    mapping(uint256 => uint256) private tokenPositionVersionBackup;
+    mapping(uint256 => uint256) private tokenPositionBackupVersion;
+    uint256[] private pendingPositionTokenIds;
 
     // Event for when positions are updated (emits the ordered list from calldata for off-chain consumers)
     event PositionsUpdated(uint256[] positions);
+    event PositionsUpdateBegan(uint256 indexed tournamentId, uint256 indexed version, uint256 expectedEntries);
+    event PositionsBatchAppended(uint256 indexed tournamentId, uint256 indexed version, uint256 processedEntries);
+    event PositionsUpdateFinalized(uint256 indexed tournamentId, uint256 indexed version, uint256 processedEntries);
+    event PositionsUpdateCancelled(uint256 indexed tournamentId, uint256 indexed version);
 
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones) Ownable(msg.sender) {
@@ -168,10 +201,12 @@ contract Predictions is Ownable {
         onlyOwner
         returns (bool success)
     {
+        if (positionsUpdateInProgress) revert PositionsUpdateAlreadyInProgress();
         if (_predictionIds.length == 0) revert NoPredictionsProvided();
         if (_predictionIds.length != _predictionPoints.length) revert ArrayLengthMismatch();
 
-        uint256 newVersion = positionsVersion + 1;
+        uint256 newVersion = positionsUpdateNonce + 1;
+        positionsUpdateNonce = newVersion;
         positionsVersion = newVersion;
         uint256 maxPoints = type(uint256).max;
         uint256 currentRank = 0;
@@ -192,6 +227,105 @@ contract Predictions is Ownable {
 
         emit PositionsUpdated(_predictionIds);
         return true;
+    }
+
+    function beginPositionsUpdate(uint256 tournamentId, uint256 expectedEntries) external onlyOwner {
+        if (positionsUpdateInProgress) revert PositionsUpdateAlreadyInProgress();
+        if (tournamentId == 0) revert InvalidTournamentId();
+        if (expectedEntries == 0) revert InvalidExpectedEntries();
+        if (submittedCountByTournament[tournamentId] != expectedEntries) revert ExpectedEntriesMismatch();
+
+        positionsUpdateInProgress = true;
+        pendingTournamentId = tournamentId;
+        pendingExpectedEntries = expectedEntries;
+        pendingProcessedEntries = 0;
+        pendingLastPoints = 0;
+        pendingHasLastPoints = false;
+        pendingCurrentRank = 0;
+        pendingPositionsVersion = positionsUpdateNonce + 1;
+        positionsUpdateNonce = pendingPositionsVersion;
+        delete pendingPositionTokenIds;
+
+        emit PositionsUpdateBegan(tournamentId, pendingPositionsVersion, expectedEntries);
+    }
+
+    function appendPositionsBatch(uint256[] calldata tokenIds, uint256[] calldata points) external onlyOwner {
+        if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
+        if (tokenIds.length == 0) revert EmptyPositionsBatch();
+        if (tokenIds.length != points.length) revert ArrayLengthMismatch();
+
+        uint256 processedEntries = pendingProcessedEntries;
+        if (processedEntries + tokenIds.length > pendingExpectedEntries) revert BatchExceedsExpectedEntries();
+
+        uint256 lastPoints = pendingLastPoints;
+        bool hasLastPoints = pendingHasLastPoints;
+        uint256 currentRank = pendingCurrentRank;
+
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            uint256 tokenId = tokenIds[i];
+            uint256 pointValue = points[i];
+
+            if ((i > 0 && pointValue > points[i - 1]) || (i == 0 && hasLastPoints && pointValue > lastPoints)) {
+                revert PointsNotOrdered();
+            }
+
+            if (tokenPendingVersion[tokenId] == pendingPositionsVersion) revert DuplicatePositionToken();
+            if (!used[tokenId] || _tokenTournamentId(tokenId) != pendingTournamentId) {
+                revert TokenNotEligibleForTournament();
+            }
+
+            tokenPositionBackup[tokenId] = tokenPositions[tokenId];
+            tokenPositionVersionBackup[tokenId] = tokenPositionsVersion[tokenId];
+            tokenPositionBackupVersion[tokenId] = pendingPositionsVersion;
+            pendingPositionTokenIds.push(tokenId);
+
+            uint256 globalIndex = processedEntries + i;
+            if (!hasLastPoints) {
+                currentRank = 1;
+                hasLastPoints = true;
+            } else if (pointValue < lastPoints) {
+                currentRank = globalIndex + 1;
+            }
+
+            tokenPendingVersion[tokenId] = pendingPositionsVersion;
+            tokenPositions[tokenId] = currentRank;
+            tokenPositionsVersion[tokenId] = pendingPositionsVersion;
+            lastPoints = pointValue;
+        }
+
+        pendingProcessedEntries = processedEntries + tokenIds.length;
+        pendingLastPoints = lastPoints;
+        pendingHasLastPoints = hasLastPoints;
+        pendingCurrentRank = currentRank;
+
+        emit PositionsBatchAppended(pendingTournamentId, pendingPositionsVersion, pendingProcessedEntries);
+    }
+
+    function finalizePositionsUpdate() external onlyOwner {
+        if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
+        if (pendingProcessedEntries != pendingExpectedEntries) revert PositionsUpdateIncomplete();
+
+        positionsVersion = pendingPositionsVersion;
+
+        emit PositionsUpdateFinalized(pendingTournamentId, pendingPositionsVersion, pendingProcessedEntries);
+
+        _clearPendingPositionsState();
+    }
+
+    function cancelPositionsUpdate() external onlyOwner {
+        if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
+
+        for (uint256 i = 0; i < pendingPositionTokenIds.length; i++) {
+            uint256 tokenId = pendingPositionTokenIds[i];
+            if (tokenPositionBackupVersion[tokenId] != pendingPositionsVersion) continue;
+
+            tokenPositions[tokenId] = tokenPositionBackup[tokenId];
+            tokenPositionsVersion[tokenId] = tokenPositionVersionBackup[tokenId];
+        }
+
+        emit PositionsUpdateCancelled(pendingTournamentId, pendingPositionsVersion);
+
+        _clearPendingPositionsState();
     }
 
     function getCartonPosition(uint256 tokenId) public view returns (uint256) {
@@ -245,6 +379,7 @@ contract Predictions is Ownable {
         bool[] memory usedGameId = new bool[](totalGames + 1);
 
         used[tokenId] = true;
+        submittedCountByTournament[_tokenTournamentId(tokenId)] += 1;
         if (!predictionsStarted) predictionsStarted = true;
 
         for (uint256 i = 0; i < _prediction.length; i++) {
@@ -295,6 +430,22 @@ contract Predictions is Ownable {
         if (ITreasuryTournamentStatus(treasury).isTournamentClosedAnyAsset(tournamentId)) {
             revert TournamentClosedForCorrections();
         }
+    }
+
+    function _tokenTournamentId(uint256 tokenId) internal view returns (uint256) {
+        return ICartonTournamentTokenLookup(address(cartones)).tokenTournamentId(tokenId);
+    }
+
+    function _clearPendingPositionsState() internal {
+        positionsUpdateInProgress = false;
+        pendingTournamentId = 0;
+        pendingPositionsVersion = 0;
+        pendingExpectedEntries = 0;
+        pendingProcessedEntries = 0;
+        pendingLastPoints = 0;
+        pendingHasLastPoints = false;
+        pendingCurrentRank = 0;
+        delete pendingPositionTokenIds;
     }
 
     function getPrediction(uint256 tokenId) external view returns (Prediction[] memory) {

@@ -319,6 +319,16 @@ contract CartonTest is BaseTest {
         assertEq(carton.activeTournamentId(), 1);
     }
 
+    function testMintStoresTokenTournamentId() public {
+        vm.prank(admin);
+        carton.setActiveTournament(7);
+
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 1, "");
+
+        assertEq(carton.tokenTournamentId(tokenId), 7);
+    }
+
     function testSetActiveTournament_OnlyAdmin() public {
         vm.prank(user);
         vm.expectRevert();
@@ -377,6 +387,7 @@ contract CartonTest is BaseTest {
 
         // Verify carton was minted
         assertEq(carton.balanceOf(user, 1), 1);
+        assertEq(carton.tokenTournamentId(1), 1);
 
         // Verify USDC was split between prize pool and reserve inside Treasury
         assertEq(treasury.prizePools(1, address(USDC)), 950000);

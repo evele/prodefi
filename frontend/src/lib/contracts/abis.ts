@@ -697,6 +697,25 @@ export const CARTON_ABI = [
   },
   {
     "type": "function",
+    "name": "tokenTournamentId",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "totalSupply",
     "inputs": [],
     "outputs": [
@@ -1361,6 +1380,42 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "appendPositionsBatch",
+    "inputs": [
+      {
+        "name": "tokenIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "points",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "beginPositionsUpdate",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expectedEntries",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "calculateDifferencePoints",
     "inputs": [
       {
@@ -1447,6 +1502,13 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "cancelPositionsUpdate",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "cartones",
     "inputs": [],
     "outputs": [
@@ -1457,6 +1519,13 @@ export const PREDICTIONS_ABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "finalizePositionsUpdate",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1662,6 +1731,123 @@ export const PREDICTIONS_ABI = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingCurrentRank",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingExpectedEntries",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingHasLastPoints",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingLastPoints",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingPositionsVersion",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingProcessedEntries",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingTournamentId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "positionsUpdateInProgress",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "positionsUpdateNonce",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1896,6 +2082,25 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "submittedCountByTournament",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "teamsHash",
     "inputs": [],
     "outputs": [
@@ -1916,6 +2121,25 @@ export const PREDICTIONS_ABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tokenPendingVersion",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -2130,6 +2354,100 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "event",
+    "name": "PositionsBatchAppended",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "processedEntries",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PositionsUpdateBegan",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "expectedEntries",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PositionsUpdateCancelled",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PositionsUpdateFinalized",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "processedEntries",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PositionsUpdated",
     "inputs": [
       {
@@ -2298,6 +2616,11 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "BatchExceedsExpectedEntries",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DeadlineMustBeFuture",
     "inputs": []
   },
@@ -2313,7 +2636,27 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "DuplicatePositionToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DuplicateTeamId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EmptyPositionsBatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExpectedEntriesMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidExpectedEntries",
     "inputs": []
   },
   {
@@ -2324,6 +2667,11 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "InvalidTeamId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTournamentId",
     "inputs": []
   },
   {
@@ -2385,6 +2733,21 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "PositionsUpdateAlreadyInProgress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PositionsUpdateIncomplete",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PositionsUpdateNotInProgress",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "PredictionAlreadySubmitted",
     "inputs": []
   },
@@ -2406,6 +2769,11 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "TeamsHashAlreadyFrozen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TokenNotEligibleForTournament",
     "inputs": []
   },
   {
@@ -4115,3 +4483,4 @@ export const USDC_ABI = [
     ]
   }
 ] as const satisfies Abi
+

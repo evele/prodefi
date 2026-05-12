@@ -121,8 +121,10 @@ type FixturesViewProps = {
 export function FixturesView({ groups }: FixturesViewProps) {
   const [viewMode, setViewMode] = useState<'matches' | 'standings'>('matches')
   const allGames = useMemo(() => groups.flatMap((g) => g.games), [groups])
+
+  type ContractReadResult = { status: 'success' | 'failure'; result?: unknown }
   
-  const { data: officialGamesMetaData, isLoading: isLoadingGameMeta } = useReadContracts({
+  const { data: rawOfficialGamesMetaData, isLoading: isLoadingGameMeta } = useReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
@@ -133,7 +135,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
       refetchInterval: 30000,
     }
   })
-  const { data: officialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
+  const { data: rawOfficialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
@@ -144,6 +146,9 @@ export function FixturesView({ groups }: FixturesViewProps) {
       refetchInterval: 30000,
     }
   })
+
+  const officialGamesMetaData = rawOfficialGamesMetaData as ContractReadResult[] | undefined
+  const officialGameResultsData = rawOfficialGameResultsData as ContractReadResult[] | undefined
 
   const officialResultsMap = useMemo(() => {
     const map = new Map<number, { result: [number, number]; set: boolean }>()

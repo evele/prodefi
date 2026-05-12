@@ -92,6 +92,7 @@ Next implementation follow-up:
 1. Reflect the shared-position rule in code and admin/final-ranking flow
 2. Ensure prize-claim logic supports shared ranking blocks like `1, 2, 2, 4`
 3. Replace the old default payout assumptions with the fixed 32-place pyramid
+4. Replace one-shot `setPositions(...)` admin usage with a batched leaderboard publication flow for large fields
 
 ### Recently Completed: USDC-Only Cleanup (Apr 2026)
 
@@ -339,6 +340,14 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - Prize distribution is intended to be set after sales close, when the final pool is known. Distribution may sum to less than 100% to leave room for development, donation, jackpot, or other reserves.
 - Results can be set onchain as matches are played. Provisional rankings can be computed offchain for display, while final positions are set onchain once and become the source of truth for prize claims.
 - Deferred integrity improvements: challenge window before finalization, batched final-position verification, and `resultsHash`/`leaderboardHash` commitments for the offchain ranking calculation.
+
+### Deferred Architecture Follow-up: Shared Treasury + Tournament-Scoped Predictions
+
+- Keep `Treasury` as the shared multi-tournament accounting layer keyed by `tournamentId`.
+- Treat each `Predictions` deployment as one tournament instance instead of making `Predictions` fully multi-tournament.
+- Future architecture step: let `Treasury` resolve the correct `Predictions` contract per `tournamentId` instead of relying on a single global `predictionsContract` reference.
+- `Carton` token metadata should remain tournament-aware so admin flows and claims can validate the tournament context cheaply.
+- This is intentionally deferred while the current work focuses on batched leaderboard publication for the active tournament model.
 
 ---
 

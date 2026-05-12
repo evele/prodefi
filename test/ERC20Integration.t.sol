@@ -65,8 +65,12 @@ contract ERC20IntegrationTest is Test {
 
         uint256 treasuryBalanceAfter = treasury.getPrizePool(TOURNAMENT_ID, address(usdc));
 
-        assertEq(treasuryBalanceAfter - treasuryBalanceBefore, 95 * 10 ** 6, "Treasury should receive the 95% prizeable pool");
-        assertEq(treasury.getReservePool(TOURNAMENT_ID, address(usdc)), 5 * 10 ** 6, "Treasury should track the 5% reserve");
+        assertEq(
+            treasuryBalanceAfter - treasuryBalanceBefore, 95 * 10 ** 6, "Treasury should receive the 95% prizeable pool"
+        );
+        assertEq(
+            treasury.getReservePool(TOURNAMENT_ID, address(usdc)), 5 * 10 ** 6, "Treasury should track the 5% reserve"
+        );
         assertEq(carton.balanceOf(user1, 1), 1, "User should own token #1");
         assertEq(usdc.balanceOf(user1), 900 * 10 ** 6, "User should have 900 USDC left");
 
@@ -85,7 +89,11 @@ contract ERC20IntegrationTest is Test {
         carton.buyCartonWithToken(address(usdc));
         vm.stopPrank();
 
-        assertEq(treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 190 * 10 ** 6, "USDC prize pool should have 190 USDC");
-        assertEq(treasury.getReservePool(TOURNAMENT_ID, address(usdc)), 10 * 10 ** 6, "USDC reserve should have 10 USDC");
+        assertEq(
+            treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 190 * 10 ** 6, "USDC prize pool should have 190 USDC"
+        );
+        assertEq(
+            treasury.getReservePool(TOURNAMENT_ID, address(usdc)), 10 * 10 ** 6, "USDC reserve should have 10 USDC"
+        );
     }
 }

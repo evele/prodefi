@@ -44,6 +44,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     mapping(address => bool) public acceptedTokens;
     mapping(address => uint256) public tokenPrices;
+    mapping(uint256 => uint256) public tokenTournamentId;
 
     mapping(address => uint256[]) private userTokens;
 
@@ -80,6 +81,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function mint(address account, uint256 amount, bytes memory data) public onlyRole(MINTER_ROLE) returns (uint256) {
         uint256 tokenId = _nextTokenId++;
+        tokenTournamentId[tokenId] = activeTournamentId;
         _mint(account, tokenId, amount, data);
         return tokenId;
     }
@@ -92,6 +94,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         uint256[] memory ids = new uint256[](amounts.length);
         for (uint256 i = 0; i < amounts.length; i++) {
             ids[i] = _nextTokenId++;
+            tokenTournamentId[ids[i]] = activeTournamentId;
         }
         _mintBatch(to, ids, amounts, data);
         return ids;
@@ -114,6 +117,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 tokenId = _nextTokenId++;
+        tokenTournamentId[tokenId] = _tournamentId;
         _mint(msg.sender, tokenId, 1, "");
 
         emit CartonPurchasedWithToken(msg.sender, tokenId, token, amount);
