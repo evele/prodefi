@@ -109,6 +109,14 @@ export function mapBuyCartonError(error: unknown): string {
     return 'Carton sales are already closed for this tournament.'
   }
 
+  if (includesAny(message, ['tournamentnotregistered', 'tournament not registered'])) {
+    return 'This tournament is not registered in Treasury yet.'
+  }
+
+  if (includesAny(message, ['zerotournamentid', 'invalidtournamentid', 'invalid tournament id'])) {
+    return 'Select a valid active tournament before buying.'
+  }
+
   if (includesAny(message, ['erc20insufficientallowance', 'insufficient allowance'])) {
     return 'Approve USDC before buying.'
   }
@@ -190,7 +198,7 @@ export function mapCombinedPredictionErrorToMessage(error: unknown): string {
     return 'Some match results were already published, so this carton can no longer submit game predictions.'
   }
   if (message.includes('duplicate team id')) {
-    return 'Choose 4 different teams before submitting winners.'
+    return 'Choose 4 different teams for 1st, 2nd, 3rd, and 4th place.'
   }
   if (message.includes('invalid team id')) {
     return 'One or more selected teams are invalid. Refresh and try again.'
@@ -214,7 +222,7 @@ export function mapWinnersErrorToMessage(error: unknown): string {
     return 'Winner predictions were already submitted for this carton.'
   }
   if (message.includes('duplicate team id')) {
-    return 'Choose 4 different teams before submitting winners.'
+    return 'Choose 4 different teams for 1st, 2nd, 3rd, and 4th place.'
   }
   if (message.includes('invalid team id')) {
     return 'One or more selected teams are invalid. Refresh and try again.'
@@ -245,6 +253,9 @@ export function mapClaimError(error: unknown): string {
   }
   if (message.includes('no prize available')) {
     return 'No USDC prize is available for this carton.'
+  }
+  if (includesAny(message, ['tokentournamentmismatch', 'token tournament mismatch'])) {
+    return 'This carton does not belong to the selected tournament.'
   }
 
   return 'Could not claim the USDC prize. Please try again.'
@@ -285,6 +296,36 @@ export function mapAdminError(error: unknown): string {
   if (message.includes('points must be ordered')) {
     return 'Leaderboard points must be sorted from highest to lowest.'
   }
+  if (includesAny(message, ['invalidtournamentid', 'invalid tournament id'])) {
+    return 'Select a valid tournament before uploading positions.'
+  }
+  if (includesAny(message, ['invalidexpectedentries', 'invalid expected entries'])) {
+    return 'The leaderboard draft needs at least one submitted carton.'
+  }
+  if (includesAny(message, ['expectedentriesmismatch', 'expected entries mismatch'])) {
+    return 'The submitted count for this tournament no longer matches the leaderboard draft size.'
+  }
+  if (includesAny(message, ['positionsupdatealreadyinprogress', 'positions update already in progress'])) {
+    return 'There is already a leaderboard draft in progress.'
+  }
+  if (includesAny(message, ['positionsupdatenotinprogress', 'positions update not in progress'])) {
+    return 'There is no pending leaderboard draft to continue.'
+  }
+  if (includesAny(message, ['emptypositionsbatch', 'empty positions batch'])) {
+    return 'Each leaderboard batch must include at least one entry.'
+  }
+  if (includesAny(message, ['batchexceedsexpectedentries', 'batch exceeds expected entries'])) {
+    return 'This batch would exceed the expected number of leaderboard entries.'
+  }
+  if (includesAny(message, ['tokennoteligiblefortournament', 'token not eligible for tournament'])) {
+    return 'One or more cartones do not belong to this tournament or were never submitted.'
+  }
+  if (includesAny(message, ['duplicatepositiontoken', 'duplicate position token'])) {
+    return 'The same carton cannot appear twice in the leaderboard draft.'
+  }
+  if (includesAny(message, ['positionsupdateincomplete', 'positions update incomplete'])) {
+    return 'Upload every leaderboard batch before finalizing the positions.'
+  }
   if (message.includes('results already set for this game')) {
     return 'This game already has an official result.'
   }
@@ -309,6 +350,9 @@ export function mapAdminError(error: unknown): string {
   if (includesAny(message, ['salesalreadyclosed', 'sales already closed'])) {
     return 'Sales are already closed for this tournament.'
   }
+  if (includesAny(message, ['tournamentnotregistered', 'tournament not registered'])) {
+    return 'Register the tournament and its engine before using this flow.'
+  }
   if (includesAny(message, ['salesnotclosed', 'sales not closed'])) {
     return 'Close sales before this action.'
   }
@@ -316,7 +360,28 @@ export function mapAdminError(error: unknown): string {
     return 'Tournament must be finalized before this action.'
   }
   if (includesAny(message, ['tournamentnotreadyforfinalization', 'tournament not ready for finalization'])) {
-    return 'Finalize requires closed sales, prize distribution, all results, official winners, and final positions.'
+    return 'Finalize requires closed sales, prize distribution, sealed final prize amounts, all results, official winners, and final positions.'
+  }
+  if (includesAny(message, ['finalprizeamountsalreadyloaded', 'final prize amounts already loaded'])) {
+    return 'Prize distribution can no longer be changed after loading final prize amounts.'
+  }
+  if (includesAny(message, ['finalprizeamountsalreadysealed', 'final prize amounts already sealed'])) {
+    return 'Final prize amounts are already sealed for this asset.'
+  }
+  if (includesAny(message, ['finalprizeamountsnotsealed', 'final prize amounts not sealed'])) {
+    return 'Load and seal the final prize amounts before finalizing the tournament.'
+  }
+  if (includesAny(message, ['finalprizeamountsexceedprizepool', 'final prize amounts exceed prize pool'])) {
+    return 'Final prize amounts exceed the current prizeable pool.'
+  }
+  if (includesAny(message, ['noprizerecipientsprovided', 'no prize recipients provided'])) {
+    return 'There are no winning cartones to save yet.'
+  }
+  if (includesAny(message, ['prizearraylengthmismatch', 'prize array length mismatch'])) {
+    return 'Final prize token and amount arrays must have the same length.'
+  }
+  if (includesAny(message, ['tokentournamentmismatch', 'token tournament mismatch'])) {
+    return 'One or more cartones do not belong to the selected tournament.'
   }
   if (message.includes('no prize pool')) {
     return 'This tournament has no prize pool to finalize yet.'
@@ -326,6 +391,9 @@ export function mapAdminError(error: unknown): string {
   }
   if (includesAny(message, ['invalidpercentage', 'invalid percentage'])) {
     return 'Prize distribution percentages must be between 0 and 100 and sum to at most 100.'
+  }
+  if (includesAny(message, ['insufficientglobalreserve', 'insufficient global reserve'])) {
+    return 'Global reserve does not have enough balance for this action.'
   }
 
   return 'Admin action failed. Review the inputs and try again.'

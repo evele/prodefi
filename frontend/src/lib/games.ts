@@ -1,5 +1,21 @@
 import { teams2026Config } from './teams2026.config'
 import type { Game, GroupData } from './types'
+import groupSchedule from './worldcup2026-group-schedule.json'
+
+type GroupScheduleEntry = {
+  team1: number
+  team2: number
+  kickoffEt: string
+  venue: string
+}
+
+function matchupKey(team1: number, team2: number) {
+  return team1 < team2 ? `${team1}-${team2}` : `${team2}-${team1}`
+}
+
+const groupScheduleByMatchup = new Map(
+  (groupSchedule as GroupScheduleEntry[]).map((entry) => [matchupKey(entry.team1, entry.team2), entry]),
+)
 
 /** Build round-robin games for all groups. Returns flat game list + group metadata. */
 export const buildAllGroupGames = (): { games: Game[]; groups: GroupData[] } => {
@@ -23,12 +39,15 @@ export const buildAllGroupGames = (): { games: Game[]; groups: GroupData[] } => 
 
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
+        const schedule = groupScheduleByMatchup.get(matchupKey(ids[i], ids[j]))
         const game: Game = {
           id: gameId++,
           team1: ids[i],
           team2: ids[j],
           result: [null, null],
           set: false,
+          kickoffEt: schedule?.kickoffEt,
+          venue: schedule?.venue,
         }
         groupGames.push(game)
         allGames.push(game)

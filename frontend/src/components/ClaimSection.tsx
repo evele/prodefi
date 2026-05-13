@@ -15,7 +15,17 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     functionName: 'activeTournamentId',
     query: { refetchInterval: 10_000 },
   })
-  const tournamentId = activeTournamentId ?? 0n
+
+  const { data: tokenTournamentId } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'tokenTournamentId',
+    args: [tokenId],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const tournamentId = tokenTournamentId ?? 0n
+  const usesActivePredictionsEngine = tournamentId > 0n && tournamentId === (activeTournamentId ?? 0n)
 
   const { data: tournamentFinalized } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
@@ -29,37 +39,38 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'positionsVersion',
-    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
+    query: { enabled: usesActivePredictionsEngine && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: rawRank } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositions',
-    args: tournamentFinalized ? [tokenId] : undefined,
-    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
+    args: usesActivePredictionsEngine && tournamentFinalized ? [tokenId] : undefined,
+    query: { enabled: usesActivePredictionsEngine && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: rankVersion } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositionsVersion',
-    args: tournamentFinalized ? [tokenId] : undefined,
-    query: { enabled: Boolean(tournamentFinalized), refetchInterval: 10_000 },
+    args: usesActivePredictionsEngine && tournamentFinalized ? [tokenId] : undefined,
+    query: { enabled: usesActivePredictionsEngine && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const rank = useMemo(() => {
+    if (!usesActivePredictionsEngine) return null
     if (rawRank === undefined || rawRank === 0n) return null
     if (positionsVersion === undefined || rankVersion !== positionsVersion) return null
     return Number(rawRank)
-  }, [positionsVersion, rankVersion, rawRank])
+  }, [positionsVersion, rankVersion, rawRank, usesActivePredictionsEngine])
 
   const { data: usdcPrize } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
-    functionName: 'getUserPrizeAmount',
-    args: rank !== null && tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(rank)] : undefined,
-    query: { enabled: rank !== null && Boolean(tournamentFinalized), refetchInterval: 10_000 },
+    functionName: 'getClaimablePrizeAmount',
+    args: tournamentId > 0n ? [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
   const { data: usdcClaimed, refetch: refetchUsdcClaimed } = useReadContract({
@@ -114,9 +125,11 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
         </p>
       </div>
 
-      {rank === null ? (
+      {rank === null && usdcPrizeValue === 0n ? (
         <p className="text-sm" style={{ color: 'var(--text-disabled)' }}>
-          Este cartón no tiene posición en el marcador final.
+          {usesActivePredictionsEngine
+            ? 'Este cartón no tiene posición en el marcador final.'
+            : 'La posición de este cartón no está disponible en el motor activo, pero aún puedes reclamar si tiene premio.'}
         </p>
       ) : (
         <div

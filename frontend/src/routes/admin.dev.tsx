@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
+import { formatUnits } from 'viem'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
@@ -10,6 +11,14 @@ import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
 import { buildAllGroupGames } from '../lib/games'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import {
+  FIXED_PRIZE_DISTRIBUTION_INPUT,
+  PRIZE_BANDS,
+  computeFinalPrizeAmounts,
+  computeSharedRanks,
+  parseLeaderboardCsv,
+  parsePrizeDistributionInput,
+} from '../lib/prize-payout'
 import { mapAdminError } from '../lib/transaction-errors'
 
 export const Route = createFileRoute('/admin/dev')({
@@ -43,6 +52,11 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { execute, isBusy } = useAdminWrite()
   const { games } = useMemo(() => buildAllGroupGames(), [])
+  const [gameSearch, setGameSearch] = useState('')
+  const demoScores = useMemo<[number, number][]>(
+    () => [[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [0, 2], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3], [3, 2]],
+    [],
+  )
 
   const { data: activeTournamentId } = useReadContract({
     address: carton,
@@ -86,6 +100,35 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
   // Local state for goal inputs per game
   const [goals, setGoals] = useState<Record<number, [string, string]>>({})
 
+  const gameSearchEntries = useMemo(
+    () => games.map((game) => {
+      const team1 = teamsById[game.team1] ?? String(game.team1)
+      const team2 = teamsById[game.team2] ?? String(game.team2)
+      const label = `#${game.id} ${team1} vs ${team2}`
+      const haystack = `${game.id} ${team1} ${team2} ${label}`.toLowerCase()
+      return {
+        game,
+        label,
+        haystack,
+      }
+    }),
+    [games],
+  )
+
+  const filteredGames = useMemo(() => {
+    const query = gameSearch.trim().toLowerCase()
+    if (!query) return gameSearchEntries
+
+    const normalizedQuery = query.startsWith('#') ? query.slice(1) : query
+    const exactId = Number(normalizedQuery)
+    if (!Number.isNaN(exactId) && exactId > 0) {
+      const exactMatch = gameSearchEntries.find((entry) => entry.game.id === exactId)
+      if (exactMatch) return [exactMatch]
+    }
+
+    return gameSearchEntries.filter((entry) => entry.haystack.includes(query))
+  }, [gameSearch, gameSearchEntries])
+
   const getGoals = (gameId: number): [string, string] => goals[gameId] ?? ['', '']
 
   const setGoal = (gameId: number, team: 0 | 1, value: string) => {
@@ -95,6 +138,24 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
       updated[team] = value
       return { ...prev, [gameId]: updated }
     })
+  }
+
+  const autofillVisibleGames = () => {
+    if (filteredGames.length === 0) {
+      toast.error('No hay partidos visibles para autocompletar.')
+      return
+    }
+
+    setGoals((prev) => {
+      const next = { ...prev }
+      for (const { game } of filteredGames) {
+        const [team1Goals, team2Goals] = demoScores[Math.floor(Math.random() * demoScores.length)]
+        next[game.id] = [String(team1Goals), String(team2Goals)]
+      }
+      return next
+    })
+
+    toast.success(`Se cargaron resultados de prueba para ${filteredGames.length} partido${filteredGames.length === 1 ? '' : 's'}.`)
   }
 
   const submitResult = (gameId: number) => {
@@ -150,8 +211,42 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
             This tournament is finalized. Result corrections are locked.
           </div>
         )}
+        <div className="mb-3 space-y-2">
+          <div className="flex gap-2">
+            <Input
+              list="admin-game-search-options"
+              value={gameSearch}
+              onChange={(e) => setGameSearch(e.target.value)}
+              placeholder="Buscar partido por #id, equipo o cruce"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setGameSearch('')}
+              disabled={gameSearch.length === 0}
+            >
+              Limpiar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={autofillVisibleGames}
+              disabled={filteredGames.length === 0 || Boolean(tournamentFinalized)}
+            >
+              Autocompletar
+            </Button>
+          </div>
+          <datalist id="admin-game-search-options">
+            {gameSearchEntries.map((entry) => (
+              <option key={`game-search-${entry.game.id}`} value={entry.label} />
+            ))}
+          </datalist>
+          <p className="text-xs text-gray-500">
+            {filteredGames.length} de {games.length} partidos visibles
+          </p>
+        </div>
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {games.map((game) => (
+          {filteredGames.map(({ game, label }) => (
             <div key={game.id} className="flex items-center gap-2 text-sm">
               <span className="w-8 text-gray-500">#{game.id}</span>
               <span className="w-28 truncate text-right">{teamsById[game.team1] ?? game.team1}</span>
@@ -185,8 +280,14 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
               >
                 {storedGamesById.get(game.id)?.set ? 'Update' : 'Set'}
               </Button>
+              <span className="hidden xl:inline w-52 truncate text-xs text-gray-400">{label}</span>
             </div>
           ))}
+          {filteredGames.length === 0 && (
+            <div className="rounded-md border border-dashed border-gray-300 px-3 py-4 text-sm text-gray-500">
+              No se encontraron partidos para esa búsqueda.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -198,6 +299,10 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
 function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const { execute, isBusy } = useAdminWrite()
+  const teamsAlphabetical = useMemo(
+    () => [...teams2026].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })),
+    [],
+  )
 
   const { data: officialWinnersData } = useReadContract({
     address: predictions,
@@ -279,11 +384,11 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
                   onChange={(e) => setWinner(i, e.target.value)}
                 >
                   <option value="">Select team...</option>
-                  {teams2026.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} (#{t.id})
-                    </option>
-                  ))}
+                   {teamsAlphabetical.map((t) => (
+                     <option key={t.id} value={t.id}>
+                       {t.name} (#{t.id})
+                     </option>
+                   ))}
                 </select>
               </div>
             ))}
@@ -299,10 +404,22 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
 
 // --- Set Positions Section ---
 
+const POSITION_BATCH_SIZE = 250
+
 function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
+  const [csvInput, setCsvInput] = useState('')
+  const [batchProgress, setBatchProgress] = useState<{ phase: 'idle' | 'begin' | 'append' | 'finalize'; current: number; total: number } | null>(null)
+
+  const { data: activeTournamentId } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'activeTournamentId',
+    query: { refetchInterval: 10_000 },
+  })
+  const tournamentId = activeTournamentId ?? 0n
 
   const { data: nextTokenId } = useReadContract({
     address: carton,
@@ -343,51 +460,249 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const [csvInput, setCsvInput] = useState('')
+  const { data: usedData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'used' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
 
-  const submit = () => {
-    const lines = csvInput.trim().split('\n').filter(Boolean)
-    if (lines.length === 0) {
-      toast.error('Enter at least one tokenId,points pair')
+  const { data: tokenTournamentData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: carton,
+      abi: CARTON_ABI,
+      functionName: 'tokenTournamentId' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const tournamentScopedTokenIds = useMemo(
+    () => candidateTokenIds.filter((_, index) => (tokenTournamentData?.[index]?.result as bigint | undefined) === tournamentId),
+    [candidateTokenIds, tokenTournamentData, tournamentId],
+  )
+
+  const usedTokenIds = useMemo(
+    () =>
+      tournamentScopedTokenIds.filter((tokenId) => {
+        const candidateIndex = candidateTokenIds.findIndex((candidateTokenId) => candidateTokenId === tokenId)
+        return candidateIndex >= 0 && Boolean(usedData?.[candidateIndex]?.result)
+      }),
+    [candidateTokenIds, tournamentScopedTokenIds, usedData],
+  )
+
+  const onchainPointsContracts = useMemo(
+    () =>
+      usedTokenIds.map((tokenId) => ({
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'calculateTotalPoints' as const,
+        args: [tokenId] as const,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [usedTokenIds.map((tokenId) => tokenId.toString()).join(',')],
+  )
+
+  const { data: onchainPointsData } = useReadContracts({
+    contracts: onchainPointsContracts,
+    query: { enabled: onchainPointsContracts.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: submittedCount } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'submittedCountByTournament',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
+  })
+
+  const { data: positionsUpdateInProgress } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsUpdateInProgress',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingTournamentId } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingTournamentId',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingExpectedEntries } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingExpectedEntries',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: pendingProcessedEntries } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'pendingProcessedEntries',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const onchainPointEntries = useMemo(
+    () =>
+      usedTokenIds
+        .map((tokenId, index) => ({
+          tokenId,
+          points: (onchainPointsData?.[index]?.result as bigint | undefined) ?? 0n,
+        }))
+        .sort((a, b) => {
+          if (a.points !== b.points) return a.points > b.points ? -1 : 1
+          if (a.tokenId === b.tokenId) return 0
+          return a.tokenId < b.tokenId ? -1 : 1
+        }),
+    [onchainPointsData, usedTokenIds],
+  )
+
+  const canFillFromOnchain = tournamentId > 0n && usedTokenIds.length > 0 && onchainPointsData?.length === usedTokenIds.length
+  const activePendingUpdateMatchesTournament = Boolean(positionsUpdateInProgress && pendingTournamentId === tournamentId)
+
+  const fillFromOnchain = () => {
+    if (tournamentId === 0n) {
+      toast.error('Set an active tournament first.')
       return
     }
 
-    const ids: bigint[] = []
-    const points: bigint[] = []
-
-    for (const line of lines) {
-      const parts = line.split(',').map((s) => s.trim())
-      if (parts.length !== 2) {
-        toast.error(`Invalid format: "${line}". Expected: tokenId,points`)
-        return
-      }
-      const id = BigInt(parts[0])
-      const pt = BigInt(parts[1])
-      ids.push(id)
-      points.push(pt)
+    if (usedTokenIds.length === 0) {
+      toast.error('There are no submitted cartones for the active tournament yet.')
+      return
     }
 
-    // Validate descending order
-    for (let i = 1; i < points.length; i++) {
-      if (points[i] > points[i - 1]) {
-        toast.error('Points must be in descending order')
+    if (!canFillFromOnchain) {
+      toast.error('Still loading on-chain points. Try again in a moment.')
+      return
+    }
+
+    setCsvInput(onchainPointEntries.map((entry) => `${entry.tokenId.toString()},${entry.points.toString()}`).join('\n'))
+    toast.success(`Loaded ${onchainPointEntries.length} cartone${onchainPointEntries.length === 1 ? '' : 's'} from on-chain points.`)
+  }
+
+  const submit = () => {
+    if (tournamentId === 0n) {
+      toast.error('Set an active tournament first.')
+      return
+    }
+
+    const { entries, error } = parseLeaderboardCsv(csvInput)
+    if (error) {
+      toast.error(error)
+      return
+    }
+
+    if (entries.length === 0) {
+      toast.error('There are no leaderboard entries to upload.')
+      return
+    }
+
+    const expectedEntries = Number(submittedCount ?? 0n)
+    if (entries.length !== expectedEntries) {
+      toast.error(`The CSV contains ${entries.length} entries, but tournament ${tournamentId.toString()} has ${expectedEntries} submitted cartones.`)
+      return
+    }
+
+    const entryTokenIdSet = new Set(entries.map((entry) => entry.tokenId.toString()))
+    const missingTournamentToken = usedTokenIds.find((tokenId) => !entryTokenIdSet.has(tokenId.toString()))
+    if (missingTournamentToken) {
+      toast.error(`Carton #${missingTournamentToken.toString()} from the active tournament is missing from the CSV.`)
+      return
+    }
+
+    const chunks = Array.from({ length: Math.ceil(entries.length / POSITION_BATCH_SIZE) }, (_, index) =>
+      entries.slice(index * POSITION_BATCH_SIZE, (index + 1) * POSITION_BATCH_SIZE),
+    )
+
+    const uploadNextChunk = (chunkIndex: number) => {
+      if (chunkIndex >= chunks.length) {
+        setBatchProgress({ phase: 'finalize', current: chunks.length, total: chunks.length })
+        void execute(
+          {
+            address: predictions,
+            abi: PREDICTIONS_ABI,
+            functionName: 'finalizePositionsUpdate',
+          },
+          {
+            toastId: 'admin-finalize-positions-batch',
+            pendingMessage: 'Finalizing leaderboard version...',
+            successMessage: 'Leaderboard positions saved.',
+            revertedMessage: 'Leaderboard finalization was rejected on-chain.',
+            logLabel: 'Admin finalize positions update',
+            onSuccess: async () => {
+              setBatchProgress({ phase: 'idle', current: chunks.length, total: chunks.length })
+            },
+          },
+        )
         return
       }
+
+      const chunk = chunks[chunkIndex]
+      setBatchProgress({ phase: 'append', current: chunkIndex + 1, total: chunks.length })
+
+      void execute(
+        {
+          address: predictions,
+          abi: PREDICTIONS_ABI,
+          functionName: 'appendPositionsBatch',
+          args: [chunk.map((entry) => entry.tokenId), chunk.map((entry) => entry.points)],
+        },
+        {
+          toastId: `admin-set-positions-batch-${chunkIndex}`,
+          pendingMessage: `Uploading leaderboard batch ${chunkIndex + 1}/${chunks.length}...`,
+          successMessage: `Batch ${chunkIndex + 1}/${chunks.length} saved.`,
+          revertedMessage: 'Leaderboard batch was rejected on-chain.',
+          logLabel: 'Admin append positions batch',
+          onSuccess: async () => {
+            uploadNextChunk(chunkIndex + 1)
+          },
+        },
+      )
     }
+
+    setBatchProgress({ phase: 'begin', current: 0, total: chunks.length })
 
     void execute(
       {
         address: predictions,
         abi: PREDICTIONS_ABI,
-        functionName: 'setPositions',
-        args: [ids, points],
+        functionName: 'beginPositionsUpdate',
+        args: [BigInt(entries.length)],
       },
       {
-        toastId: 'admin-set-positions',
-        pendingMessage: 'Waiting for leaderboard confirmation...',
-        successMessage: 'Leaderboard positions saved.',
-        revertedMessage: 'Leaderboard positions were rejected on-chain.',
-        logLabel: 'Admin set positions',
+        toastId: 'admin-begin-positions-update',
+        pendingMessage: 'Opening leaderboard draft...',
+        successMessage: 'Leaderboard draft opened.',
+        revertedMessage: 'Could not open leaderboard draft on-chain.',
+        logLabel: 'Admin begin positions update',
+        onSuccess: async () => {
+          uploadNextChunk(0)
+        },
+      },
+    )
+  }
+
+  const cancelPendingUpdate = () => {
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'cancelPositionsUpdate',
+      },
+      {
+        toastId: 'admin-cancel-positions-update',
+        pendingMessage: 'Cancelling leaderboard draft...',
+        successMessage: 'Leaderboard draft cancelled.',
+        revertedMessage: 'Could not cancel the leaderboard draft.',
+        logLabel: 'Admin cancel positions update',
+        onSuccess: async () => {
+          setBatchProgress({ phase: 'idle', current: 0, total: 0 })
+        },
       },
     )
   }
@@ -401,34 +716,94 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
           version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
         }))
         .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
-        .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
-        .map((entry) => entry.tokenId),
+        .sort((a, b) => {
+          if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+          if (a.tokenId === b.tokenId) return 0
+          return a.tokenId < b.tokenId ? -1 : 1
+        }),
     [candidateTokenIds, positionData, positionVersionData, positionsVersion],
   )
+
+  const parsedPreview = useMemo(() => {
+    const { entries, error } = parseLeaderboardCsv(csvInput)
+    if (error || entries.length === 0) return []
+    return computeSharedRanks(entries)
+  }, [csvInput])
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Set Positions</CardTitle>
-        <CardDescription>Set leaderboard: tokenId,points per line (descending by points)</CardDescription>
+        <CardDescription>Set the active tournament leaderboard in batches, or fill it automatically from on-chain totals.</CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-3 text-sm space-y-1">
+          <div><span className="font-medium">Active tournament:</span> {tournamentId > 0n ? tournamentId.toString() : '—'}</div>
+          <div><span className="font-medium">Tournament cartones:</span> {tournamentScopedTokenIds.length}</div>
+          <div><span className="font-medium">Submitted cartones:</span> {submittedCount?.toString() ?? '—'}</div>
+          <div><span className="font-medium">Draft in progress:</span> {String(Boolean(positionsUpdateInProgress))}</div>
+          {activePendingUpdateMatchesTournament && (
+            <div><span className="font-medium">Draft progress:</span> {(pendingProcessedEntries ?? 0n).toString()} / {(pendingExpectedEntries ?? 0n).toString()}</div>
+          )}
+        </div>
+
         <textarea
           className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-          placeholder={"1,150\n3,120\n2,95"}
+          placeholder={"1,150\n3,120\n2,120\n4,95"}
           value={csvInput}
           onChange={(e) => setCsvInput(e.target.value)}
         />
-        <Button className="mt-2" onClick={submit} disabled={!isOwner || isBusy}>
-          {isBusy ? 'Submitting...' : 'Set Positions'}
-        </Button>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!isOwner || isBusy || usedTokenIds.length === 0 || Boolean(positionsUpdateInProgress)}>
+            Fill Positions
+          </Button>
+          <Button onClick={submit} disabled={!isOwner || isBusy || Boolean(positionsUpdateInProgress)}>
+            {isBusy ? 'Submitting...' : 'Set Positions In Batches'}
+          </Button>
+          {activePendingUpdateMatchesTournament && (
+            <Button type="button" variant="outline" onClick={cancelPendingUpdate} disabled={!isOwner || isBusy}>
+              Cancel Pending Update
+            </Button>
+          )}
+        </div>
 
-        {positionsArray && positionsArray.length > 0 && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          {usedTokenIds.length === 0
+            ? 'No hay cartones enviados todavía para el torneo activo.'
+            : canFillFromOnchain
+              ? `Fill Positions arma el CSV con ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
+              : 'Cargando puntos onchain para autocompletar el ranking...'}
+        </p>
+
+        {batchProgress && batchProgress.phase !== 'idle' && (
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {batchProgress.phase === 'begin'
+              ? `Abriendo draft del leaderboard (${batchProgress.total} batch${batchProgress.total === 1 ? '' : 'es'}).`
+              : batchProgress.phase === 'append'
+                ? `Subiendo batch ${batchProgress.current}/${batchProgress.total}.`
+                : 'Finalizando versión del leaderboard...'}
+          </p>
+        )}
+
+        {parsedPreview.length > 0 && (
+          <div className="mt-4">
+            <div className="text-sm font-medium mb-1">Preview from CSV:</div>
+            <div className="text-xs text-gray-600 space-y-0.5">
+              {parsedPreview.map((entry) => (
+                <div key={`preview-${entry.tokenId.toString()}`}>
+                  #{entry.rank} — Token {entry.tokenId.toString()} · {entry.points.toString()} pts
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {positionsArray.length > 0 && (
           <div className="mt-4">
             <div className="text-sm font-medium mb-1">Current leaderboard:</div>
             <div className="text-xs text-gray-600 space-y-0.5">
-              {positionsArray.map((tokenId, i) => (
-                <div key={i}>#{i + 1} — Token {tokenId.toString()}</div>
+              {positionsArray.map((entry) => (
+                <div key={entry.tokenId.toString()}>#{entry.rank.toString()} — Token {entry.tokenId.toString()}</div>
               ))}
             </div>
           </div>
@@ -441,14 +816,55 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
 // --- Close Tournament Section ---
 
 function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { address } = useAccount()
   const { execute, isBusy } = useAdminWrite()
 
   const [tournamentId, setTournamentId] = useState('1')
-  const [distributionInput, setDistributionInput] = useState('50,30,15,5')
+  const [distributionInput, setDistributionInput] = useState(FIXED_PRIZE_DISTRIBUTION_INPUT)
   const tokenAddress = CONTRACT_ADDRESSES.USDC
   const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
+
+  const { data: nextTokenId } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'nextTokenId',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const candidateTokenIds = useMemo(() => {
+    const upperBound = Number(nextTokenId ?? 1n)
+    return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
+  }, [nextTokenId])
+
+  const { data: positionsVersion } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsVersion',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: positionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositions' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const { data: positionVersionData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'tokenPositionsVersion' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
 
   const { data: managerRole } = useReadContract({
     address: treasury,
@@ -492,9 +908,74 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     address: treasury,
     abi: TREASURY_ABI,
     functionName: 'getPrizePool',
-    args: [BigInt(tournamentId || '0'), tokenAddress],
+    args: [parsedTournamentId, tokenAddress],
     query: { refetchInterval: 10_000 },
   })
+
+  const { data: reservePool } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'getGlobalReserve',
+    args: [tokenAddress],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: finalAmountsReady } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'finalPrizeAmountsReady',
+    args: [parsedTournamentId, tokenAddress],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: finalAmountTotal } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'finalPrizeAmountTotals',
+    args: [parsedTournamentId, tokenAddress],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const leaderboardEntries = useMemo(
+    () =>
+      candidateTokenIds
+        .map((tokenId, i) => ({
+          tokenId,
+          rank: (positionData?.[i]?.result as bigint | undefined) ?? 0n,
+          version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
+        }))
+        .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
+        .sort((a, b) => {
+          if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+          if (a.tokenId === b.tokenId) return 0
+          return a.tokenId < b.tokenId ? -1 : 1
+        })
+        .map((entry) => ({ tokenId: entry.tokenId, rank: Number(entry.rank), points: 0n })),
+    [candidateTokenIds, positionData, positionVersionData, positionsVersion],
+  )
+
+  const parsedDistribution = useMemo(() => parsePrizeDistributionInput(distributionInput), [distributionInput])
+  const distributionIsValid = parsedDistribution.length > 0
+    && parsedDistribution.every((value) => Number.isInteger(value) && value >= 0 && value <= 100)
+    && parsedDistribution.reduce((sum, value) => sum + value, 0) <= 100
+
+  const payoutPreview = useMemo(() => {
+    if (!distributionIsValid || prizePool === undefined || leaderboardEntries.length === 0) {
+      return null
+    }
+    return computeFinalPrizeAmounts(leaderboardEntries, prizePool, parsedDistribution)
+  }, [distributionIsValid, leaderboardEntries, parsedDistribution, prizePool])
+
+  const finalPrizePayload = useMemo(() => {
+    if (!payoutPreview || candidateTokenIds.length === 0) return null
+
+    const amountByTokenId = new Map(payoutPreview.payouts.map((entry) => [entry.tokenId.toString(), entry.amount]))
+
+    return {
+      tokenIds: candidateTokenIds,
+      amounts: candidateTokenIds.map((tokenId) => amountByTokenId.get(tokenId.toString()) ?? 0n),
+    }
+  }, [candidateTokenIds, payoutPreview])
 
   const closeSales = () => {
     const tid = Number(tournamentId)
@@ -526,12 +1007,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       return
     }
 
-    const percentages = distributionInput
-      .split(',')
-      .map((value) => Number(value.trim()))
-      .filter((value) => !Number.isNaN(value))
-
-    if (percentages.length === 0 || percentages.some((value) => !Number.isInteger(value) || value < 0 || value > 100)) {
+    if (!distributionIsValid) {
       toast.error('Enter comma-separated percentages between 0 and 100')
       return
     }
@@ -541,7 +1017,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
         address: treasury,
         abi: TREASURY_ABI,
         functionName: 'setPrizeDistribution',
-        args: [BigInt(tid), tokenAddress, percentages],
+        args: [BigInt(tid), tokenAddress, parsedDistribution],
       },
       {
         toastId: `admin-prize-distribution-${tid}-usdc`,
@@ -549,6 +1025,58 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
         successMessage: 'USDC prize distribution saved.',
         revertedMessage: 'Prize distribution was rejected on-chain.',
         logLabel: 'Admin set prize distribution',
+      },
+    )
+  }
+
+  const loadFinalPrizes = () => {
+    const tid = Number(tournamentId)
+    if (isNaN(tid) || tid <= 0) {
+      toast.error('Enter a valid tournament ID')
+      return
+    }
+    if (!payoutPreview || !finalPrizePayload) {
+      toast.error('Set final leaderboard positions first so the final prize amounts can be computed.')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'setFinalPrizeAmounts',
+        args: [BigInt(tid), tokenAddress, finalPrizePayload.tokenIds, finalPrizePayload.amounts],
+      },
+      {
+        toastId: `admin-final-prizes-${tid}-usdc`,
+        pendingMessage: 'Saving final USDC prize amounts...',
+        successMessage: 'Final USDC prize amounts saved. Review them and seal when ready.',
+        revertedMessage: 'Final USDC prize amounts were rejected on-chain.',
+        logLabel: 'Admin set final prize amounts',
+      },
+    )
+  }
+
+  const sealFinalPrizes = () => {
+    const tid = Number(tournamentId)
+    if (isNaN(tid) || tid <= 0) {
+      toast.error('Enter a valid tournament ID')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'sealFinalPrizeAmounts',
+        args: [BigInt(tid), tokenAddress],
+      },
+      {
+        toastId: `admin-seal-final-prizes-${tid}-usdc`,
+        pendingMessage: 'Sealing final USDC prize amounts...',
+        successMessage: 'Final USDC prize amounts sealed.',
+        revertedMessage: 'Sealing final USDC prize amounts was rejected on-chain.',
+        logLabel: 'Admin seal final prize amounts',
       },
     )
   }
@@ -577,14 +1105,22 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
   }
 
   const poolDisplay = prizePool !== undefined
-    ? `${(Number(prizePool) / 1e6).toFixed(2)} USDC`
+    ? `${Number(formatUnits(prizePool, 6)).toFixed(2)} USDC`
+    : '—'
+
+  const reserveDisplay = reservePool !== undefined
+    ? `${Number(formatUnits(reservePool, 6)).toFixed(2)} USDC`
+    : '—'
+
+  const finalTotalDisplay = finalAmountTotal !== undefined
+    ? `${Number(formatUnits(finalAmountTotal, 6)).toFixed(2)} USDC`
     : '—'
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Tournament Lifecycle</CardTitle>
-        <CardDescription>Close sales, configure USDC prizes, then finalize claims.</CardDescription>
+        <CardDescription>Close sales, set the fixed 32-place pyramid, load exact per-carton prizes, review/correct if needed, then seal and finalize claims.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -608,7 +1144,9 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
           <div className="text-sm space-y-1">
             <div><span className="font-medium">Asset:</span> USDC</div>
-            <div><span className="font-medium">Prize Pool:</span> {poolDisplay}</div>
+            <div><span className="font-medium">Prizeable Pool:</span> {poolDisplay}</div>
+            <div><span className="font-medium">Global Reserve:</span> {reserveDisplay}</div>
+            <div><span className="font-medium">Final Prize Total:</span> {finalTotalDisplay}</div>
             <div>
               <span className="font-medium">Sales Closed:</span>{' '}
               <span className={salesClosed ? 'text-green-600' : 'text-yellow-600'}>
@@ -619,6 +1157,12 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
               <span className="font-medium">USDC Distribution:</span>{' '}
               <span className={usdcDistributionSet ? 'text-green-600' : 'text-yellow-600'}>
                 {String(Boolean(usdcDistributionSet))}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Final Amounts Ready:</span>{' '}
+              <span className={finalAmountsReady ? 'text-green-600' : 'text-yellow-600'}>
+                {String(Boolean(finalAmountsReady))}
               </span>
             </div>
             <div>
@@ -641,7 +1185,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             <Input
               value={distributionInput}
               onChange={(e) => setDistributionInput(e.target.value)}
-              placeholder="50,30,15,5"
+              placeholder={FIXED_PRIZE_DISTRIBUTION_INPUT}
             />
             <Button
               onClick={setPrizeDistribution}
@@ -651,9 +1195,86 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             </Button>
           </div>
 
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Default fixed pyramid: {FIXED_PRIZE_DISTRIBUTION_INPUT}
+          </div>
+
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            `Load Final Prizes` can be rerun before sealing. It overwrites every minted token for this tournament context, including prizes that now become `0`.
+          </div>
+
+          {payoutPreview && (
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="space-y-1 text-sm">
+                <div><span className="font-medium">Shared-rank preview:</span> {leaderboardEntries.length} ranked cartones</div>
+                <div><span className="font-medium">Tokens overwritten on load:</span> {candidateTokenIds.length}</div>
+                <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(payoutPreview.totalAssigned, 6)).toFixed(2)} USDC</div>
+                <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+              </div>
+
+              <div>
+                <div className="text-sm font-medium mb-1">Band reference:</div>
+                <div className="text-xs text-gray-600 space-y-0.5">
+                  {PRIZE_BANDS.map((band) => {
+                    const percentage = parsedDistribution[band.start - 1] ?? 0
+                    return (
+                      <div key={`band-${band.start}`}>
+                        {band.label} → {percentage}%
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-medium mb-1">Final payouts preview:</div>
+                <div className="max-h-56 overflow-y-auto text-xs text-gray-600 space-y-0.5">
+                  {payoutPreview.payouts.map((entry) => (
+                    <div key={`payout-${entry.tokenId.toString()}`}>
+                      #{entry.rank} — Token {entry.tokenId.toString()} · {Number(formatUnits(entry.amount, 6)).toFixed(2)} USDC
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={loadFinalPrizes}
+            disabled={
+              !isOwner
+              || !hasManagerRole
+              || !salesClosed
+              || !usdcDistributionSet
+              || Boolean(finalAmountsReady)
+              || Boolean(tournamentFinalized)
+              || !finalPrizePayload
+              || isBusy
+            }
+          >
+            {isBusy ? 'Saving...' : 'Load Final Prizes'}
+          </Button>
+
+          <Button
+            onClick={sealFinalPrizes}
+            disabled={
+              !isOwner
+              || !hasManagerRole
+              || !salesClosed
+              || !usdcDistributionSet
+              || Boolean(finalAmountsReady)
+              || Boolean(tournamentFinalized)
+              || (finalAmountTotal ?? 0n) === 0n
+              || isBusy
+            }
+          >
+            {isBusy ? 'Sealing...' : 'Seal Final Prizes'}
+          </Button>
+
           <Button
             onClick={finalizeTournament}
-            disabled={!isOwner || !hasManagerRole || !salesClosed || !usdcDistributionSet || Boolean(tournamentFinalized) || isBusy}
+            disabled={!isOwner || !hasManagerRole || !salesClosed || !usdcDistributionSet || !finalAmountsReady || Boolean(tournamentFinalized) || isBusy}
           >
             {isBusy ? 'Finalizing...' : 'Finalize Tournament'}
           </Button>

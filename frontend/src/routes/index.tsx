@@ -9,18 +9,12 @@ import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
+import { PRIZE_BANDS } from '../lib/prize-payout'
 import { Ticket } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
 })
-
-const POSITION_META = [
-  { label: '1° Lugar', icon: '🥇', position: 1 },
-  { label: '2° Lugar', icon: '🥈', position: 2 },
-  { label: '3° Lugar', icon: '🥉', position: 3 },
-  { label: '4° Lugar', icon: '4°',  position: 4 },
-] as const
 
 function HomePage() {
   const navigate = useNavigate()
@@ -40,8 +34,9 @@ function HomePage() {
   const { data: usdcPrice, isLoading: usdcPriceLoading } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
-    functionName: 'tokenPrices',
-    args: [CONTRACT_ADDRESSES.USDC],
+    functionName: 'tokenPricesByTournament',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n },
   })
 
   const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
@@ -121,13 +116,20 @@ function HomePage() {
     query: { enabled: tournamentId > 0n },
   })
 
+  const { data: usdcReservePool } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'getGlobalReserve',
+    args: [CONTRACT_ADDRESSES.USDC],
+  })
+
   const prizeContracts = useMemo(() => {
     if (tournamentId === 0n) return []
-    return POSITION_META.map((meta) => ({
+    return PRIZE_BANDS.map((band) => ({
       address: CONTRACT_ADDRESSES.TREASURY,
       abi: TREASURY_ABI,
       functionName: 'getUserPrizeAmount',
-      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(meta.position)],
+      args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(band.start)],
     }) as const)
   }, [tournamentId])
 
@@ -136,7 +138,7 @@ function HomePage() {
     query: { enabled: prizeContracts.length > 0 },
   })
 
-  const usdcPositionAmounts = POSITION_META.map((_, index) => {
+  const usdcBandAmounts = PRIZE_BANDS.map((_, index) => {
     const entry = prizeAmounts?.[index]
     return (entry?.result as bigint | undefined) ?? 0n
   })
@@ -149,7 +151,12 @@ function HomePage() {
   const buyCartonWithUsdc = () => {
     if (!usdcPriceValue) return
     void purchaseWrite.simulateAndSend(
-      { address: CONTRACT_ADDRESSES.CARTON, abi: CARTON_ABI, functionName: 'buyCartonWithToken', args: [CONTRACT_ADDRESSES.USDC] },
+      {
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'buyCartonWithToken',
+        args: [tournamentId, CONTRACT_ADDRESSES.USDC],
+      },
       {
         toastId: 'buy-carton-usdc',
         pendingMessage: 'Esperando confirmación de compra…',
@@ -204,6 +211,34 @@ function HomePage() {
     },
   })
 
+  const tokenTournamentContracts = useMemo(
+    () =>
+      (cartonsUser ?? []).map((tokenId) => ({
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'tokenTournamentId' as const,
+        args: [tokenId] as const,
+      })),
+    [cartonsUser],
+  )
+
+  const { data: tokenTournamentResults } = useReadContracts({
+    contracts: tokenTournamentContracts,
+    query: {
+      enabled: tokenTournamentContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const activeTournamentCartons = useMemo(() => {
+    if (!cartonsUser?.length || tournamentId === 0n) return []
+
+    return cartonsUser.filter(
+      (_, index) => ((tokenTournamentResults?.[index]?.result as bigint | undefined) ?? 0n) === tournamentId,
+    )
+  }, [cartonsUser, tokenTournamentResults, tournamentId])
+
   const { data: deadline } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -231,10 +266,14 @@ function HomePage() {
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
     : '—'
 
-  const cartonStatusContracts = useMemo(() => {
-    if (!cartonsUser?.length) return []
+  const usdcReserveDisplay = usdcReservePool !== undefined
+    ? `${Number(formatUnits(usdcReservePool, 6)).toFixed(2)} USDC`
+    : '—'
 
-    return cartonsUser.flatMap((tokenId) => [
+  const cartonStatusContracts = useMemo(() => {
+    if (!activeTournamentCartons.length) return []
+
+    return activeTournamentCartons.flatMap((tokenId) => [
       {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
@@ -248,7 +287,7 @@ function HomePage() {
         args: [tokenId],
       } as const,
     ])
-  }, [cartonsUser])
+  }, [activeTournamentCartons])
 
   const { data: cartonStatusResults } = useReadContracts({
     contracts: cartonStatusContracts,
@@ -260,18 +299,18 @@ function HomePage() {
   })
 
   const cartonEntries = useMemo(() => {
-    if (!cartonsUser?.length) return []
+    if (!activeTournamentCartons.length) return []
 
     const deadlineValue = deadline ? Number(deadline) : undefined
 
-    return cartonsUser.map((tokenId, index) => {
+    return activeTournamentCartons.map((tokenId, index) => {
       const gamesSubmitted = Boolean(cartonStatusResults?.[index * 2]?.result)
       const winnersSubmitted = hasWinnersPrediction(cartonStatusResults?.[index * 2 + 1]?.result)
       const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue })
 
       return { tokenId, status, gamesSubmitted, winnersSubmitted }
     })
-  }, [cartonsUser, cartonStatusResults, deadline])
+  }, [activeTournamentCartons, cartonStatusResults, deadline])
 
   const orderedCartonEntries = useMemo(() => {
     return [...cartonEntries].sort((a, b) => {
@@ -302,7 +341,7 @@ function HomePage() {
     if (!nextActionableCarton.winnersSubmitted) {
       return {
         title: `Carton #${nextActionableCarton.tokenId.toString()} casi listo`,
-        description: 'Ya enviaste los partidos. Solo falta elegir los 4 ganadores del torneo.',
+        description: 'Ya enviaste los partidos. Solo falta definir el top 4 del torneo.',
         cta: 'Continuar prediccion',
       }
     }
@@ -343,7 +382,7 @@ function HomePage() {
             className="text-xs font-medium uppercase tracking-widest"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Prize Pool
+            Pool premiable
           </p>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span
@@ -353,6 +392,12 @@ function HomePage() {
               {usdcPoolDisplay}
             </span>
           </div>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Reserva global onchain: {usdcReserveDisplay}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Se premia sobre el 95% de las ventas. El resto queda en reserva y remanentes.
+          </p>
         </section>
       )}
 
@@ -450,12 +495,12 @@ function HomePage() {
             >
               Mis Cartones
             </p>
-            {cartonsUser && cartonsUser.length > 0 && (
+            {activeTournamentCartons.length > 0 && (
               <span
                 className="text-xs font-mono px-1.5 py-0.5 rounded-full"
                 style={{ background: 'rgba(0,230,118,0.12)', color: 'var(--accent-green)' }}
               >
-                {cartonsUser.length}
+                {activeTournamentCartons.length}
               </span>
             )}
           </div>
@@ -493,14 +538,16 @@ function HomePage() {
               </p>
             </div>
           )}
-          {!cartonsUser || cartonsUser.length === 0 ? (
+          {activeTournamentCartons.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <Ticket className="w-8 h-8 opacity-30" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm font-medium" style={{ color: 'var(--text-disabled)' }}>
-                Sin cartones todavía
+                {cartonsUser && cartonsUser.length > 0 ? 'Sin cartones en el torneo activo' : 'Sin cartones todavía'}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
-                Comprá el primero para empezar a predecir
+                {cartonsUser && cartonsUser.length > 0
+                  ? 'Tus otros cartones pertenecen a otro torneo. Compra uno del torneo activo para predecir aquí.'
+                  : 'Comprá el primero para empezar a predecir'}
               </p>
             </div>
           ) : (
@@ -530,29 +577,29 @@ function HomePage() {
                 className="px-4 py-2.5 flex justify-between text-xs font-medium"
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
-                <span className="uppercase tracking-wider">Pool USDC</span>
+                <span className="uppercase tracking-wider">Bandas de premios</span>
                 <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
                   {usdcPoolDisplay}
                 </span>
               </div>
-              {POSITION_META.map((meta, idx) => (
+              {PRIZE_BANDS.map((band, idx) => (
                 <div
-                  key={`usdc-${meta.position}`}
+                  key={`usdc-${band.start}`}
                   className="px-4 py-2.5 flex items-center justify-between text-sm"
                   style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
                 >
                   <span className="flex items-center gap-2">
-                    <span>{meta.icon}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{meta.label}</span>
+                    <span>{band.icon}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{band.label}</span>
                   </span>
                   <span
                     style={{
                       fontFamily: 'var(--font-mono-custom)',
                       fontWeight: 600,
-                      color: meta.position === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
+                      color: band.start === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
                     }}
                   >
-                    {formatAssetValue(usdcPositionAmounts[idx])}
+                    {formatAssetValue(usdcBandAmounts[idx])}
                   </span>
                 </div>
               ))}

@@ -22,19 +22,20 @@ contract ERC20IntegrationTest is Test {
 
         // Deploy contracts
         carton = new Carton(owner, owner, owner);
-        predictions = new Predictions(address(carton));
-        treasury = new Treasury(owner, address(carton), address(predictions));
+        predictions = new Predictions(address(carton), TOURNAMENT_ID);
+        treasury = new Treasury(owner, address(carton), 500);
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Setup Carton
         carton.setTreasuryAddress(address(treasury));
         carton.setActiveTournament(TOURNAMENT_ID);
         carton.setAcceptedToken(address(usdc), true);
-        carton.setTokenPrice(address(usdc), 100 * 10 ** 6); // 100 USDC
+        carton.setTokenPrice(TOURNAMENT_ID, address(usdc), 100 * 10 ** 6); // 100 USDC
 
         // Setup Treasury roles
         treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), owner);
+        treasury.registerTournament(TOURNAMENT_ID, address(predictions));
 
         // Mint USDC to user1 for testing
         usdc.mint(user1, 1000 * 10 ** 6);
@@ -61,11 +62,14 @@ contract ERC20IntegrationTest is Test {
         usdc.approve(address(carton), price);
 
         // Buy carton with USDC
-        carton.buyCartonWithToken(address(usdc));
+        carton.buyCartonWithToken(TOURNAMENT_ID, address(usdc));
 
         uint256 treasuryBalanceAfter = treasury.getPrizePool(TOURNAMENT_ID, address(usdc));
 
-        assertEq(treasuryBalanceAfter - treasuryBalanceBefore, price, "Treasury should receive USDC");
+        assertEq(
+            treasuryBalanceAfter - treasuryBalanceBefore, 95 * 10 ** 6, "Treasury should receive the 95% prizeable pool"
+        );
+        assertEq(treasury.globalReserve(address(usdc)), 5 * 10 ** 6, "Treasury should track the 5% reserve");
         assertEq(carton.balanceOf(user1, 1), 1, "User should own token #1");
         assertEq(usdc.balanceOf(user1), 900 * 10 ** 6, "User should have 900 USDC left");
 
@@ -75,15 +79,18 @@ contract ERC20IntegrationTest is Test {
     function test_MultipleUsdcPurchasesAccumulateSinglePrizePool() public {
         vm.startPrank(user1);
         usdc.approve(address(carton), 100 * 10 ** 6);
-        carton.buyCartonWithToken(address(usdc));
+        carton.buyCartonWithToken(TOURNAMENT_ID, address(usdc));
         vm.stopPrank();
 
         vm.startPrank(address(3));
         usdc.mint(address(3), 1000 * 10 ** 6);
         usdc.approve(address(carton), 100 * 10 ** 6);
-        carton.buyCartonWithToken(address(usdc));
+        carton.buyCartonWithToken(TOURNAMENT_ID, address(usdc));
         vm.stopPrank();
 
-        assertEq(treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 200 * 10 ** 6, "USDC pool should have 200 USDC");
+        assertEq(
+            treasury.getPrizePool(TOURNAMENT_ID, address(usdc)), 190 * 10 ** 6, "USDC prize pool should have 190 USDC"
+        );
+        assertEq(treasury.globalReserve(address(usdc)), 10 * 10 ** 6, "USDC reserve should have 10 USDC");
     }
 }

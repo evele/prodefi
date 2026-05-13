@@ -1,6 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
+import {
+  getFixtureKickoffDayKey,
+  formatFixtureKickoffDate,
+  formatFixtureKickoffTime,
+  getFixtureLanguage,
+} from '../lib/fixture-time'
 import { teamsSiglaById, teamsById, teamsFlagById } from '../lib/teams'
 import type { Game, GroupData } from '../lib/types'
 import { calculateStandings, type StandingRow } from '../lib/standings'
@@ -19,17 +25,56 @@ function withPreviewStandings(rows: StandingRow[]): StandingRow[] {
   }))
 }
 
+function normalizeOfficialGameMeta(value: unknown): { id: number; set: boolean } | null {
+  if (Array.isArray(value)) {
+    const gameId = Number(value[0])
+    const isSet = Boolean(value[1])
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  if (typeof value === 'object' && value !== null && 'id' in value && 'set' in value) {
+    const gameId = Number((value as { id?: unknown }).id)
+    const isSet = Boolean((value as { set?: unknown }).set)
+    return Number.isFinite(gameId) ? { id: gameId, set: isSet } : null
+  }
+
+  return null
+}
+
+function normalizeGameResult(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) return null
+
+  const team1Goals = Number(value[0])
+  const team2Goals = Number(value[1])
+
+  return Number.isFinite(team1Goals) && Number.isFinite(team2Goals)
+    ? [team1Goals, team2Goals]
+    : null
+}
+
 type FixtureMatchProps = {
   game: Game
   officialResult?: [number, number]
   isSet: boolean
+  groupLabel?: string
+  showKickoffDate?: boolean
 }
 
-function FixtureMatch({ game, officialResult, isSet }: FixtureMatchProps) {
+function sortGamesByKickoff(a: Game, b: Game) {
+  if (!a.kickoffEt && !b.kickoffEt) return a.id - b.id
+  if (!a.kickoffEt) return 1
+  if (!b.kickoffEt) return -1
+  return a.kickoffEt.localeCompare(b.kickoffEt)
+}
+
+function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate = true }: FixtureMatchProps) {
+  const fixtureLanguage = getFixtureLanguage()
   const team1Name = teamsById[game.team1] ?? `#${game.team1}`
   const team2Name = teamsById[game.team2] ?? `#${game.team2}`
   const team1Short = teamsSiglaById[game.team1] ?? team1Name
   const team2Short = teamsSiglaById[game.team2] ?? team2Name
+  const kickoffDate = formatFixtureKickoffDate(game.kickoffEt, fixtureLanguage)
+  const kickoffTime = formatFixtureKickoffTime(game.kickoffEt, fixtureLanguage)
 
   return (
     <div
@@ -48,29 +93,67 @@ function FixtureMatch({ game, officialResult, isSet }: FixtureMatchProps) {
         </div>
 
       {/* Score display */}
-      <div className="flex items-center justify-center gap-3 w-20 shrink-0">
-        {isSet ? (
-          <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center gap-3 w-28 shrink-0 sm:w-36">
+        <div className="flex flex-col items-center text-center leading-tight">
+          {isSet ? (
+            <div className="flex items-center gap-2">
+              <span
+                className="text-lg font-bold font-mono"
+                style={{ color: 'var(--accent-green)' }}
+              >
+                {officialResult?.[0]}
+              </span>
+              <span className="text-xs opacity-30">—</span>
+              <span
+                className="text-lg font-bold font-mono"
+                style={{ color: 'var(--accent-green)' }}
+              >
+                {officialResult?.[1]}
+              </span>
+            </div>
+          ) : (
+            <>
+            {kickoffDate ? (
+              <>
+                {showKickoffDate && (
+                  <span className="text-[11px] font-medium uppercase tracking-wider opacity-70">
+                    {kickoffDate}
+                  </span>
+                )}
+                {kickoffTime && (
+                  <span
+                    className={showKickoffDate ? 'text-xs font-semibold' : 'text-[11px] font-medium uppercase tracking-wider opacity-70'}
+                    style={{ color: showKickoffDate ? 'var(--accent-gold)' : undefined }}
+                  >
+                    {kickoffTime}
+                  </span>
+                )}
+                {game.venue && (
+                  <span className="mt-1 text-[10px] opacity-50 max-w-32 sm:max-w-none">
+                    {game.venue}
+                  </span>
+                )}
+              </>
+            ) : (
+                <span className="text-xs font-medium uppercase tracking-widest opacity-30">
+                  vs
+                </span>
+              )}
+            </>
+          )}
+          {groupLabel && (
             <span
-              className="text-lg font-bold font-mono"
-              style={{ color: 'var(--accent-green)' }}
+              className="mt-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
+              style={{
+                color: 'var(--text-secondary)',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
             >
-              {officialResult?.[0]}
+              Grupo {groupLabel}
             </span>
-            <span className="text-xs opacity-30">—</span>
-            <span
-              className="text-lg font-bold font-mono"
-              style={{ color: 'var(--accent-green)' }}
-            >
-              {officialResult?.[1]}
-            </span>
-          </div>
-        ) : (
-          // TODO: Show kickoff time here once we have match schedule data.
-          <span className="text-xs font-medium uppercase tracking-widest opacity-30">
-            vs
-          </span>
-        )}
+          )}
+        </div>
       </div>
 
         {/* Team 2 */}
@@ -91,11 +174,28 @@ type FixturesViewProps = {
   groups: GroupData[]
 }
 
+type FixtureViewTab = 'group' | 'date' | 'standings'
+
+const FIXTURE_VIEW_STORAGE_KEY = 'fixture-view-tab'
+
 export function FixturesView({ groups }: FixturesViewProps) {
-  const [viewMode, setViewMode] = useState<'matches' | 'standings'>('matches')
+  const [activeTab, setActiveTab] = useState<FixtureViewTab>(() => {
+    if (typeof window === 'undefined') return 'group'
+
+    const stored = window.localStorage.getItem(FIXTURE_VIEW_STORAGE_KEY)
+    if (stored === 'group' || stored === 'date' || stored === 'standings') return stored
+    return 'group'
+  })
+  const fixtureLanguage = getFixtureLanguage()
   const allGames = useMemo(() => groups.flatMap((g) => g.games), [groups])
+
+  useEffect(() => {
+    window.localStorage.setItem(FIXTURE_VIEW_STORAGE_KEY, activeTab)
+  }, [activeTab])
+
+  type ContractReadResult = { status: 'success' | 'failure'; result?: unknown }
   
-  const { data: officialGamesData, isLoading } = useReadContracts({
+  const { data: rawOfficialGamesMetaData, isLoading: isLoadingGameMeta } = useReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
@@ -106,20 +206,98 @@ export function FixturesView({ groups }: FixturesViewProps) {
       refetchInterval: 30000,
     }
   })
+  const { data: rawOfficialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
+    contracts: allGames.map((g) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'getGameResults',
+      args: [g.id],
+    })),
+    query: {
+      refetchInterval: 30000,
+    }
+  })
+
+  const officialGamesMetaData = rawOfficialGamesMetaData as ContractReadResult[] | undefined
+  const officialGameResultsData = rawOfficialGameResultsData as ContractReadResult[] | undefined
 
   const officialResultsMap = useMemo(() => {
     const map = new Map<number, { result: [number, number]; set: boolean }>()
-    if (!officialGamesData) return map
+    if (!officialGamesMetaData) return map
     
-    officialGamesData.forEach((res, idx) => {
-      if (res.status === 'success' && res.result && Array.isArray(res.result)) {
-        // res.result is [id, [score1, score2], set]
-        const data = res.result as unknown as [number, [number, number], boolean]
-        map.set(allGames[idx].id, { result: [data[1][0], data[1][1]], set: data[2] })
-      }
+    officialGamesMetaData.forEach((res, idx) => {
+      if (res.status !== 'success') return
+
+      const meta = normalizeOfficialGameMeta(res.result)
+      const result = normalizeGameResult(officialGameResultsData?.[idx]?.status === 'success' ? officialGameResultsData[idx].result : undefined)
+
+      if (!meta || !result) return
+
+      map.set(allGames[idx].id, { result, set: meta.set })
     })
     return map
-  }, [officialGamesData, allGames])
+  }, [officialGameResultsData, officialGamesMetaData, allGames])
+
+  const enrichedMatches = useMemo(
+    () =>
+      groups.flatMap((group) =>
+        [...group.games].sort(sortGamesByKickoff).map((game) => {
+          const official = officialResultsMap.get(game.id)
+          return {
+            game,
+            groupId: group.groupId,
+            groupLabel: group.groupLabel,
+            officialResult: official?.result,
+            isSet: official?.set ?? false,
+          }
+        }),
+      ),
+    [groups, officialResultsMap],
+  )
+
+  const matchesByDate = useMemo(() => {
+    const buckets = new Map<string, { label: string; matches: typeof enrichedMatches }>()
+    const unscheduled: typeof enrichedMatches = []
+
+    for (const match of enrichedMatches) {
+      const key = getFixtureKickoffDayKey(match.game.kickoffEt, fixtureLanguage)
+      if (!key) {
+        unscheduled.push(match)
+        continue
+      }
+
+      const existing = buckets.get(key)
+      if (existing) {
+        existing.matches.push(match)
+        continue
+      }
+
+      buckets.set(key, {
+        label: formatFixtureKickoffDate(match.game.kickoffEt, fixtureLanguage) ?? key,
+        matches: [match],
+      })
+    }
+
+    const datedBuckets = Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, bucket]) => ({
+        key,
+        label: bucket.label,
+        matches: [...bucket.matches].sort((a, b) => sortGamesByKickoff(a.game, b.game)),
+      }))
+
+    if (unscheduled.length > 0) {
+      datedBuckets.push({
+        key: 'tbd',
+        label: fixtureLanguage === 'es' ? 'Sin fecha' : 'TBD',
+        matches: [...unscheduled].sort((a, b) => sortGamesByKickoff(a.game, b.game)),
+      })
+    }
+
+    return datedBuckets
+  }, [enrichedMatches, fixtureLanguage])
+
+  const isLoading = isLoadingGameMeta || isLoadingGameResults
 
   if (isLoading) {
     return (
@@ -140,37 +318,79 @@ export function FixturesView({ groups }: FixturesViewProps) {
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }}
         >
           <button
-            onClick={() => setViewMode('matches')}
+            onClick={() => setActiveTab('group')}
             className="px-4 py-1.5 text-sm font-medium rounded-md transition-all"
             style={{
-              background: viewMode === 'matches' ? 'var(--bg-card)' : 'transparent',
-              color: viewMode === 'matches' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: viewMode === 'matches' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+              background: activeTab === 'group' ? 'var(--bg-card)' : 'transparent',
+              color: activeTab === 'group' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              boxShadow: activeTab === 'group' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
             }}
           >
-            Partidos
+            Por grupo
           </button>
           <button
-            onClick={() => setViewMode('standings')}
+            onClick={() => setActiveTab('date')}
             className="px-4 py-1.5 text-sm font-medium rounded-md transition-all"
             style={{
-              background: viewMode === 'standings' ? 'var(--bg-card)' : 'transparent',
-              color: viewMode === 'standings' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: viewMode === 'standings' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+              background: activeTab === 'date' ? 'var(--bg-card)' : 'transparent',
+              color: activeTab === 'date' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              boxShadow: activeTab === 'date' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
             }}
           >
-            Posiciones
+            Por fecha
           </button>
+            <button
+              onClick={() => setActiveTab('standings')}
+              className="px-4 py-1.5 text-sm font-medium rounded-md transition-all"
+              style={{
+                background: activeTab === 'standings' ? 'var(--bg-card)' : 'transparent',
+                color: activeTab === 'standings' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                boxShadow: activeTab === 'standings' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+              }}
+            >
+              Posiciones
+            </button>
+          </div>
         </div>
-      </div>
 
-      {groups.map((group) => {
+      {activeTab === 'date'
+        ? matchesByDate.map((bucket) => (
+          <div
+            key={bucket.key}
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+          >
+            <div
+              className="px-4 py-2.5 flex items-center justify-between"
+              style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}
+            >
+              <span className="font-display text-base font-bold uppercase tracking-wider" style={{ color: 'var(--accent-green)' }}>
+                {bucket.label}
+              </span>
+            </div>
+
+            <div className="p-2">
+              {bucket.matches.map((match) => (
+                <FixtureMatch
+                  key={match.game.id}
+                  game={match.game}
+                  officialResult={match.officialResult}
+                  isSet={match.isSet}
+                  groupLabel={match.groupLabel}
+                  showKickoffDate={false}
+                />
+              ))}
+            </div>
+          </div>
+        ))
+        : groups.map((group) => {
         const teamIds = Array.from(new Set(group.games.flatMap(g => [g.team1, g.team2])))
         const standings = calculateStandings(group.games, officialResultsMap, teamIds)
         const hasOfficialStandings = standings.some((row) => row.played > 0)
         const displayStandings = import.meta.env.DEV && !hasOfficialStandings
           ? withPreviewStandings(standings)
           : standings
+        const scheduledGames = [...group.games].sort(sortGamesByKickoff)
 
         return (
           <div 
@@ -187,9 +407,9 @@ export function FixturesView({ groups }: FixturesViewProps) {
               </span>
             </div>
 
-            {viewMode === 'matches' ? (
+            {activeTab !== 'standings' ? (
               <div className="p-2">
-                {group.games.map((game) => {
+                {scheduledGames.map((game) => {
                   const official = officialResultsMap.get(game.id)
                   return (
                     <FixtureMatch 
@@ -197,6 +417,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
                       game={game} 
                       officialResult={official?.result}
                       isSet={official?.set ?? false}
+                      showKickoffDate
                     />
                   )
                 })}

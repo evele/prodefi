@@ -26,16 +26,18 @@ contract DeployScript is Script {
         Carton carton = new Carton(deployer, deployer, deployer);
         console.log("Carton deployed at:", address(carton));
 
-        // Deploy Predictions - ahora solo address del carton; teamsHash via setter si aplica
-        Predictions predictions = new Predictions(address(carton));
+        uint256 tournamentId = 1; // Primer torneo
+
+        // Deploy Predictions scoped to a single tournament; teamsHash via setter si aplica
+        Predictions predictions = new Predictions(address(carton), tournamentId);
         console.log("Predictions deployed at:", address(predictions));
         if (teamsHash != bytes32(0)) {
             predictions.setTeamsHash(teamsHash);
             console.log("Teams hash set:", uint256(teamsHash));
         }
 
-        // Deploy Treasury - necesita 3 parámetros: admin, carton, predictions
-        Treasury treasury = new Treasury(deployer, address(carton), address(predictions));
+        // Deploy Treasury - shared multi-tournament accounting layer
+        Treasury treasury = new Treasury(deployer, address(carton), 500);
         console.log("Treasury deployed at:", address(treasury));
 
         // Deploy MockUSDC (6 decimals like real USDC)
@@ -46,17 +48,16 @@ contract DeployScript is Script {
         // Configure USDC in Carton
         console.log("\nConfiguring USDC support...");
         carton.setAcceptedToken(address(usdc), true);
-        carton.setTokenPrice(address(usdc), 10 ** 6); // 1 USDC = 10^6
         console.log("USDC accepted with price: 1 USDC");
 
         // Setup inicial
         console.log("\nSetting up contracts...");
 
-        uint256 tournamentId = 1; // Primer torneo
-
         // Configure Treasury integration
         carton.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(tournamentId, address(predictions));
         carton.setActiveTournament(tournamentId);
+        carton.setTokenPrice(tournamentId, address(usdc), 10 ** 6); // 1 USDC = 10^6
         console.log("Carton configured with Treasury and active tournament:", tournamentId);
 
         // Grant FUND_DEPOSITOR_ROLE to Carton contract
@@ -67,14 +68,42 @@ contract DeployScript is Script {
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), deployer);
         console.log("Deployer granted TOURNAMENT_MANAGER_ROLE on Treasury");
 
-        // Configurar distribución de premios en Treasury para torneo 1 (50%, 30%, 15%, 5%)
-        uint8[] memory distribution = new uint8[](4);
-        distribution[0] = 50; // 1st place
-        distribution[1] = 30; // 2nd place
-        distribution[2] = 15; // 3rd place
-        distribution[3] = 5; // 4th place
-        treasury.setPrizeDistribution(tournamentId, address(usdc), distribution);
-        console.log("USDC prize distribution set for tournament 1: 50%, 30%, 15%, 5%");
+        // Prize distribution is now configured only after sales close.
+        // Keep the fixed 32-place vector here as the deployment-time reference for the admin flow.
+        uint8[] memory distribution = new uint8[](32);
+        distribution[0] = 22;
+        distribution[1] = 14;
+        distribution[2] = 9;
+        distribution[3] = 7;
+        distribution[4] = 4;
+        distribution[5] = 4;
+        distribution[6] = 4;
+        distribution[7] = 4;
+        distribution[8] = 2;
+        distribution[9] = 2;
+        distribution[10] = 2;
+        distribution[11] = 2;
+        distribution[12] = 2;
+        distribution[13] = 2;
+        distribution[14] = 2;
+        distribution[15] = 2;
+        distribution[16] = 1;
+        distribution[17] = 1;
+        distribution[18] = 1;
+        distribution[19] = 1;
+        distribution[20] = 1;
+        distribution[21] = 1;
+        distribution[22] = 1;
+        distribution[23] = 1;
+        distribution[24] = 1;
+        distribution[25] = 1;
+        distribution[26] = 1;
+        distribution[27] = 1;
+        distribution[28] = 1;
+        distribution[29] = 1;
+        distribution[30] = 1;
+        distribution[31] = 1;
+        console.log("Fixed payout places configured for admin reference:", distribution.length);
 
         // Mint USDC to deployer for testing purchases
         usdc.mint(deployer, 1000 * 10 ** 6);

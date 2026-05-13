@@ -15,6 +15,7 @@ interface ITreasury {
     function depositFromSales(uint256 tournamentId) external payable;
     function depositFromSalesERC20(uint256 tournamentId, address token, uint256 amount) external;
     function salesClosed(uint256 tournamentId) external view returns (bool);
+    function isTournamentRegistered(uint256 tournamentId) external view returns (bool);
 }
 
 /// @custom:security-contact inux2012@gmail.com
@@ -34,6 +35,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     error ZeroTreasuryAddress();
     error ZeroTournamentId();
     error TournamentSalesClosed();
+    error TournamentNotRegistered();
 
     bytes32 public constant URI_SETTER_ROLE = keccak256("URI_SETTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -43,7 +45,8 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     uint256 private _nextTokenId = 1;
 
     mapping(address => bool) public acceptedTokens;
-    mapping(address => uint256) public tokenPrices;
+    mapping(uint256 => mapping(address => uint256)) public tokenPricesByTournament;
+    mapping(uint256 => uint256) public tokenTournamentId;
 
     mapping(address => uint256[]) private userTokens;
 
@@ -79,7 +82,18 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function mint(address account, uint256 amount, bytes memory data) public onlyRole(MINTER_ROLE) returns (uint256) {
+        return mintForTournament(account, activeTournamentId, amount, data);
+    }
+
+    function mintForTournament(address account, uint256 tournamentId, uint256 amount, bytes memory data)
+        public
+        onlyRole(MINTER_ROLE)
+        returns (uint256)
+    {
+        _validateTournamentSelection(tournamentId);
+
         uint256 tokenId = _nextTokenId++;
+        tokenTournamentId[tokenId] = tournamentId;
         _mint(account, tokenId, amount, data);
         return tokenId;
     }
@@ -89,9 +103,20 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         onlyRole(MINTER_ROLE)
         returns (uint256[] memory)
     {
+        return mintBatchForTournament(to, activeTournamentId, amounts, data);
+    }
+
+    function mintBatchForTournament(address to, uint256 tournamentId, uint256[] memory amounts, bytes memory data)
+        public
+        onlyRole(MINTER_ROLE)
+        returns (uint256[] memory)
+    {
+        _validateTournamentSelection(tournamentId);
+
         uint256[] memory ids = new uint256[](amounts.length);
         for (uint256 i = 0; i < amounts.length; i++) {
             ids[i] = _nextTokenId++;
+            tokenTournamentId[ids[i]] = tournamentId;
         }
         _mintBatch(to, ids, amounts, data);
         return ids;
@@ -102,26 +127,37 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function buyCartonWithToken(address token) external whenNotPaused nonReentrant {
+        _buyCartonWithToken(activeTournamentId, token);
+    }
+
+    function buyCartonWithToken(uint256 tournamentId, address token) public whenNotPaused nonReentrant {
+        _buyCartonWithToken(tournamentId, token);
+    }
+
+    function _buyCartonWithToken(uint256 tournamentId, address token) internal {
+        _validateTournamentSelection(tournamentId);
+
         if (!acceptedTokens[token]) revert TokenNotAccepted();
-        if (tokenPrices[token] == 0) revert TokenPriceNotSet();
+        uint256 amount = tokenPricesByTournament[tournamentId][token];
+        if (amount == 0) revert TokenPriceNotSet();
+
         ITreasury _treasury = treasury;
-        uint256 _tournamentId = activeTournamentId;
-        if (address(_treasury) != address(0) && _tournamentId > 0 && _treasury.salesClosed(_tournamentId)) {
+        if (address(_treasury) != address(0) && _treasury.salesClosed(tournamentId)) {
             revert TournamentSalesClosed();
         }
 
-        uint256 amount = tokenPrices[token];
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 tokenId = _nextTokenId++;
+        tokenTournamentId[tokenId] = tournamentId;
         _mint(msg.sender, tokenId, 1, "");
 
         emit CartonPurchasedWithToken(msg.sender, tokenId, token, amount);
 
         // Auto-deposit to Treasury if configured
-        if (address(_treasury) != address(0) && _tournamentId > 0) {
-            IERC20(token).approve(address(_treasury), amount);
-            _treasury.depositFromSalesERC20(_tournamentId, token, amount);
+        if (address(_treasury) != address(0)) {
+            IERC20(token).forceApprove(address(_treasury), amount);
+            _treasury.depositFromSalesERC20(tournamentId, token, amount);
         }
     }
 
@@ -130,8 +166,17 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function setTokenPrice(address token, uint256 price) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        setTokenPrice(activeTournamentId, token, price);
+    }
+
+    function setTokenPrice(uint256 tournamentId, address token, uint256 price) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (tournamentId == 0) revert ZeroTournamentId();
         if (price == 0) revert PriceMustBePositive();
-        tokenPrices[token] = price;
+        tokenPricesByTournament[tournamentId][token] = price;
+    }
+
+    function tokenPrices(address token) external view returns (uint256) {
+        return tokenPricesByTournament[activeTournamentId][token];
     }
 
     function setCartonPrice(uint256 newPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -161,6 +206,15 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     function setActiveTournament(uint256 tournamentId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (tournamentId == 0) revert ZeroTournamentId();
         activeTournamentId = tournamentId;
+    }
+
+    function _validateTournamentSelection(uint256 tournamentId) internal view {
+        if (tournamentId == 0) revert ZeroTournamentId();
+
+        ITreasury _treasury = treasury;
+        if (address(_treasury) != address(0) && !_treasury.isTournamentRegistered(tournamentId)) {
+            revert TournamentNotRegistered();
+        }
     }
 
     function getUserTokens(address user) external view returns (uint256[] memory) {

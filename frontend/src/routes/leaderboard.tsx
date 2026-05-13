@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
 import { formatUnits } from 'viem'
+import { computeSharedRanks } from '../lib/prize-payout'
 
 export const Route = createFileRoute('/leaderboard')({
   component: LeaderboardPage,
@@ -39,6 +40,13 @@ function LeaderboardPage() {
     query: { refetchInterval: 10_000 },
   })
 
+  const { data: positionsUpdateInProgress } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsUpdateInProgress',
+    query: { refetchInterval: 10_000 },
+  })
+
   const { data: positionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -68,27 +76,53 @@ function LeaderboardPage() {
           version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
         }))
         .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
-        .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
-        .map((entry) => entry.tokenId),
+        .sort((a, b) => {
+          if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+          if (a.tokenId === b.tokenId) return 0
+          return a.tokenId < b.tokenId ? -1 : 1
+        }),
     [candidateTokenIds, positionData, positionVersionData, positionsVersion],
+  )
+
+  const { data: usedData } = useReadContracts({
+    contracts: candidateTokenIds.map((tokenId) => ({
+      address: CONTRACT_ADDRESSES.PREDICTIONS,
+      abi: PREDICTIONS_ABI,
+      functionName: 'used' as const,
+      args: [tokenId] as const,
+    })),
+    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+  })
+
+  const usedTokenIds = useMemo(
+    () => candidateTokenIds.filter((_, i) => Boolean(usedData?.[i]?.result)),
+    [candidateTokenIds, usedData],
   )
 
   const pointsContracts = useMemo(
     () =>
-      positionsArray.map((tokenId) => ({
+      usedTokenIds.map((tokenId) => ({
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'calculateTotalPoints' as const,
         args: [tokenId] as const,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(',')],
+    [usedTokenIds.map((tokenId) => tokenId.toString()).join(',')],
   )
 
   const { data: pointsData } = useReadContracts({
     contracts: pointsContracts,
     query: { enabled: pointsContracts.length > 0, refetchInterval: 10_000 },
   })
+
+  const pointsByTokenId = useMemo(() => {
+    const map = new Map<string, bigint>()
+    usedTokenIds.forEach((tokenId, i) => {
+      map.set(tokenId.toString(), (pointsData?.[i]?.result as bigint | undefined) ?? 0n)
+    })
+    return map
+  }, [pointsData, usedTokenIds])
 
   const { data: userTokensRaw } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -124,14 +158,14 @@ function LeaderboardPage() {
 
   const usdcPrizeContracts = useMemo(
     () =>
-      positionsArray.map((_, i) => ({
+      positionsArray.map(({ tokenId }) => ({
         address: CONTRACT_ADDRESSES.TREASURY,
         abi: TREASURY_ABI,
-        functionName: 'getUserPrizeAmount' as const,
-        args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(i + 1)] as const,
+        functionName: 'getClaimablePrizeAmount' as const,
+        args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] as const,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(','), tournamentId],
+    [positionsArray.map((entry) => entry.tokenId.toString()).join(','), tournamentId],
   )
 
   const { data: usdcPrizesData } = useReadContracts({
@@ -139,17 +173,41 @@ function LeaderboardPage() {
     query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  const leaderboardRows = useMemo(
+  const finalLeaderboardRows = useMemo(
     () =>
-      positionsArray.map((tokenId, i) => ({
-        rank: i + 1,
+      positionsArray.map(({ tokenId, rank }, i) => ({
+        rank: Number(rank),
         tokenId,
-        points: (pointsData?.[i]?.result as bigint | undefined) ?? 0n,
+        points: pointsByTokenId.get(tokenId.toString()) ?? 0n,
         usdcPrize: tournamentFinalized ? ((usdcPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
         isYours: userTokenSet.has(tokenId.toString()),
       })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [positionsArray.join(','), pointsData, usdcPrizesData, userTokenSet, tournamentFinalized],
+    [pointsByTokenId, positionsArray, tournamentFinalized, usdcPrizesData, userTokenSet],
+  )
+
+  const provisionalLeaderboardRows = useMemo(() => {
+    const sortedEntries = usedTokenIds
+      .map((tokenId) => ({ tokenId, points: pointsByTokenId.get(tokenId.toString()) ?? 0n }))
+      .sort((a, b) => {
+        if (a.points !== b.points) return a.points > b.points ? -1 : 1
+        if (a.tokenId === b.tokenId) return 0
+        return a.tokenId < b.tokenId ? -1 : 1
+      })
+
+    return computeSharedRanks(sortedEntries).map((entry) => ({
+      rank: entry.rank,
+      tokenId: entry.tokenId,
+      points: entry.points,
+      usdcPrize: undefined,
+      isYours: userTokenSet.has(entry.tokenId.toString()),
+    }))
+  }, [pointsByTokenId, usedTokenIds, userTokenSet])
+
+  const isFinalLeaderboard = positionsArray.length > 0 && !positionsUpdateInProgress
+
+  const leaderboardRows = useMemo(
+    () => (isFinalLeaderboard ? finalLeaderboardRows : provisionalLeaderboardRows),
+    [finalLeaderboardRows, isFinalLeaderboard, provisionalLeaderboardRows],
   )
 
   const yourBestRank = useMemo(() => {
@@ -172,15 +230,15 @@ function LeaderboardPage() {
   }
 
   const statCards = [
-    {
-      label: 'Jugadores',
-      value: positionsArray.length > 0 ? String(positionsArray.length) : '—',
-    },
+      {
+        label: 'Jugadores',
+        value: leaderboardRows.length > 0 ? String(leaderboardRows.length) : '—',
+      },
     {
       label: 'Pool USDC',
       value: usdcPool !== undefined ? `${Number(formatUnits(usdcPool, 6)).toFixed(2)}` : '—',
       unit: 'USDC',
-      sub: tournamentFinalized ? 'Finalizado' : 'En vivo',
+      sub: tournamentFinalized ? 'Finalizado' : isFinalLeaderboard ? 'Casi final' : 'Parcial',
     },
     {
       label: 'Tu mejor puesto',
@@ -198,9 +256,20 @@ function LeaderboardPage() {
           Clasificación
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-          Ranking basado en precisión de predicciones
+          {isFinalLeaderboard
+            ? 'Tabla final basada en los puestos publicados onchain'
+            : 'Tabla provisional calculada en frontend con los resultados cargados hasta ahora'}
         </p>
       </div>
+
+      {!isFinalLeaderboard && leaderboardRows.length > 0 && (
+        <div
+          className="rounded-lg px-4 py-3 text-sm"
+          style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.18)', color: 'rgb(125, 211, 252)' }}
+        >
+          Clasificación provisional: se ordena solo por puntos acumulados hasta ahora. Si hay empate, el puesto se comparte.
+        </div>
+      )}
 
       {/* ─── Stats cards ─── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -246,13 +315,15 @@ function LeaderboardPage() {
           <div className="text-right">USDC</div>
         </div>
 
-        {positionsArray.length === 0 ? (
+        {leaderboardRows.length === 0 ? (
           <div className="py-16 text-center" style={{ background: 'var(--bg-card)' }}>
             <p className="font-display text-xl font-bold uppercase" style={{ color: 'var(--text-disabled)' }}>
               Sin clasificación aún
             </p>
             <p className="text-sm mt-2" style={{ color: 'var(--text-disabled)' }}>
-              El admin publicará los resultados al finalizar el torneo.
+              {usedTokenIds.length === 0
+                ? 'Todavía no hay cartones con predicciones enviadas.'
+                : 'Aún no hay puntos para mostrar o falta publicar más resultados.'}
             </p>
           </div>
         ) : (

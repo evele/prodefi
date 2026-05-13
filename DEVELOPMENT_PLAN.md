@@ -3,26 +3,26 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For permanent technical information about the project, see CLAUDE.md.
 
-*Last updated: May 7, 2026*
+*Last updated: May 12, 2026*
 
 ---
 
 ## Current Status
 
-### Smart Contracts: COMPLETE (127 tests passing)
+### Smart Contracts: COMPLETE (151 tests passing)
 
 | Contract | Tests | Status |
 |---|---|---|
-| Carton.sol (ERC1155) | 35 | Complete - USDC-only purchase flow, Treasury auto-deposit |
-| Treasury.sol | 52 | Complete - prize pools, tournament lifecycle, claims |
-| Predictions.sol | 14 | Complete - game/winner predictions, points, positions |
+| Carton.sol (ERC1155) | 40 | Complete - tournament-aware mint/purchase flows, Treasury auto-deposit |
+| Treasury.sol | 57 | Complete - tournament lifecycle, claims, global reserve, tournament engines |
+| Predictions.sol | 48 | Complete - game/winner predictions, points, positions, tournament-scoped engine |
 | ERC20Integration | 3 | Complete - end-to-end USDC purchase flow |
 | Integration | 3 | Complete - full workflow, deadline enforcement |
 | ~~Counter (boilerplate)~~ | ~~2~~ | ~~Deleted (Feb 14)~~ |
 
 **Deploy script**: Complete with full Treasury integration, role configuration, MockUSDC deployment.
 
-### Frontend: ~85% Complete (MVP flow complete)
+### Frontend: ~90% Complete (MVP flow complete)
 
 | Feature | Route | Status |
 |---|---|---|
@@ -35,6 +35,7 @@ For permanent technical information about the project, see CLAUDE.md.
 | View submitted predictions | `/predictions` | Done |
 | Leaderboard | `/leaderboard` | Done — real on-chain data |
 | Claim prizes | `/predictions` | Done — ClaimSection per carton |
+| Official fixture schedule + grouping modes | `/fixtures` | Done |
 | Admin: set results | `/admin/dev` | Done |
 | Admin: set official winners | `/admin/dev` | Done |
 | Admin: set positions | `/admin/dev` | Done |
@@ -56,6 +57,26 @@ All critical bugs fixed. All dead code cleaned up:
 - No testnet/mainnet deployment config exists (everything targets Anvil localhost)
 - Leaderboard no longer depends on `getPositions()` storage array; frontend reconstructs rankings from `Carton.nextTokenId()` + `Predictions.tokenPositions(tokenId)` and filters stale entries with `positionsVersion` / `tokenPositionsVersion`
 - Alternative considered for future: use `PositionsUpdated` logs as the leaderboard source, optionally storing a `lastPositionsBlock` pointer to query a narrow block range instead of scanning long history
+- Frontend still assumes a single active `Predictions` address in `.env`; this is now intentional product scope, while onchain contracts already support a shared multi-tournament architecture underneath
+
+### Multi-Tournament Refactor Status (May 2026)
+
+Completed in code and tests:
+
+- `Treasury` now resolves one competition engine per tournament instead of using a single global `Predictions` reference
+- `Treasury` claims now validate `Carton.tokenTournamentId(tokenId)` directly
+- retained reserve accounting moved to shared `globalReserve[asset]`
+- `Carton` core flows now support explicit `tournamentId` for mint/purchase
+- `Predictions` is now tournament-scoped with immutable `tournamentId`
+- full contract suite passes with the new architecture (`151` tests)
+
+Product/frontend scope kept intentionally narrow for now:
+
+- one active `Predictions` address in frontend `.env`
+- one active tournament UX at a time
+- historical claims use the token's real tournament context, even if predictions UI stays bound to the active engine
+
+Implementation notes for the refactor are tracked in `refactormt.md`.
 
 ### Scoring Follow-up (May 2026)
 
@@ -92,6 +113,7 @@ Next implementation follow-up:
 1. Reflect the shared-position rule in code and admin/final-ranking flow
 2. Ensure prize-claim logic supports shared ranking blocks like `1, 2, 2, 4`
 3. Replace the old default payout assumptions with the fixed 32-place pyramid
+4. Replace one-shot `setPositions(...)` admin usage with a batched leaderboard publication flow for large fields
 
 ### Recently Completed: USDC-Only Cleanup (Apr 2026)
 
@@ -322,6 +344,39 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 
 Estado: **Pendiente de investigación dedicada — requiere foco técnico específico antes de tomar decisión**
 
+### Next Session Plan: Smart Accounts + Social Login
+
+Goal for the next session:
+
+- evaluate whether ProDefi should move toward a smart-account-first onboarding flow with social login and sponsored gas
+
+Tomorrow's priorities:
+
+1. Define the desired product shape before choosing a provider
+   - social login only vs social + email + passkeys
+   - invisible embedded wallet vs visible smart account UX
+   - whether the user should ever need a traditional seed phrase during onboarding
+2. Compare concrete stacks
+   - start with options like `Alchemy Account Kit`, `ZeroDev`, `Biconomy`, `Privy`, `Dynamic`, `Web3Auth`, and Safe-based flows
+   - document which ones support both smart accounts and social login cleanly
+3. Map the exact ProDefi flows that would benefit from sponsorship
+   - `submitPredictionAndWinners`
+   - `claimPrize`
+   - `buyCartonWithToken`
+   - possible USDC approve replacement paths (`permit`, session keys, or bundling)
+4. Check integration impact on the current frontend stack
+   - what stays from `wagmi` / `RainbowKit`
+   - what would need replacing for auth, account state, and transaction execution
+5. Decide what the first implementation spike should be
+   - likely target: login + smart account creation + one sponsored action on localhost/dev
+
+Key evaluation questions:
+
+- Can we get social login + smart accounts without making the wallet model confusing?
+- Can the chosen stack sponsor gas while keeping the current contract model untouched?
+- Is there a realistic path to remove the explicit USDC `approve` friction from the happy path?
+- Which provider gives the cleanest UX in Spanish first, with an easy English expansion later?
+
 ### Post-MVP (Nice to have)
 
 - ERC20 allowlist per tournament
@@ -339,6 +394,14 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - Prize distribution is intended to be set after sales close, when the final pool is known. Distribution may sum to less than 100% to leave room for development, donation, jackpot, or other reserves.
 - Results can be set onchain as matches are played. Provisional rankings can be computed offchain for display, while final positions are set onchain once and become the source of truth for prize claims.
 - Deferred integrity improvements: challenge window before finalization, batched final-position verification, and `resultsHash`/`leaderboardHash` commitments for the offchain ranking calculation.
+
+### Deferred Architecture Follow-up: Shared Treasury + Tournament-Scoped Predictions
+
+- Keep `Treasury` as the shared multi-tournament accounting layer keyed by `tournamentId`.
+- Treat each `Predictions` deployment as one tournament instance instead of making `Predictions` fully multi-tournament.
+- Future architecture step: let `Treasury` resolve the correct `Predictions` contract per `tournamentId` instead of relying on a single global `predictionsContract` reference.
+- `Carton` token metadata should remain tournament-aware so admin flows and claims can validate the tournament context cheaply.
+- This is intentionally deferred while the current work focuses on batched leaderboard publication for the active tournament model.
 
 ---
 
@@ -377,6 +440,8 @@ Estado: **Pendiente de investigación dedicada — requiere foco técnico espec�
 - **Apr 15, 2026**: USDC-only cleanup completed. ETH purchase disabled onchain, deploy/product flow aligned to USDC-only, and product-facing prize/claim/admin UX updated while keeping native balance visible for gas awareness.
 - **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
 - **Apr 15, 2026**: Predictions UX iteration. Added combined submit path, restored incomplete-match submit blocking, reset drafts on carton change/success, unified submitted predictions into the same panels, and improved read-only legibility for already-sent values.
+- **May 12, 2026**: Core multi-tournament refactor completed. `Treasury` now resolves tournament-scoped competition engines, uses shared `globalReserve`, and validates claims by `tokenTournamentId`. `Carton` and `Predictions` were updated to explicit/tournament-scoped flows; full contract suite now passes with 151 tests.
+- **May 12, 2026**: Fixture UX upgraded. Added official FIFA group-stage schedule data, timezone-aware kickoff conversion, cleaner prediction-match metadata layout, and 3 main fixture tabs (`Por grupo`, `Por fecha`, `Posiciones`) with `localStorage` persistence.
 
 ## Related Documents
 
