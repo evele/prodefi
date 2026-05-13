@@ -16,7 +16,10 @@ contract CartonTest is BaseTest {
         USDC = new MockERC20("USDC", "USDC", 6);
     }
 
-    function _deployTreasuryAndRegister(uint256 tournamentId, address engine) internal returns (Treasury deployedTreasury) {
+    function _deployTreasuryAndRegister(uint256 tournamentId, address engine)
+        internal
+        returns (Treasury deployedTreasury)
+    {
         deployedTreasury = new Treasury(admin, address(carton), 500);
 
         vm.startPrank(admin);
