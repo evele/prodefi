@@ -257,3 +257,36 @@ Add/replace tests for:
 - Regenerated frontend ABI artifacts from the refactored contracts.
 - Verification:
   - `npm run build` passes after frontend integration changes
+
+### 2026-05-12 - Official Fixture Schedule Added
+
+- Pulled official FIFA World Cup 2026 group-stage schedule data from FIFA content endpoints.
+- Added `frontend/src/lib/worldcup2026-group-schedule.json` with official group-stage kickoff times and venues.
+- Added `frontend/src/lib/fixture-time.ts` to convert/display fixture kickoff times by language:
+  - `es` -> Buenos Aires, Argentina (`GMT-3`)
+  - `en` -> US Eastern Time (`ET`)
+- Merged schedule metadata into local `Game` objects without changing existing `gameId` generation.
+- Updated `FixturesView` to:
+  - show official day and kickoff time when a match has no result yet
+  - show venue for upcoming matches
+  - sort displayed matches inside each group by official kickoff time
+- Added a fixture-page note driven by the active language/timezone presentation.
+- Extended the same fixture time conversion into `predictions`:
+  - group-stage matches are now shown in kickoff order inside each group
+  - match cards now show date, converted kickoff time, and venue above the score inputs
+- Verification:
+  - `npm run build` passes after schedule integration
+
+### 2026-05-12 - Fixture Grouping Modes
+
+- Replaced the old double-tab layout with 3 main fixture tabs:
+  - `Por grupo`
+  - `Por fecha`
+  - `Posiciones`
+- Persisted the selected fixture tab in `localStorage` so the view survives reloads.
+- `Por fecha` reuses existing official kickoff data and groups matches by local display day.
+- Date buckets render matches with subtle `Grupo X` badges so group context is preserved.
+- Added a stable day-key helper in `fixture-time.ts` for date bucketing.
+- Updated frontend copy from `Fixtures` to `Fixture` in the page header and navbar.
+- Verification:
+  - `npm run build` passes after fixture grouping changes

@@ -11,6 +11,13 @@ type GroupMatchesProps = {
 }
 
 export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange, pointsByGameId }: GroupMatchesProps) {
+  const scheduledGames = [...games].sort((a, b) => {
+    if (!a.kickoffEt && !b.kickoffEt) return a.id - b.id
+    if (!a.kickoffEt) return 1
+    if (!b.kickoffEt) return -1
+    return a.kickoffEt.localeCompare(b.kickoffEt)
+  })
+
   return (
     <div
       className="rounded-xl px-3 py-3 sm:px-4"
@@ -28,7 +35,7 @@ export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance =
         </span>
       </div>
       <div>
-        {games.map((game) => (
+        {scheduledGames.map((game) => (
           <Match
             key={game.id}
             game={game}

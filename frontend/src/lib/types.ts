@@ -13,6 +13,8 @@ export type Game = {
   team2: number
   result: [number | null, number | null]
   set: boolean
+  kickoffEt?: string
+  venue?: string
 }
 
 export type GroupData = {

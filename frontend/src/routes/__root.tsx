@@ -51,7 +51,7 @@ function RootLayout() {
                 Inicio
               </Link>
               <Link to="/fixtures" className={navLinkClass}>
-                Fixtures
+                Fixture
               </Link>
               <Link
                 to="/predictions"
@@ -112,7 +112,7 @@ function RootLayout() {
           activeProps={{ style: { color: 'var(--accent-green)' } }}
         >
           <Calendar size={20} strokeWidth={1.75} />
-          <span>Fixtures</span>
+          <span>Fixture</span>
         </Link>
         <Link
           to="/predictions"

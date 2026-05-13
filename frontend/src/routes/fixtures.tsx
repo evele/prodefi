@@ -15,14 +15,14 @@ function FixturesPage() {
       {/* ─── Page header ─── */}
       <div>
         <h1 className="font-display text-3xl font-black uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>
-          Fixtures
+          Fixture
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
           Resultados oficiales del torneo
         </p>
       </div>
 
-      {/* ─── Fixtures ─── */}
+      {/* ─── Fixture ─── */}
       <FixturesView groups={groups} />
     </div>
   )
