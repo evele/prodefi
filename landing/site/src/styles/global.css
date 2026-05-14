@@ -1321,16 +1321,6 @@ input {
     align-items: start;
   }
 
-  .prize-grid {
-    grid-template-columns: 1.2fr 0.8fr 0.8fr;
-    margin-top: 3.8rem;
-  }
-
-  .prize-card {
-    min-height: 23.5rem;
-    padding: 2rem 1.8rem;
-  }
-
   .rules-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 3rem;
@@ -1398,5 +1388,15 @@ input {
 
   .prizes-headline {
     display: flex;
+  }
+
+  .prize-grid {
+    grid-template-columns: 1.2fr 0.8fr 0.8fr;
+    margin-top: 3.8rem;
+  }
+
+  .prize-card {
+    min-height: 23.5rem;
+    padding: 2rem 1.8rem;
   }
 }

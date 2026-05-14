@@ -20,6 +20,10 @@
   - `npm run dev` — start Vite dev server.
   - `npm run build` — type-check and build.
   - `npm run lint` — ESLint checks.
+- Landing deploy (from repo root)
+  - `firebase use prodefi` — select Firebase project `prodefi-f2237`.
+  - `firebase deploy --only hosting` — build and publish `landing/site/dist` via Firebase Hosting.
+  - `firebase deploy --only hosting,functions` — also deploy the waitlist function when backend changes are included.
 
 ## Coding Style & Naming Conventions
 - Solidity: run `forge fmt`; 4-space indents; contracts and files in `PascalCase.sol`; tests in `test/Foo.t.sol`.

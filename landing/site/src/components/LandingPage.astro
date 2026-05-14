@@ -1,4 +1,5 @@
 ---
+import { Image } from 'astro:assets'
 import worldCupPoster from '../images/poster-mundial-fifa-2026.webp'
 import SiteFooter from './SiteFooter.astro'
 import SiteHeader from './SiteHeader.astro'
@@ -61,11 +62,18 @@ const languageLinks = [
 
       <div class="hero-visual">
         <div class="hero-card">
-          <img
+          <Image
             class="hero-card__poster"
-            src={worldCupPoster.src}
+            src={worldCupPoster}
             alt={content.hero.posterAlt}
+            width={960}
+            height={1200}
+            layout="constrained"
+            fit="cover"
+            widths={[360, 530, 720, 960]}
+            sizes="(max-width: 767px) 88vw, (max-width: 1199px) 42vw, 530px"
             loading="eager"
+            fetchpriority="high"
             decoding="async"
           />
           <div class="hero-card__grain"></div>
