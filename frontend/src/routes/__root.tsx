@@ -1,7 +1,7 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 /* import { TanStsackRouterDevtools } from '@tanstack/router-devtools' */
 import { useUserBalance } from '../hooks/useBalance'
-import { Home, Target, Trophy, Settings, Calendar } from 'lucide-react'
+import { Home, Target, Trophy, Calendar } from 'lucide-react'
 import { WalletButton } from '../components/WalletButton'
 
 function RootLayout() {
@@ -58,16 +58,11 @@ function RootLayout() {
                 search={{ carton: undefined }}
                 className={navLinkClass}
               >
-                Predecir
+                Predicciones
               </Link>
               <Link to="/leaderboard" className={navLinkClass}>
                 Tabla
               </Link>
-              {import.meta.env.DEV && (
-                <Link to="/admin/dev" className={navLinkClass}>
-                  Admin
-                </Link>
-              )}
             </nav>
             <WalletButton />
           </div>
@@ -122,7 +117,7 @@ function RootLayout() {
           activeProps={{ style: { color: 'var(--accent-green)' } }}
         >
           <Target size={20} strokeWidth={1.75} />
-          <span>Predecir</span>
+          <span>Predicciones</span>
         </Link>
         <Link
           to="/leaderboard"
@@ -133,17 +128,6 @@ function RootLayout() {
           <Trophy size={20} strokeWidth={1.75} />
           <span>Tabla</span>
         </Link>
-        {import.meta.env.DEV && (
-          <Link
-            to="/admin/dev"
-            className="flex-1 flex flex-col items-center justify-center py-3 gap-0.5 text-[10px] font-medium transition-colors"
-            style={{ color: 'var(--text-secondary)' }}
-            activeProps={{ style: { color: 'var(--accent-green)' } }}
-          >
-            <Settings size={20} strokeWidth={1.75} />
-            <span>Admin</span>
-          </Link>
-        )}
       </nav>
 
       {/*<TanStackRouterDevtools />*/} 

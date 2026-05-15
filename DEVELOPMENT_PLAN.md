@@ -1,7 +1,7 @@
 # Development Plan
 
 **PURPOSE**: Project planning, task organization, and development roadmap.
-For permanent technical information about the project, see CLAUDE.md.
+For project overview and stable architecture notes, see README.md.
 
 *Last updated: May 12, 2026*
 
@@ -9,13 +9,13 @@ For permanent technical information about the project, see CLAUDE.md.
 
 ## Current Status
 
-### Smart Contracts: COMPLETE (151 tests passing)
+### Smart Contracts: COMPLETE (158 tests passing)
 
 | Contract | Tests | Status |
 |---|---|---|
 | Carton.sol (ERC1155) | 40 | Complete - tournament-aware mint/purchase flows, Treasury auto-deposit |
 | Treasury.sol | 57 | Complete - tournament lifecycle, claims, global reserve, tournament engines |
-| Predictions.sol | 48 | Complete - game/winner predictions, points, positions, tournament-scoped engine |
+| Predictions.sol | 55 | Complete - game/winner predictions, points, positions, tournament-scoped engine |
 | ERC20Integration | 3 | Complete - end-to-end USDC purchase flow |
 | Integration | 3 | Complete - full workflow, deadline enforcement |
 | ~~Counter (boilerplate)~~ | ~~2~~ | ~~Deleted (Feb 14)~~ |
@@ -68,7 +68,7 @@ Completed in code and tests:
 - retained reserve accounting moved to shared `globalReserve[asset]`
 - `Carton` core flows now support explicit `tournamentId` for mint/purchase
 - `Predictions` is now tournament-scoped with immutable `tournamentId`
-- full contract suite passes with the new architecture (`151` tests)
+- full contract suite passes with the new architecture (`158` tests)
 
 Product/frontend scope kept intentionally narrow for now:
 
@@ -76,7 +76,7 @@ Product/frontend scope kept intentionally narrow for now:
 - one active tournament UX at a time
 - historical claims use the token's real tournament context, even if predictions UI stays bound to the active engine
 
-Implementation notes for the refactor are tracked in `refactormt.md`.
+Implementation notes for the refactor are tracked in `docs/plans/refactormt.md`.
 
 ### Scoring Follow-up (May 2026)
 
@@ -100,7 +100,7 @@ Completed in code and tests:
   - total points when official winners exist but a carton never submitted winner picks
 - `/reglas` in `landing/site` now reflects the current scoring definition
 
-Payout / tie product decision locked (see `PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
+Payout / tie product decision locked (see `docs/plans/PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
 
 1. Final ranking is ordered only by total points.
 2. If two or more cartones tie on points, they share the position using standard competition ranking (`1, 2, 2, 4`).
@@ -409,6 +409,11 @@ Key evaluation questions:
 
 ### Post-MVP (Nice to have)
 
+- GitHub Actions CI/CD for root contracts + landing deploy
+  - run `forge test` in CI on PRs and before any deploy job
+  - on merge/push to `main`, deploy Firebase hosting only if Foundry tests pass first
+  - define required secrets/credentials for Firebase deploy in GitHub Actions
+  - confirm whether the deploy target should be only `landing/site` or also functions when backend changes land
 - ERC20 allowlist per tournament
 - `totalClaimed` telemetry + `remainingPool` view
 - Admin remainder withdrawal (0-10% after close)
@@ -464,17 +469,17 @@ Key evaluation questions:
 - **Oct 14, 2025**: Tournament lifecycle (`closeTournament` + snapshot), 106 tests
 - **Oct 15, 2025**: MockERC20, deploy automation, frontend multi-asset UI
 - **Feb 9, 2026**: Fixed 2 stale tests (team ID 33->49), identified contract bugs, full project review
-- **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
+- **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, `docs/archive/DEAD_CODE_REVIEW.md` creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 - **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
 - **Apr 15, 2026**: USDC-only cleanup completed. ETH purchase disabled onchain, deploy/product flow aligned to USDC-only, and product-facing prize/claim/admin UX updated while keeping native balance visible for gas awareness.
 - **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
 - **Apr 15, 2026**: Predictions UX iteration. Added combined submit path, restored incomplete-match submit blocking, reset drafts on carton change/success, unified submitted predictions into the same panels, and improved read-only legibility for already-sent values.
-- **May 12, 2026**: Core multi-tournament refactor completed. `Treasury` now resolves tournament-scoped competition engines, uses shared `globalReserve`, and validates claims by `tokenTournamentId`. `Carton` and `Predictions` were updated to explicit/tournament-scoped flows; full contract suite now passes with 151 tests.
+- **May 12, 2026**: Core multi-tournament refactor completed. `Treasury` now resolves tournament-scoped competition engines, uses shared `globalReserve`, and validates claims by `tokenTournamentId`. `Carton` and `Predictions` were updated to explicit/tournament-scoped flows; full contract suite now passes with 158 tests.
 - **May 12, 2026**: Fixture UX upgraded. Added official FIFA group-stage schedule data, timezone-aware kickoff conversion, cleaner prediction-match metadata layout, and 3 main fixture tabs (`Por grupo`, `Por fecha`, `Posiciones`) with `localStorage` persistence.
 
 ## Related Documents
 
-- See CLAUDE.md for persistent project knowledge and architecture.
+- See README.md for project overview, architecture, and doc map.
 - See AGENTS.md for contributor workflow, commands, and conventions.
 - See `knowledge/openfort.md` as the canonical reference before changing the Openfort integration.

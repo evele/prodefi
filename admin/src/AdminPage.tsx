@@ -1,16 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useAccount, useReadContract, useReadContracts } from 'wagmi'
-import { formatUnits } from 'viem'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Input } from '../components/ui/input'
-import { Button } from '../components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
-import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
+import { useAccount, useReadContract, useReadContracts } from './lib/wallet'
+import { formatUnits, type Address } from 'viem'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
+import { Input } from './components/ui/input'
+import { Button } from './components/ui/button'
+import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI } from '../../frontend/src/lib/contracts'
 import { toast } from 'sonner'
-import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
-import { teams2026Config } from '../lib/teams2026.config'
-import { buildAllGroupGames } from '../lib/games'
-import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { computeTeamsHash, teams2026, teamsById } from '../../frontend/src/lib/teams'
+import { teams2026Config } from '../../frontend/src/lib/teams2026.config'
+import { buildAllGroupGames } from '../../frontend/src/lib/games'
+import { useSimulatedContractWrite } from './hooks/useSimulatedContractWrite'
 import {
   FIXED_PRIZE_DISTRIBUTION_INPUT,
   PRIZE_BANDS,
@@ -18,12 +17,8 @@ import {
   computeSharedRanks,
   parseLeaderboardCsv,
   parsePrizeDistributionInput,
-} from '../lib/prize-payout'
-import { mapAdminError } from '../lib/transaction-errors'
-
-export const Route = createFileRoute('/admin/dev')({
-  component: AdminPage,
-})
+} from '../../frontend/src/lib/prize-payout'
+import { mapAdminError } from '../../frontend/src/lib/transaction-errors'
 
 function useAdminWrite() {
   const write = useSimulatedContractWrite()
@@ -44,17 +39,61 @@ function useAdminWrite() {
   }
 }
 
+type AdminPermissions = {
+  predictionsOwner?: Address
+  isPredictionsOwner: boolean
+  treasuryAdminRole?: `0x${string}`
+  hasTreasuryAdminRole: boolean
+  treasuryManagerRole?: `0x${string}`
+  hasTreasuryManagerRole: boolean
+}
+
+type AdminCapability = {
+  label: string
+  detail: string
+  required: string
+  allowed: boolean
+}
+
+function truncateAddress(address?: string) {
+  if (!address) return '—'
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
+function CapabilityBadge({ allowed }: { allowed: boolean }) {
+  return (
+    <span
+      className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+      style={{
+        background: allowed ? 'rgba(0, 230, 118, 0.12)' : 'rgba(255, 77, 109, 0.12)',
+        color: allowed ? 'var(--accent-green)' : 'var(--accent-red)',
+      }}
+    >
+      {allowed ? 'Allowed' : 'Blocked'}
+    </span>
+  )
+}
+
 // --- Set Results Section ---
 
-function SetResultsSection({ isOwner }: { isOwner: boolean }) {
+function SetResultsSection({ canManagePredictions }: { canManagePredictions: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const carton = CONTRACT_ADDRESSES.CARTON
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { execute, isBusy } = useAdminWrite()
+  const { chainId } = useAccount()
   const { games } = useMemo(() => buildAllGroupGames(), [])
   const [gameSearch, setGameSearch] = useState('')
   const demoScores = useMemo<[number, number][]>(
-    () => [[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [0, 2], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3], [3, 2]],
+    () => {
+      const scores: [number, number][] = []
+      for (let team1Goals = 0; team1Goals <= 7; team1Goals += 1) {
+        for (let team2Goals = 0; team2Goals <= 7 - team1Goals; team2Goals += 1) {
+          scores.push([team1Goals, team2Goals])
+        }
+      }
+      return scores
+    },
     [],
   )
 
@@ -76,7 +115,7 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
     },
   })
 
-  const { data: gamesData, refetch: refetchGamesData } = useReadContracts({
+  const { data: gamesStatusData, refetch: refetchGamesStatus } = useReadContracts({
     contracts: games.map((game) => ({
       address: predictions,
       abi: PREDICTIONS_ABI,
@@ -86,16 +125,35 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
     query: { enabled: games.length > 0, refetchInterval: 10_000 },
   })
 
+  const { data: gameResultsData, refetch: refetchGameResults } = useReadContracts({
+    contracts: games.map((game) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'getGameResults' as const,
+      args: [game.id] as const,
+    })),
+    query: { enabled: games.length > 0, refetchInterval: 10_000 },
+  })
+
   const storedGamesById = useMemo(() => {
     return new Map(
       games.map((game, index) => {
-        const result = gamesData?.[index]?.result as
-          | { id: number; result: [number, number]; set: boolean }
-          | undefined
-        return [game.id, result]
+        const rawStatus = gamesStatusData?.[index]?.result as [number, boolean] | { id?: number; set?: boolean } | undefined
+        const rawResult = gameResultsData?.[index]?.result as [number, number] | undefined
+
+        const isSet = Array.isArray(rawStatus) ? Boolean(rawStatus[1]) : Boolean(rawStatus?.set)
+        const result = Array.isArray(rawResult) ? rawResult : [0, 0]
+
+        return [
+          game.id,
+          {
+            result,
+            set: isSet,
+          },
+        ]
       }),
     )
-  }, [games, gamesData])
+  }, [games, gameResultsData, gamesStatusData])
 
   // Local state for goal inputs per game
   const [goals, setGoals] = useState<Record<number, [string, string]>>({})
@@ -128,6 +186,8 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
 
     return gameSearchEntries.filter((entry) => entry.haystack.includes(query))
   }, [gameSearch, gameSearchEntries])
+
+  const isAnvil = chainId === 31337
 
   const getGoals = (gameId: number): [string, string] => goals[gameId] ?? ['', '']
 
@@ -191,7 +251,77 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
         revertedMessage: 'Result update was rejected on-chain.',
         logLabel: hasStoredResult ? 'Admin update results' : 'Admin set results',
         onSuccess: async () => {
-          await refetchGamesData()
+          await Promise.all([refetchGamesStatus(), refetchGameResults()])
+        },
+      },
+    )
+  }
+
+  const batchPayload = useMemo(() => {
+    const gameIds: number[] = []
+    const team1Goals: number[] = []
+    const team2Goals: number[] = []
+    const invalidGameIds: number[] = []
+
+    for (const { game } of filteredGames) {
+      if (storedGamesById.get(game.id)?.set) continue
+
+      const [g1, g2] = getGoals(game.id)
+      const hasAnyValue = g1.trim() !== '' || g2.trim() !== ''
+      if (!hasAnyValue) continue
+
+      const t1 = Number(g1)
+      const t2 = Number(g2)
+      const invalid = isNaN(t1) || isNaN(t2) || t1 < 0 || t2 < 0 || !Number.isInteger(t1) || !Number.isInteger(t2)
+      if (invalid) {
+        invalidGameIds.push(game.id)
+        continue
+      }
+
+      gameIds.push(game.id)
+      team1Goals.push(t1)
+      team2Goals.push(t2)
+    }
+
+    return { gameIds, team1Goals, team2Goals, invalidGameIds }
+  }, [filteredGames, goals, storedGamesById])
+
+  const submitBatchResults = () => {
+    if (!isAnvil) {
+      toast.error('Batch result loading is available only on Anvil (chain 31337).')
+      return
+    }
+
+    if (tournamentFinalized) {
+      toast.error('This tournament is finalized. Results can no longer be corrected.')
+      return
+    }
+
+    if (batchPayload.invalidGameIds.length > 0) {
+      toast.error(`Fix invalid goals for games: ${batchPayload.invalidGameIds.join(', ')}`)
+      return
+    }
+
+    if (batchPayload.gameIds.length === 0) {
+      toast.error('No visible unset results with valid goals to send in batch.')
+      return
+    }
+
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setResultsBatch',
+        args: [batchPayload.gameIds, batchPayload.team1Goals, batchPayload.team2Goals],
+      },
+      {
+        toastId: 'admin-set-results-batch',
+        pendingMessage: `Waiting for batch confirmation (${batchPayload.gameIds.length} games)...`,
+        successMessage: `Saved ${batchPayload.gameIds.length} results in batch.`,
+        revertedMessage: 'Batch result update was rejected on-chain.',
+        logLabel: 'Admin set results batch',
+        onSuccess: async () => {
+          await Promise.all([refetchGamesStatus(), refetchGameResults()])
         },
       },
     )
@@ -244,9 +374,29 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
           <p className="text-xs text-gray-500">
             {filteredGames.length} de {games.length} partidos visibles
           </p>
+          {isAnvil && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Dev helper: batch result loading is enabled only on Anvil and only sets visible games with valid loaded goals.
+            </div>
+          )}
+          {isAnvil && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={submitBatchResults}
+                disabled={!canManagePredictions || isBusy || Boolean(tournamentFinalized) || batchPayload.gameIds.length === 0}
+              >
+                Set Batch ({batchPayload.gameIds.length})
+              </Button>
+              <span className="text-xs text-gray-500">
+                Skips already set games and empty rows.
+              </span>
+            </div>
+          )}
         </div>
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {filteredGames.map(({ game, label }) => (
+          {filteredGames.map(({ game }) => (
             <div key={game.id} className="flex items-center gap-2 text-sm">
               <span className="w-8 text-gray-500">#{game.id}</span>
               <span className="w-28 truncate text-right">{teamsById[game.team1] ?? game.team1}</span>
@@ -276,11 +426,10 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
               <Button
                 size="sm"
                 onClick={() => submitResult(game.id)}
-                disabled={!isOwner || isBusy || Boolean(tournamentFinalized)}
+                disabled={!canManagePredictions || isBusy || Boolean(tournamentFinalized)}
               >
                 {storedGamesById.get(game.id)?.set ? 'Update' : 'Set'}
               </Button>
-              <span className="hidden xl:inline w-52 truncate text-xs text-gray-400">{label}</span>
             </div>
           ))}
           {filteredGames.length === 0 && (
@@ -296,7 +445,7 @@ function SetResultsSection({ isOwner }: { isOwner: boolean }) {
 
 // --- Set Official Winners Section ---
 
-function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
+function SetOfficialWinnersSection({ canManagePredictions }: { canManagePredictions: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const { execute, isBusy } = useAdminWrite()
   const teamsAlphabetical = useMemo(
@@ -392,7 +541,7 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
                 </select>
               </div>
             ))}
-            <Button onClick={submit} disabled={!isOwner || isBusy || winnersAlreadySet}>
+            <Button onClick={submit} disabled={!canManagePredictions || isBusy || winnersAlreadySet}>
               {isBusy ? 'Submitting...' : 'Set Winners'}
             </Button>
           </div>
@@ -406,7 +555,7 @@ function SetOfficialWinnersSection({ isOwner }: { isOwner: boolean }) {
 
 const POSITION_BATCH_SIZE = 250
 
-function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
+function SetPositionsSection({ canManagePredictions }: { canManagePredictions: boolean }) {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
@@ -754,14 +903,14 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
           onChange={(e) => setCsvInput(e.target.value)}
         />
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!isOwner || isBusy || usedTokenIds.length === 0 || Boolean(positionsUpdateInProgress)}>
+          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0 || Boolean(positionsUpdateInProgress)}>
             Fill Positions
           </Button>
-          <Button onClick={submit} disabled={!isOwner || isBusy || Boolean(positionsUpdateInProgress)}>
+          <Button onClick={submit} disabled={!canManagePredictions || isBusy || Boolean(positionsUpdateInProgress)}>
             {isBusy ? 'Submitting...' : 'Set Positions In Batches'}
           </Button>
           {activePendingUpdateMatchesTournament && (
-            <Button type="button" variant="outline" onClick={cancelPendingUpdate} disabled={!isOwner || isBusy}>
+            <Button type="button" variant="outline" onClick={cancelPendingUpdate} disabled={!canManagePredictions || isBusy}>
               Cancel Pending Update
             </Button>
           )}
@@ -815,11 +964,14 @@ function SetPositionsSection({ isOwner }: { isOwner: boolean }) {
 
 // --- Close Tournament Section ---
 
-function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
+function CloseTournamentSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasTreasuryAdminRole' | 'hasTreasuryManagerRole'>
+}) {
   const carton = CONTRACT_ADDRESSES.CARTON
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const treasury = CONTRACT_ADDRESSES.TREASURY
-  const { address } = useAccount()
   const { execute, isBusy } = useAdminWrite()
 
   const [tournamentId, setTournamentId] = useState('1')
@@ -864,20 +1016,6 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       args: [tokenId] as const,
     })),
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
-  })
-
-  const { data: managerRole } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'TOURNAMENT_MANAGER_ROLE',
-  })
-
-  const { data: hasManagerRole } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'hasRole',
-    args: managerRole && address ? [managerRole as `0x${string}`, address] : undefined,
-    query: { enabled: !!managerRole && !!address, refetchInterval: 10_000 },
   })
 
   const { data: salesClosed } = useReadContract({
@@ -954,6 +1092,8 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     [candidateTokenIds, positionData, positionVersionData, positionsVersion],
   )
 
+  const leaderboardTokenIds = useMemo(() => leaderboardEntries.map((entry) => entry.tokenId), [leaderboardEntries])
+
   const parsedDistribution = useMemo(() => parsePrizeDistributionInput(distributionInput), [distributionInput])
   const distributionIsValid = parsedDistribution.length > 0
     && parsedDistribution.every((value) => Number.isInteger(value) && value >= 0 && value <= 100)
@@ -965,6 +1105,32 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
     }
     return computeFinalPrizeAmounts(leaderboardEntries, prizePool, parsedDistribution)
   }, [distributionIsValid, leaderboardEntries, parsedDistribution, prizePool])
+
+  const { data: claimablePrizeData } = useReadContracts({
+    contracts: leaderboardTokenIds.map((tokenId) => ({
+      address: treasury,
+      abi: TREASURY_ABI,
+      functionName: 'getClaimablePrizeAmount' as const,
+      args: [parsedTournamentId, tokenId, tokenAddress] as const,
+    })),
+    query: {
+      enabled: parsedTournamentId > 0n && leaderboardTokenIds.length > 0,
+      refetchInterval: 10_000,
+    },
+  })
+
+  const onchainFinalPayouts = useMemo(() => {
+    return leaderboardEntries.map((entry, index) => ({
+      ...entry,
+      amount: (claimablePrizeData?.[index]?.result as bigint | undefined) ?? 0n,
+    }))
+  }, [claimablePrizeData, leaderboardEntries])
+
+  const hasLoadedFinalAmounts = (finalAmountTotal ?? 0n) > 0n
+  const displayedPayouts = hasLoadedFinalAmounts ? onchainFinalPayouts : (payoutPreview?.payouts ?? [])
+  const displayedAssignedTotal = hasLoadedFinalAmounts
+    ? onchainFinalPayouts.reduce((sum, entry) => sum + entry.amount, 0n)
+    : (payoutPreview?.totalAssigned ?? 0n)
 
   const finalPrizePayload = useMemo(() => {
     if (!payoutPreview || candidateTokenIds.length === 0) return null
@@ -1125,11 +1291,17 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
       <CardContent>
         <div className="space-y-3">
           <div className="text-sm">
-            <span className="font-medium">Has TOURNAMENT_MANAGER_ROLE:</span>{' '}
-            <span className={hasManagerRole ? 'text-green-600' : 'text-red-600'}>
-              {String(Boolean(hasManagerRole))}
-            </span>
-          </div>
+              <span className="font-medium">Has TOURNAMENT_MANAGER_ROLE:</span>{' '}
+              <span className={permissions.hasTreasuryManagerRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasTreasuryManagerRole)}
+              </span>
+            </div>
+            <div className="text-sm">
+              <span className="font-medium">Has Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+              <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasTreasuryAdminRole)}
+              </span>
+            </div>
 
           <div className="flex gap-2 items-center">
             <span className="text-sm font-medium w-24">Tournament ID</span>
@@ -1175,7 +1347,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
           <Button
             onClick={closeSales}
-            disabled={!isOwner || !hasManagerRole || Boolean(salesClosed) || isBusy}
+            disabled={!permissions.hasTreasuryManagerRole || Boolean(salesClosed) || isBusy}
           >
             {isBusy ? 'Closing...' : 'Close Sales'}
           </Button>
@@ -1189,7 +1361,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             />
             <Button
               onClick={setPrizeDistribution}
-              disabled={!isOwner || !hasManagerRole || !salesClosed || Boolean(tournamentFinalized) || isBusy}
+              disabled={!permissions.hasTreasuryAdminRole || !salesClosed || Boolean(tournamentFinalized) || isBusy}
             >
               {isBusy ? 'Saving...' : 'Set Distribution'}
             </Button>
@@ -1203,14 +1375,23 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
             `Load Final Prizes` can be rerun before sealing. It overwrites every minted token for this tournament context, including prizes that now become `0`.
           </div>
 
-          {payoutPreview && (
+          {(payoutPreview || hasLoadedFinalAmounts) && (
             <div className="rounded-lg border border-border p-3 space-y-3">
               <div className="space-y-1 text-sm">
                 <div><span className="font-medium">Shared-rank preview:</span> {leaderboardEntries.length} ranked cartones</div>
                 <div><span className="font-medium">Tokens overwritten on load:</span> {candidateTokenIds.length}</div>
-                <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
-                <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(payoutPreview.totalAssigned, 6)).toFixed(2)} USDC</div>
-                <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(displayedAssignedTotal, 6)).toFixed(2)} USDC</div>
+                {!hasLoadedFinalAmounts && payoutPreview && (
+                  <>
+                    <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                    <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                  </>
+                )}
+                {hasLoadedFinalAmounts && (
+                  <div className="text-xs text-gray-600">
+                    Showing exact on-chain final prize amounts loaded for each token. This no longer simulates payouts from the current pool.
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1228,9 +1409,9 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
               </div>
 
               <div>
-                <div className="text-sm font-medium mb-1">Final payouts preview:</div>
+                <div className="text-sm font-medium mb-1">{hasLoadedFinalAmounts ? 'Final payouts loaded on-chain:' : 'Final payouts preview:'}</div>
                 <div className="max-h-56 overflow-y-auto text-xs text-gray-600 space-y-0.5">
-                  {payoutPreview.payouts.map((entry) => (
+                  {displayedPayouts.map((entry) => (
                     <div key={`payout-${entry.tokenId.toString()}`}>
                       #{entry.rank} — Token {entry.tokenId.toString()} · {Number(formatUnits(entry.amount, 6)).toFixed(2)} USDC
                     </div>
@@ -1243,11 +1424,10 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
           <Button
             onClick={loadFinalPrizes}
             disabled={
-              !isOwner
-              || !hasManagerRole
-              || !salesClosed
-              || !usdcDistributionSet
-              || Boolean(finalAmountsReady)
+                !permissions.hasTreasuryAdminRole
+                || !salesClosed
+                || !usdcDistributionSet
+                || Boolean(finalAmountsReady)
               || Boolean(tournamentFinalized)
               || !finalPrizePayload
               || isBusy
@@ -1259,11 +1439,10 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
           <Button
             onClick={sealFinalPrizes}
             disabled={
-              !isOwner
-              || !hasManagerRole
-              || !salesClosed
-              || !usdcDistributionSet
-              || Boolean(finalAmountsReady)
+                !permissions.hasTreasuryAdminRole
+                || !salesClosed
+                || !usdcDistributionSet
+                || Boolean(finalAmountsReady)
               || Boolean(tournamentFinalized)
               || (finalAmountTotal ?? 0n) === 0n
               || isBusy
@@ -1274,7 +1453,7 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
           <Button
             onClick={finalizeTournament}
-            disabled={!isOwner || !hasManagerRole || !salesClosed || !usdcDistributionSet || !finalAmountsReady || Boolean(tournamentFinalized) || isBusy}
+            disabled={!permissions.hasTreasuryManagerRole || !salesClosed || !usdcDistributionSet || !finalAmountsReady || Boolean(tournamentFinalized) || isBusy}
           >
             {isBusy ? 'Finalizing...' : 'Finalize Tournament'}
           </Button>
@@ -1286,22 +1465,98 @@ function CloseTournamentSection({ isOwner }: { isOwner: boolean }) {
 
 // --- Main Admin Page ---
 
-function AdminPage() {
-  const isDev = import.meta.env.DEV
+export function AdminPage() {
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
+  const treasury = CONTRACT_ADDRESSES.TREASURY
   const { address, isConnected } = useAccount()
 
-  const { data: owner } = useReadContract({
+  const { data: owner } = useReadContract<Address>({
     address: predictions,
     abi: PREDICTIONS_ABI,
     functionName: 'owner',
     query: { refetchInterval: 10_000 },
   })
 
-  const isOwner = useMemo(() => {
+  const isPredictionsOwner = useMemo(() => {
     if (!address || !owner) return false
-    return address.toLowerCase() === (owner as string).toLowerCase()
+    return address.toLowerCase() === owner.toLowerCase()
   }, [address, owner])
+
+  const { data: treasuryAdminRole } = useReadContract<`0x${string}`>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'DEFAULT_ADMIN_ROLE',
+  })
+
+  const { data: treasuryManagerRole } = useReadContract<`0x${string}`>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'TOURNAMENT_MANAGER_ROLE',
+  })
+
+  const { data: hasTreasuryAdminRole = false } = useReadContract<boolean>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'hasRole',
+    args: treasuryAdminRole && address ? [treasuryAdminRole, address] : undefined,
+    query: { enabled: Boolean(treasuryAdminRole && address), refetchInterval: 10_000 },
+  })
+
+  const { data: hasTreasuryManagerRole = false } = useReadContract<boolean>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'hasRole',
+    args: treasuryManagerRole && address ? [treasuryManagerRole, address] : undefined,
+    query: { enabled: Boolean(treasuryManagerRole && address), refetchInterval: 10_000 },
+  })
+
+  const permissions = useMemo<AdminPermissions>(
+    () => ({
+      predictionsOwner: owner,
+      isPredictionsOwner,
+      treasuryAdminRole,
+      hasTreasuryAdminRole,
+      treasuryManagerRole,
+      hasTreasuryManagerRole,
+    }),
+    [hasTreasuryAdminRole, hasTreasuryManagerRole, isPredictionsOwner, owner, treasuryAdminRole, treasuryManagerRole],
+  )
+
+  const capabilities = useMemo<AdminCapability[]>(
+    () => [
+      {
+        label: 'Predictions config',
+        detail: 'teams hash, freeze, deadline, total games',
+        required: 'Predictions.owner()',
+        allowed: permissions.isPredictionsOwner,
+      },
+      {
+        label: 'Results and winners',
+        detail: 'set/update results, official winners',
+        required: 'Predictions.owner()',
+        allowed: permissions.isPredictionsOwner,
+      },
+      {
+        label: 'Leaderboard positions',
+        detail: 'manual upload, batches, cancel, fill from onchain',
+        required: 'Predictions.owner()',
+        allowed: permissions.isPredictionsOwner,
+      },
+      {
+        label: 'Treasury distribution',
+        detail: 'set distribution, load final prizes, seal final prizes',
+        required: 'Treasury.DEFAULT_ADMIN_ROLE',
+        allowed: permissions.hasTreasuryAdminRole,
+      },
+      {
+        label: 'Tournament lifecycle',
+        detail: 'close sales, finalize tournament',
+        required: 'Treasury.TOURNAMENT_MANAGER_ROLE',
+        allowed: permissions.hasTreasuryManagerRole,
+      },
+    ],
+    [permissions.hasTreasuryAdminRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
+  )
 
   // Teams hash state
   const { data: onchainTeamsHash } = useReadContract({
@@ -1453,33 +1708,67 @@ function AdminPage() {
     )
   }
 
-  if (!isDev) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin</CardTitle>
-          <CardDescription>Admin interface is disabled in production builds.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Run locally (npm run dev) to access this page.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <div className="grid gap-8 lg:grid-cols-2">
       {/* Existing config card */}
       <Card>
         <CardHeader>
           <CardTitle>Admin</CardTitle>
-          <CardDescription>Owner-only actions for Predictions contract</CardDescription>
+          <CardDescription>Permission-aware controls for Predictions and Treasury</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3 text-sm">
             <div><span className="font-medium">Connected:</span> {isConnected ? address : 'Not connected'}</div>
-            <div><span className="font-medium">Owner:</span> {owner as string || '—'}</div>
-            {!isOwner && <div className="text-red-600">Connect with the owner wallet to proceed.</div>}
+            <div><span className="font-medium">Predictions owner:</span> {permissions.predictionsOwner ?? '—'}</div>
+            <div><span className="font-medium">Predictions owner (short):</span> {truncateAddress(permissions.predictionsOwner)}</div>
+            <div><span className="font-medium">Connected (short):</span> {truncateAddress(address)}</div>
+            <div>
+              <span className="font-medium">Can manage predictions:</span>{' '}
+              <span className={permissions.isPredictionsOwner ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.isPredictionsOwner)}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+              <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasTreasuryAdminRole)}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Treasury TOURNAMENT_MANAGER_ROLE:</span>{' '}
+              <span className={permissions.hasTreasuryManagerRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasTreasuryManagerRole)}
+              </span>
+            </div>
+            <div><span className="font-medium">Treasury admin role id:</span> {permissions.treasuryAdminRole ?? '—'}</div>
+            <div><span className="font-medium">Treasury manager role id:</span> {permissions.treasuryManagerRole ?? '—'}</div>
+            {!permissions.isPredictionsOwner && <div className="text-red-600">Predictions config, results, winners, and positions require the `Predictions.owner()` wallet.</div>}
+            {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
+            {!permissions.hasTreasuryManagerRole && <div className="text-red-600">Closing sales and finalizing the tournament require `Treasury.TOURNAMENT_MANAGER_ROLE`.</div>}
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <div className="text-sm font-medium">Wallet Capabilities</div>
+            <div className="grid gap-3">
+              {capabilities.map((capability) => (
+                <div
+                  key={capability.label}
+                  className="rounded-lg border p-3"
+                  style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium">{capability.label}</div>
+                    <CapabilityBadge allowed={capability.allowed} />
+                  </div>
+                  <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    {capability.detail}
+                  </div>
+                  <div className="mt-1 text-xs" style={{ color: 'var(--text-disabled)' }}>
+                    Requires {capability.required}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6 space-y-6">
@@ -1487,19 +1776,19 @@ function AdminPage() {
               <div className="mb-2 font-medium">Teams Hash</div>
               <div className="flex gap-2 items-center">
                 <Input value={teamsHash} onChange={(e) => setTeamsHashLocal(e.target.value)} placeholder="0x..." />
-                <Button onClick={submitTeamsHash} disabled={!isOwner || Boolean(isFrozen) || isBusy}>
+                <Button onClick={submitTeamsHash} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>
                   {isBusy ? 'Setting...' : 'Set Hash'}
                 </Button>
               </div>
               <div className="text-xs text-gray-600 mt-1">Frozen: {String(isFrozen)}</div>
-              <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!isOwner || Boolean(isFrozen) || isBusy}>Freeze</Button>
+              <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>Freeze</Button>
             </div>
 
             <div>
               <div className="mb-2 font-medium">Submission Deadline</div>
               <div className="flex gap-2 items-center">
                 <Input type="datetime-local" value={deadlineLocal} onChange={(e) => setDeadlineLocal(e.target.value)} />
-                <Button onClick={setDeadline} disabled={!isOwner || isBusy}>
+                <Button onClick={setDeadline} disabled={!permissions.isPredictionsOwner || isBusy}>
                   {isBusy ? 'Saving...' : 'Save Deadline'}
                 </Button>
               </div>
@@ -1510,7 +1799,7 @@ function AdminPage() {
               <div className="text-xs text-gray-600 mb-1">On-chain: {onchainTotalGames !== undefined ? String(onchainTotalGames) : '—'} • Started: {String(Boolean(predictionsStarted))}</div>
               <div className="flex gap-2 items-center">
                 <Input type="number" min={1} max={255} value={totalGamesLocal} onChange={(e) => setTotalGamesLocal(e.target.value)} />
-                <Button onClick={setTotalGames} disabled={!isOwner || Boolean(predictionsStarted) || isBusy}>
+                <Button onClick={setTotalGames} disabled={!permissions.isPredictionsOwner || Boolean(predictionsStarted) || isBusy}>
                   {isBusy ? 'Saving...' : 'Save'}
                 </Button>
               </div>
@@ -1521,10 +1810,10 @@ function AdminPage() {
       </Card>
 
       {/* New sections */}
-      <SetResultsSection isOwner={isOwner} />
-      <SetOfficialWinnersSection isOwner={isOwner} />
-      <SetPositionsSection isOwner={isOwner} />
-      <CloseTournamentSection isOwner={isOwner} />
+      <SetResultsSection canManagePredictions={permissions.isPredictionsOwner} />
+      <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />
+      <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />
+      <CloseTournamentSection permissions={permissions} />
     </div>
   )
 }

@@ -48,6 +48,14 @@ contract PredictionsTest is Test {
         preds.submitPrediction(tokenId, arr);
     }
 
+    function _setupTreasuryAndCloseSales() internal {
+        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(preds));
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        treasury.closeSales(1);
+    }
+
     function testSubmitAndReadPicks() public {
         // Set deadline for 1 day from now
         uint256 deadline = block.timestamp + 1 days;
@@ -814,6 +822,13 @@ contract PredictionsTest is Test {
         vm.expectRevert();
         preds.setResults(1, 2, 1);
 
+        // Sales should be closed
+        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(preds));
+        vm.expectRevert(Predictions.TournamentSalesStillOpen.selector);
+        preds.setResults(1, 2, 1);
+
         // gameId = 0 should revert (1-based)
         vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.setResults(0, 2, 1);
@@ -822,15 +837,147 @@ contract PredictionsTest is Test {
         vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.setResults(5, 2, 1);
 
+        // close tournament sales, now can set results
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        treasury.closeSales(1);
+        preds.setResults(1, 2, 1);
+
         // Establecer resultados dos veces debe revertir
-        preds.setResults(1, 2, 1);
+        preds.setResults(2, 2, 1);
         vm.expectRevert(Predictions.ResultsAlreadySet.selector);
-        preds.setResults(1, 2, 1);
+        preds.setResults(2, 2, 1);
 
         // Verificar que los resultados se establecieron correctamente
         uint8[2] memory result = preds.getGameResults(1);
         assertEq(result[0], 2, "Team1 goals should be 2");
         assertEq(result[1], 1, "Team2 goals should be 1");
+    }
+
+    function testSetResultsBatch() public {
+        _setupTreasuryAndCloseSales();
+
+        uint8[] memory gameIds = new uint8[](4);
+        gameIds[0] = 1;
+        gameIds[1] = 2;
+        gameIds[2] = 3;
+        gameIds[3] = 4;
+
+        uint8[] memory team1Goals = new uint8[](4);
+        team1Goals[0] = 2;
+        team1Goals[1] = 1;
+        team1Goals[2] = 0;
+        team1Goals[3] = 3;
+
+        uint8[] memory team2Goals = new uint8[](4);
+        team2Goals[0] = 1;
+        team2Goals[1] = 1;
+        team2Goals[2] = 2;
+        team2Goals[3] = 0;
+
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+
+        uint8[2] memory result1 = preds.getGameResults(1);
+        uint8[2] memory result4 = preds.getGameResults(4);
+        assertEq(result1[0], 2);
+        assertEq(result1[1], 1);
+        assertEq(result4[0], 3);
+        assertEq(result4[1], 0);
+    }
+
+    function testSetResultsBatchRevertsWhenSalesOpen() public {
+        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(preds));
+
+        uint8[] memory gameIds = new uint8[](1);
+        gameIds[0] = 1;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 2;
+        uint8[] memory team2Goals = new uint8[](1);
+        team2Goals[0] = 1;
+
+        vm.expectRevert(Predictions.TournamentSalesStillOpen.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsOnLengthMismatch() public {
+        _setupTreasuryAndCloseSales();
+
+        uint8[] memory gameIds = new uint8[](2);
+        gameIds[0] = 1;
+        gameIds[1] = 2;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 2;
+        uint8[] memory team2Goals = new uint8[](2);
+        team2Goals[0] = 1;
+        team2Goals[1] = 1;
+
+        vm.expectRevert(Predictions.ArrayLengthMismatch.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsOnInvalidGameId() public {
+        _setupTreasuryAndCloseSales();
+
+        uint8[] memory gameIds = new uint8[](1);
+        gameIds[0] = 0;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 2;
+        uint8[] memory team2Goals = new uint8[](1);
+        team2Goals[0] = 1;
+
+        vm.expectRevert(Predictions.InvalidGameId.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsOnDuplicateGameId() public {
+        _setupTreasuryAndCloseSales();
+
+        uint8[] memory gameIds = new uint8[](2);
+        gameIds[0] = 1;
+        gameIds[1] = 1;
+        uint8[] memory team1Goals = new uint8[](2);
+        team1Goals[0] = 2;
+        team1Goals[1] = 1;
+        uint8[] memory team2Goals = new uint8[](2);
+        team2Goals[0] = 1;
+        team2Goals[1] = 1;
+
+        vm.expectRevert(Predictions.DuplicateGameId.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsWhenResultAlreadySet() public {
+        _setupTreasuryAndCloseSales();
+
+        preds.setResults(1, 2, 1);
+
+        uint8[] memory gameIds = new uint8[](2);
+        gameIds[0] = 1;
+        gameIds[1] = 2;
+        uint8[] memory team1Goals = new uint8[](2);
+        team1Goals[0] = 2;
+        team1Goals[1] = 1;
+        uint8[] memory team2Goals = new uint8[](2);
+        team2Goals[0] = 1;
+        team2Goals[1] = 1;
+
+        vm.expectRevert(Predictions.ResultsAlreadySet.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsOutsideAnvil() public {
+        vm.chainId(1);
+
+        uint8[] memory gameIds = new uint8[](1);
+        gameIds[0] = 1;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 2;
+        uint8[] memory team2Goals = new uint8[](1);
+        team2Goals[0] = 1;
+
+        vm.expectRevert(Predictions.BatchResultsOnlyOnAnvil.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
     }
 
     function testUpdateResults() public {
