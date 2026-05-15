@@ -82,3 +82,23 @@ else
   echo "❌ Error generating typed ABI exports."
   exit 1
 fi
+
+# Crear el archivo .env en el admin con las nuevas direcciones
+cat > admin/.env << EOF
+# Contract addresses deployed to Anvil
+VITE_CARTON_ADDRESS=$CARTON_ADDRESS
+VITE_PREDICTIONS_ADDRESS=$PREDICTIONS_ADDRESS
+VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS
+VITE_USDC_ADDRESS=$USDC_ADDRESS
+
+# Optional: WalletConnect Project ID (for production)
+# VITE_WALLETCONNECT_PROJECT_ID=your_project_id
+EOF
+
+echo "✅ Admin .env file updated successfully!"
+echo ""
+echo "📋 Updated addresses:"
+echo "  Carton:      $CARTON_ADDRESS"
+echo "  Predictions: $PREDICTIONS_ADDRESS"
+echo "  Treasury:    $TREASURY_ADDRESS"
+echo "  USDC:        $USDC_ADDRESS"

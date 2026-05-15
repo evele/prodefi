@@ -16,6 +16,10 @@ interface ITreasuryTournamentStatus {
     function isTournamentClosedAnyAsset(uint256 tournamentId) external view returns (bool);
 }
 
+interface ITreasurySalesClosed {
+    function salesClosed(uint256 tournamentId) external view returns (bool);
+}
+
 /// @title Predictions Contract for Prode Cards
 contract Predictions is Ownable {
     error TeamsHashAlreadyFrozen();
@@ -42,6 +46,8 @@ contract Predictions is Ownable {
     error NoPredictionForToken();
     error NoPredictionsSubmitted();
     error TournamentClosedForCorrections();
+    error TournamentSalesStillOpen();
+    error BatchResultsOnlyOnAnvil();
     error InvalidTournamentId();
     error InvalidExpectedEntries();
     error ExpectedEntriesMismatch();
@@ -399,11 +405,31 @@ contract Predictions is Ownable {
     function setResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
         if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
         if (games[gameId].set) revert ResultsAlreadySet();
+        _revertIfTournamentSalesOpen();
 
-        games[gameId].result = [team1Goals, team2Goals];
-        games[gameId].set = true;
+        _setResult(gameId, team1Goals, team2Goals);
+    }
 
-        emit ResultsSet(gameId, team1Goals, team2Goals);
+    function setResultsBatch(uint8[] calldata gameIds, uint8[] calldata team1Goals, uint8[] calldata team2Goals)
+        external
+        onlyOwner
+    {
+        if (block.chainid != 31337) revert BatchResultsOnlyOnAnvil();
+        if (gameIds.length != team1Goals.length || gameIds.length != team2Goals.length) revert ArrayLengthMismatch();
+
+        _revertIfTournamentSalesOpen();
+
+        bool[] memory usedGameId = new bool[](totalGames + 1);
+
+        for (uint256 i = 0; i < gameIds.length; i++) {
+            uint8 gameId = gameIds[i];
+            if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
+            if (usedGameId[gameId]) revert DuplicateGameId();
+            if (games[gameId].set) revert ResultsAlreadySet();
+
+            usedGameId[gameId] = true;
+            _setResult(gameId, team1Goals[i], team2Goals[i]);
+        }
     }
 
     function updateResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
@@ -419,6 +445,23 @@ contract Predictions is Ownable {
         game.result = [team1Goals, team2Goals];
 
         emit ResultsUpdated(gameId, oldTeam1Goals, oldTeam2Goals, team1Goals, team2Goals);
+    }
+
+    function _revertIfTournamentSalesOpen() internal view {
+        ICartonTournamentContext carton = ICartonTournamentContext(address(cartones));
+        address treasury = carton.treasury();
+        if (treasury == address(0)) return;
+
+        if (ITreasurySalesClosed(treasury).salesClosed(tournamentId) == false) {
+            revert TournamentSalesStillOpen();
+        }
+    }
+
+    function _setResult(uint8 gameId, uint8 team1Goals, uint8 team2Goals) internal {
+        games[gameId].result = [team1Goals, team2Goals];
+        games[gameId].set = true;
+
+        emit ResultsSet(gameId, team1Goals, team2Goals);
     }
 
     function _revertIfTournamentClosedForCorrections() internal view {

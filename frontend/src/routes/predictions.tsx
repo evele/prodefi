@@ -124,7 +124,7 @@ type BlockingStateCard = {
   detail: string
   tone: 'neutral' | 'warning'
   actionLabel?: string
-  actionTo?: '/' | '/admin/dev'
+  actionTo?: '/'
 }
 
 function getFlowCalloutToneStyles(tone: FlowCallout['tone']) {
@@ -158,7 +158,7 @@ export const Route = createFileRoute('/predictions')({
 })
 
 const DEADLINE_NOT_SET_MESSAGE =
-  'El deadline de envío no está configurado. Pide al admin que lo configure en /admin/dev.'
+  'El deadline de envío no está configurado. Pide al admin que lo configure en la consola administrativa.'
 const COMBINED_REVERT_MESSAGE = 'La predicción completa fue rechazada en cadena.'
 const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 
@@ -691,8 +691,6 @@ function PredictionsPage() {
   })()
 
   const canSubmitCombined = combinedSubmitBlockedMessage === null
-  const adminActionTo = import.meta.env.DEV ? '/admin/dev' as const : undefined
-
   const blockingState: BlockingStateCard | null = (() => {
     if (!isConnected) {
       return {
@@ -740,8 +738,8 @@ function PredictionsPage() {
         title: 'El deadline de envio todavia no esta configurado.',
         detail: 'Hasta que exista una fecha valida, la app mantiene bloqueado el envio para evitar estados ambiguos.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
@@ -751,8 +749,8 @@ function PredictionsPage() {
         title: 'Falta publicar la configuracion de equipos en cadena.',
         detail: 'La pantalla puede mostrar el fixture local, pero no deberia permitir envios hasta que ambos lados coincidan.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
@@ -762,8 +760,8 @@ function PredictionsPage() {
         title: 'La lista de equipos local no coincide con la version onchain.',
         detail: 'Primero hay que alinear la configuracion para evitar que el usuario confirme una prediccion sobre datos inconsistentes.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
