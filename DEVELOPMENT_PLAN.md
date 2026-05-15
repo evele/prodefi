@@ -409,6 +409,11 @@ Key evaluation questions:
 
 ### Post-MVP (Nice to have)
 
+- GitHub Actions CI/CD for root contracts + landing deploy
+  - run `forge test` in CI on PRs and before any deploy job
+  - on merge/push to `main`, deploy Firebase hosting only if Foundry tests pass first
+  - define required secrets/credentials for Firebase deploy in GitHub Actions
+  - confirm whether the deploy target should be only `landing/site` or also functions when backend changes land
 - ERC20 allowlist per tournament
 - `totalClaimed` telemetry + `remainingPool` view
 - Admin remainder withdrawal (0-10% after close)
