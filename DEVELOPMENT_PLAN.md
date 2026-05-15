@@ -332,50 +332,80 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 
 **Hipótesis inicial:** para ProDefi parece más prometedor investigar `ERC-4337` + `paymaster` que meta-transactions tradicionales tipo `EIP-2771`, porque permitiría subsidiar gas en flujos como submit de predicciones, claims y compra con USDC sin requerir saldo nativo.
 
-**Preguntas a responder antes de implementar:**
+**Preguntas a responder antes de implementar full production:**
 
-- **Chain objetivo**: confirmar si el deployment futuro será en una red con buen soporte de bundlers/paymasters (Base, Polygon, etc.)
+- **Chain objetivo**: confirmar la red final soportada por el proveedor elegido para embedded wallets + sponsorship
 - **Tipo de wallet**: definir si se apunta a EOAs tradicionales, embedded wallets, o smart accounts desde el inicio
 - **Cobertura del sponsorship**: decidir si subsidiar solo `submitPredictions` / `claimPrize`, o también `approve + buyCartonWithToken`
-- **Proveedor / stack**: comparar opciones concretas (`Alchemy Account Kit`, `ZeroDev`, `Biconomy`, Safe, etc.)
+- **Proveedor / stack**: comparar opciones concretas (`Openfort`, `Privy`, `Dynamic`, `Para`, `Alchemy Account Kit`, `ZeroDev`, `Biconomy`, Safe, etc.)
 - **Impacto en frontend**: revisar si conviene reemplazar parcialmente el flujo Wagmi/RainbowKit actual por un stack con smart accounts
 - **Impacto en contratos**: verificar si el modelo actual funciona sin cambios relevantes bajo `ERC-4337` y qué casos sí requerirían adaptación
 - **Alternativas**: dejar documentado cuándo tendría sentido evaluar `EIP-2771` o `EIP-7702` en vez de 4337
 
-Estado: **Pendiente de investigación dedicada — requiere foco técnico específico antes de tomar decisión**
+**Decisión tomada (dev spike):** avanzar con `Openfort` como proveedor inicial por costo/feature set. Se prioriza `email/social login + embedded wallet`, dejando la elección final de red para después.
 
-### Next Session Plan: Smart Accounts + Social Login
+**Spike ejecutado en frontend (May 2026):**
+
+- Se instaló `@openfort/react` en `frontend/`.
+- Se integró una primera capa de `OpenfortProvider` + `OpenfortWagmiBridge` en `frontend/src/components/providers.tsx`.
+- Se agregó config reusable de chain/env en `frontend/src/lib/chains.ts`.
+- Se actualizó `frontend/src/lib/wagmi.ts` para usar Openfort cuando haya keys configuradas y la chain esté soportada, con fallback al flujo actual de `RainbowKit` cuando no.
+- Se reemplazó el `ConnectButton` de la app shell por `frontend/src/components/WalletButton.tsx`, con soporte para:
+  - `email OTP`
+  - `Google`
+  - wallet externa opcional
+- Se agregó `frontend/.env.example` con variables para chain, RPC y keys de Openfort.
+- El build de `frontend/` pasa después de la integración.
+
+**Importante:** Openfort no quedó activado ciegamente sobre `Anvil`. Mientras no existan keys reales de Openfort y una chain soportada/configurada, el frontend sigue cayendo al flujo anterior con RainbowKit para no romper desarrollo local.
+
+**Bloqueos / próximos pasos para activarlo de verdad:**
+
+1. Elegir una chain soportada por Openfort para embedded wallets + sponsorship.
+2. Deployar contratos de ProDefi en esa red/testnet.
+3. Cargar en `frontend/.env`:
+   - `VITE_OPENFORT_PUBLISHABLE_KEY`
+   - `VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY`
+   - `VITE_CHAIN_ID`
+   - `VITE_RPC_URL`
+   - direcciones de contratos (`VITE_CARTON_ADDRESS`, `VITE_PREDICTIONS_ADDRESS`, `VITE_TREASURY_ADDRESS`, `VITE_USDC_ADDRESS`)
+4. Probar login real con Openfort y validar que `wagmi` siga resolviendo la cuenta embebida correctamente.
+5. Elegir el primer flujo transaccional para sponsorship real. Orden sugerido:
+   - `submitPredictionAndWinners`
+   - `claimPrize`
+   - `buyCartonWithToken`
+
+Estado: **Spike inicial integrado en frontend — pendiente activar con keys + red + contratos desplegados**
+
+### Next Session Plan: Openfort Activation
 
 Goal for the next session:
 
-- evaluate whether ProDefi should move toward a smart-account-first onboarding flow with social login and sponsored gas
+- turn the current Openfort frontend spike into a real end-to-end dev/testnet flow
 
 Tomorrow's priorities:
 
-1. Define the desired product shape before choosing a provider
-   - social login only vs social + email + passkeys
-   - invisible embedded wallet vs visible smart account UX
-   - whether the user should ever need a traditional seed phrase during onboarding
-2. Compare concrete stacks
-   - start with options like `Alchemy Account Kit`, `ZeroDev`, `Biconomy`, `Privy`, `Dynamic`, `Web3Auth`, and Safe-based flows
-   - document which ones support both smart accounts and social login cleanly
-3. Map the exact ProDefi flows that would benefit from sponsorship
+1. Pick the first real Openfort-compatible chain/testnet
+   - prefer a network with strong embedded wallet + sponsorship support
+   - keep the choice pragmatic; user-facing chain can be revisited later
+2. Deploy ProDefi contracts there and update frontend envs
+3. Map the exact ProDefi flows that should benefit from sponsorship first
    - `submitPredictionAndWinners`
    - `claimPrize`
    - `buyCartonWithToken`
    - possible USDC approve replacement paths (`permit`, session keys, or bundling)
-4. Check integration impact on the current frontend stack
-   - what stays from `wagmi` / `RainbowKit`
-   - what would need replacing for auth, account state, and transaction execution
-5. Decide what the first implementation spike should be
-   - likely target: login + smart account creation + one sponsored action on localhost/dev
+4. Validate the current frontend bridge
+   - confirm `useAccount`, reads, and writes still work with the embedded wallet path
+   - remove or reduce RainbowKit fallback once the Openfort path is stable
+5. Implement the first real sponsored action
+   - likely target: login + embedded wallet creation + one sponsored action on testnet/dev
 
 Key evaluation questions:
 
-- Can we get social login + smart accounts without making the wallet model confusing?
-- Can the chosen stack sponsor gas while keeping the current contract model untouched?
+- Can Openfort stay compatible with the current `wagmi`-based read/write model without a large route refactor?
+- Can sponsorship cover the first selected flow without changing the current contract model?
 - Is there a realistic path to remove the explicit USDC `approve` friction from the happy path?
-- Which provider gives the cleanest UX in Spanish first, with an easy English expansion later?
+- When the Openfort path is stable, should the app remain mixed (`Openfort + external wallets`) or become embedded-first?
 
 ### Post-MVP (Nice to have)
 
@@ -447,3 +477,4 @@ Key evaluation questions:
 
 - See CLAUDE.md for persistent project knowledge and architecture.
 - See AGENTS.md for contributor workflow, commands, and conventions.
+- See `knowledge/openfort.md` as the canonical reference before changing the Openfort integration.

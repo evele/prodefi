@@ -1,8 +1,8 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 /* import { TanStsackRouterDevtools } from '@tanstack/router-devtools' */
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useUserBalance } from '../hooks/useBalance'
 import { Home, Target, Trophy, Settings, Calendar } from 'lucide-react'
+import { WalletButton } from '../components/WalletButton'
 
 function RootLayout() {
   const { isConnected, eth, usdc } = useUserBalance()
@@ -69,12 +69,12 @@ function RootLayout() {
                 </Link>
               )}
             </nav>
-            <ConnectButton showBalance={false} />
+            <WalletButton />
           </div>
 
           {/* Mobile: only connect button */}
           <div className="md:hidden">
-            <ConnectButton showBalance={false} accountStatus="avatar" chainStatus="none" />
+            <WalletButton mobile />
           </div>
         </div>
       </header>
