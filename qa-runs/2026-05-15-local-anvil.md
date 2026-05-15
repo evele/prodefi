@@ -32,33 +32,33 @@ Rule of thumb:
 
 Fill this before you start.
 
-- Date:
-- Operator:
-- Target environment: `Local / Anvil`, `Staging / Testnet`, or `Production pre-release`
-- Git commit / branch:
-- Frontend URL:
-- Admin URL:
-- RPC URL:
-- Active chain ID:
+- Date: 15-05-2026
+- Operator: Eric
+- Target environment: `Local / Anvil`
+- Git commit / branch: 20-admin-decouple
+- Frontend URL: http://localhost:5173/
+- Admin URL: http://localhost:5174/
+- RPC URL: ni idea creo que ninguno
+- Active chain ID: 31337
 
 ## Wallet Map
 
 Fill this once per run.
 
-- Predictions owner wallet:
-- Treasury `DEFAULT_ADMIN_ROLE` wallet:
-- Treasury `TOURNAMENT_MANAGER_ROLE` wallet:
-- User test wallet A:
-- User test wallet B:
-- User test wallet C:
+- Predictions owner wallet: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+- Treasury `DEFAULT_ADMIN_ROLE` wallet: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+- Treasury `TOURNAMENT_MANAGER_ROLE` wallet: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+- User test wallet A: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+- User test wallet B: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+- User test wallet C: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 
 ## Contract Snapshot
 
-- `Carton` address:
-- `Predictions` address:
-- `Treasury` address:
-- `USDC` address:
-- Active tournament ID:
+- `Carton` address: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+- `Predictions` address: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+- `Treasury` address: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+- `USDC` address: 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+- Active tournament ID: 1 (creo)
 
 ## Result Legend
 
@@ -74,6 +74,7 @@ Add one row for every transaction-producing step and every important revert/guar
 | Step | Environment | Wallet | Action | Expected | Actual | Tx hash / evidence | Result | Notes |
 |---|---|---|---|---|---|---|---|---|
 | Example: A1 | Local / Anvil | Predictions owner | `setResults(1,2,1)` | Success | Success | `0x...` | PASS | First result load |
+
 
 ## Environment Blocks
 
@@ -146,71 +147,71 @@ Before you start this block:
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| 1.1 | `forge test` passes from repo root |  |  |  |
-| 1.2 | `frontend/npm run build` passes |  |  |  |
-| 1.3 | `admin/pnpm build` passes |  |  |  |
-| 1.4 | `Predictions.owner()` wallet is identified |  |  |  |
-| 1.5 | `Treasury.DEFAULT_ADMIN_ROLE` wallet is identified |  |  |  |
-| 1.6 | `Treasury.TOURNAMENT_MANAGER_ROLE` wallet is identified |  |  |  |
+| 1.1 | `forge test` passes from repo root | | PASS  |  |
+| 1.2 | `frontend/npm run build` passes | | PASS |  |
+| 1.3 | `admin/pnpm build` passes | | PASS |  |
+| 1.4 | `Predictions.owner()` wallet is identified | | PASS |  |
+| 1.5 | `Treasury.DEFAULT_ADMIN_ROLE` wallet is identified | | PASS  |  |
+| 1.6 | `Treasury.TOURNAMENT_MANAGER_ROLE` wallet is identified | | PASS  |  |
 
 ## Step 2. Local Environment
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| 2.1 | `anvil` is running |  |  |  |
-| 2.2 | Fresh local contracts are deployed |  |  |  |
-| 2.3 | Local env files point to current `Carton`, `Predictions`, `Treasury`, `USDC` |  |  |  |
-| 2.4 | Frontend is running |  |  |  |
-| 2.5 | Admin app is running |  |  |  |
-| 2.6 | Expected admin wallet is connected |  |  |  |
+| 2.1 | `anvil` is running | | PASS  |  |
+| 2.2 | Fresh local contracts are deployed | | PASS |  |
+| 2.3 | Local env files point to current `Carton`, `Predictions`, `Treasury`, `USDC` | | PASS |  |
+| 2.4 | Frontend is running | | PASS  |  |
+| 2.5 | Admin app is running |  | PASS  |  |
+| 2.6 | Expected admin wallet is connected | | PASS  |  |
 
 ## Step 3. Admin Identity Check
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| 3.1 | Admin page opens correctly |  |  |  |
-| 3.2 | Connected address matches expected wallet |  |  |  |
-| 3.3 | `Can manage predictions` is `true` for owner wallet |  |  |  |
-| 3.4 | Treasury role flags match expectations |  |  |  |
-| 3.5 | Connected chain is Anvil for local smoke test |  |  |  |
+| 3.1 | Admin page opens correctly |  | PASS  |  |
+| 3.2 | Connected address matches expected wallet |  | PASS  |  |
+| 3.3 | `Can manage predictions` is `true` for owner wallet |  | PASS  |  |
+| 3.4 | Treasury role flags match expectations |  | PASS |  |
+| 3.5 | Connected chain is Anvil for local smoke test |  | PASS  |  |
 
 ## Step 4. Tournament Config Check
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| 4.1 | `Carton.activeTournamentId` is correct |  |  |  |
-| 4.2 | `Predictions.totalGames` is correct |  |  |  |
-| 4.3 | `submissionDeadline` is in the future |  |  |  |
-| 4.4 | Accepted tokens and prices are correct |  |  |  |
-| 4.5 | `Carton` points to the expected `Treasury` |  |  |  |
+| 4.1 | `Carton.activeTournamentId` is correct |  | PASS |  |
+| 4.2 | `Predictions.totalGames` is correct |  |  | PASS |
+| 4.3 | `submissionDeadline` is in the future |  |  | No se seta de una el submission va luego |
+| 4.4 | Accepted tokens and prices are correct |  | PASS |  |
+| 4.5 | `Carton` points to the expected `Treasury` |  |   | Tal vez? |
 
 ## Step 5. Sales and Purchase Check
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| 5.1 | Buy at least one carton as a user |  |  |  |  |
-| 5.2 | Purchase succeeds |  |  |  |  |
-| 5.3 | Token appears in wallet / UI |  |  |  |  |
-| 5.4 | If using USDC, payment reaches `Treasury` |  |  |  |  |
-| 5.5 | Prize pool increases as expected |  |  |  |  |
+| 5.1 | Buy at least one carton as a user | 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC | 0xfdeabcef895c8ab640c8de9fd3d3fd150d21ab99112bd52075330d31e82730d3 | PASS |  |
+| 5.2 | Purchase succeeds |  |  | PASS  |  |
+| 5.3 | Token appears in wallet / UI |  |  | PASS |  |
+| 5.4 | If using USDC, payment reaches `Treasury` |  |  | PASS |  |
+| 5.5 | Prize pool increases as expected |  |  | PASS |  |
 
 ## Step 6. Prediction Submission Check
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| 6.1 | Submit one full prediction |  |  |  |  |
-| 6.2 | Submission tx succeeds |  |  |  |  |
-| 6.3 | UI shows stored prediction |  |  |  |  |
-| 6.4 | If winners are enabled, submit winners once |  |  |  |  |
-| 6.5 | Winners prediction is stored correctly |  |  |  |  |
+| 6.1 | Submit one full prediction |  |  | PASS  |  |
+| 6.2 | Submission tx succeeds |  | 0xcb93b012781953152216a065d540e234e1d6ae5ad8c24527a5850c18bf7a0c59 | PASS |  |
+| 6.3 | UI shows stored prediction |  |  | PASS  |  |
+| 6.4 | If winners are enabled, submit winners once |  |  | PASS | ?? todo se envía en una única transacción |
+| 6.5 | Winners prediction is stored correctly |  |  | PASS |  |
 
 ## Step 7. Sales Closure Check
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| 7.1 | Close sales from admin flow |  |  |  |  |
-| 7.2 | New purchases now fail |  |  |  |  |
-| 7.3 | Result loading is now allowed |  |  |  |  |
+| 7.1 | Close sales from admin flow |  | 0xaede50ddfa5e0440efabd6d4ea69510ef69fc40602939406ebc936ea4d3a25fb | PASS | debería verse cerrado en el front, quitar cartelote de compra |
+| 7.2 | New purchases now fail |  |  | PASS |  |
+| 7.3 | Result loading is now allowed |  |  | PASS | aunque no sé del todo a q chota se refiere  |
 
 ## Path A. Single Result Flow
 
@@ -220,25 +221,25 @@ Use this path to validate the normal production-style result workflow.
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| A1.1 | Load one result with `setResults` from admin app |  |  |  |  |
-| A1.2 | Tx succeeds |  |  |  |  |
-| A1.3 | Row shows stored score |  |  |  |  |
+| A1.1 | Load one result with `setResults` from admin app |  |  | PASS |  |
+| A1.2 | Tx succeeds |  |0x6f79d83f7ff6b057a89af4fe0eeed0dd48592e522040e4aa0a8029fe8be10201  | PASS | now the users cant complete his predictions not enough info about it |
+| A1.3 | Row shows stored score |  |  | PASS |  |
 
 ### Step A2. Duplicate Protection
 
 | ID | Check | Wallet | Evidence | Result | Notes |
 |---|---|---|---|---|---|
-| A2.1 | Try to set same result again through first-load path |  |  |  |  |
-| A2.2 | It no longer behaves like a first write |  |  |  |  |
-| A2.3 | UI routes to `updateResults` for already-set games |  |  |  |  |
+| A2.1 | Try to set same result again through first-load path |  |  | PASS | no tengo más el botón de set  - hay que modificar el batch para que me permita enviar menos resultados es una goma como está actualmente porque o sólo envío todos de una .. o todos de a uno, no puedo meter 2 o 3 de auno y luego enviar batch el resto, una cagada -- ahora parece que anduvo, cosa eh mandinga|
+| A2.2 | It no longer behaves like a first write |  |  | PASS |  |
+| A2.3 | UI routes to `updateResults` for already-set games |  |  | PASS |  |
 
 ### Step A3. Correction Flow
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| A3.1 | Change an already-set score |  |  |  |  |
-| A3.2 | `updateResults` succeeds before finalization |  |  |  |  |
-| A3.3 | Corrected score appears on screen |  |  |  |  |
+| A3.1 | Change an already-set score |  |  | PASS |  |
+| A3.2 | `updateResults` succeeds before finalization |  |  | PASS  |  |
+| A3.3 | Corrected score appears on screen |  |  | PASS |  |
 
 ## Path B. Batch Result Flow on Anvil
 
@@ -248,35 +249,35 @@ Use this path only on local Anvil. This is a dev helper and should not be availa
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| B1.1 | Batch button is visible on Anvil |  |  |  |
-| B1.2 | Button label shows number of visible unset games |  |  |  |
+| B1.1 | Batch button is visible on Anvil |  | PASS |  |
+| B1.2 | Button label shows number of visible unset games |  | PASS |  |
 
 ### Step B2. Batch Happy Path
 
 | ID | Check | Wallet | Evidence / tx hash | Result | Notes |
 |---|---|---|---|---|---|
-| B2.1 | Fill several visible unset games |  |  |  |  |
-| B2.2 | Click `Set Visible In Batch` |  |  |  |  |
-| B2.3 | One tx sets all intended visible games |  |  |  |  |
-| B2.4 | Already-set rows were skipped |  |  |  |  |
-| B2.5 | Empty rows were skipped |  |  |  |  |
-| B2.6 | Game ID list in tx matches expectation |  |  |  |  |
+| B2.1 | Fill several visible unset games |  |  | PASS  |  |
+| B2.2 | Click `Set In Batch` |  |  | PASS |  |
+| B2.3 | One tx sets all intended visible games |  |  | PASS  |  |
+| B2.4 | Already-set rows were skipped |  |  | PASS |  |
+| B2.5 | Empty rows were skipped |  |  | PASS |  |
+| B2.6 | Game ID list in tx matches expectation |  |  | PASS | eso espero demasiado quilombo chequearlo |
 
 ### Step B3. Batch Validation
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
 | B3.1 | Enter at least one invalid visible score |  |  |  |
-| B3.2 | Batch action is blocked before sending |  |  |  |
+| B3.2 | Batch action is blocked before sending |  | BLOCKED |  ya los había enviado |
 | B3.3 | Fix invalid row and retry successfully |  |  |  |
 
 ### Step B4. Non-Anvil Guard
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| B4.1 | Switch to non-Anvil chain or environment |  |  |  |
-| B4.2 | Batch button is not shown |  |  |  |
-| B4.3 | Manual `setResultsBatch` call outside Anvil reverts |  |  |  |
+| B4.1 | Switch to non-Anvil chain or environment |  | PASS |  |
+| B4.2 | Batch button is not shown |  | PASS |  |
+| B4.3 | Manual `setResultsBatch` call outside Anvil reverts |  | BLOCKED | no tengo el botón para probar  |
 
 ## Path C. Points and Leaderboard
 
@@ -284,14 +285,14 @@ Use this path only on local Anvil. This is a dev helper and should not be availa
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| C1.1 | After loading some results, points can be recalculated |  |  |  |
-| C1.2 | Partial scoring behaves as expected |  |  |  |
+| C1.1 | After loading some results, points can be recalculated |  | PASS |  |
+| C1.2 | Partial scoring behaves as expected |  | PASS |  |
 
 ### Step C2. Final Scoring Inputs
 
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
-| C2.1 | All intended match results are loaded |  |  |  |
+| C2.1 | All intended match results are loaded |  | PASS |  |
 | C2.2 | Official winners are loaded if required |  |  |  |
 | C2.3 | Tournament is ready for final point calculation |  |  |  |
 

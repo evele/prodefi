@@ -123,6 +123,14 @@ function HomePage() {
     args: [CONTRACT_ADDRESSES.USDC],
   })
 
+  const { data: tournamentFinalized } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'tournamentFinalized',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: true },
+  })
+
   const prizeContracts = useMemo(() => {
     if (tournamentId === 0n) return []
     return PRIZE_BANDS.map((band) => ({
@@ -298,6 +306,50 @@ function HomePage() {
     },
   })
 
+  const claimablePrizeContracts = useMemo(
+    () =>
+      tournamentFinalized
+        ? activeTournamentCartons.map((tokenId) => ({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'getClaimablePrizeAmount' as const,
+            args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] as const,
+          }))
+        : [],
+    [activeTournamentCartons, tournamentFinalized, tournamentId],
+  )
+
+  const { data: claimablePrizeResults } = useReadContracts({
+    contracts: claimablePrizeContracts,
+    query: {
+      enabled: claimablePrizeContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
+  const claimedPrizeContracts = useMemo(
+    () =>
+      tournamentFinalized
+        ? activeTournamentCartons.map((tokenId) => ({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'hasUserClaimed' as const,
+            args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] as const,
+          }))
+        : [],
+    [activeTournamentCartons, tournamentFinalized, tournamentId],
+  )
+
+  const { data: claimedPrizeResults } = useReadContracts({
+    contracts: claimedPrizeContracts,
+    query: {
+      enabled: claimedPrizeContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
+  })
+
   const cartonEntries = useMemo(() => {
     if (!activeTournamentCartons.length) return []
 
@@ -307,10 +359,22 @@ function HomePage() {
       const gamesSubmitted = Boolean(cartonStatusResults?.[index * 2]?.result)
       const winnersSubmitted = hasWinnersPrediction(cartonStatusResults?.[index * 2 + 1]?.result)
       const status = getPredictionStatus({ gamesSubmitted, winnersSubmitted, deadline: deadlineValue })
+      const claimablePrize = tournamentFinalized
+        ? ((claimablePrizeResults?.[index]?.result as bigint | undefined) ?? 0n)
+        : 0n
+      const hasClaimedPrize = tournamentFinalized
+        ? Boolean(claimedPrizeResults?.[index]?.result)
+        : false
 
-      return { tokenId, status, gamesSubmitted, winnersSubmitted }
+      const prizeStatus: 'none' | 'claimable' | 'claimed' = hasClaimedPrize
+        ? 'claimed'
+        : claimablePrize > 0n
+          ? 'claimable'
+          : 'none'
+
+      return { tokenId, status, gamesSubmitted, winnersSubmitted, prizeStatus }
     })
-  }, [activeTournamentCartons, cartonStatusResults, deadline])
+  }, [activeTournamentCartons, cartonStatusResults, claimablePrizeResults, claimedPrizeResults, deadline, tournamentFinalized])
 
   const orderedCartonEntries = useMemo(() => {
     return [...cartonEntries].sort((a, b) => {
@@ -334,7 +398,7 @@ function HomePage() {
       return {
         title: `Carton #${nextActionableCarton.tokenId.toString()} esperando tus partidos`,
         description: 'Ya tienes un carton listo para arrancar. Empieza por cargar los resultados de grupos.',
-        cta: 'Empezar prediccion',
+        cta: 'Comenzar prediccion',
       }
     }
 
@@ -547,16 +611,17 @@ function HomePage() {
               <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
                 {cartonsUser && cartonsUser.length > 0
                   ? 'Tus otros cartones pertenecen a otro torneo. Compra uno del torneo activo para predecir aquí.'
-                  : 'Comprá el primero para empezar a predecir'}
+                  : 'Comprá el primero para comenzar a predecir'}
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {orderedCartonEntries.map(({ tokenId, status }) => (
+              {orderedCartonEntries.map(({ tokenId, status, prizeStatus }) => (
                 <CartonListItem
                   key={tokenId.toString()}
                   tokenId={tokenId}
                   status={status}
+                  prizeStatus={prizeStatus}
                   highlighted={nextActionableCarton?.tokenId === tokenId}
                 />
               ))}
@@ -577,7 +642,7 @@ function HomePage() {
                 className="px-4 py-2.5 flex justify-between text-xs font-medium"
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
-                <span className="uppercase tracking-wider">Bandas de premios</span>
+                <span className="uppercase tracking-wider">Premios</span>
                 <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
                   {usdcPoolDisplay}
                 </span>

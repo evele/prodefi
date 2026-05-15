@@ -2,7 +2,7 @@ import type { PredictionStatus } from '../lib/types'
 
 const STATUS_CONFIG: Record<PredictionStatus, { text: string; dotColor: string; textColor: string; bgColor: string }> = {
   none: {
-    text: 'Sin empezar',
+    text: 'Pendiente',
     dotColor: 'var(--text-disabled)',
     textColor: 'var(--text-disabled)',
     bgColor: 'rgba(58, 71, 92, 0.2)',

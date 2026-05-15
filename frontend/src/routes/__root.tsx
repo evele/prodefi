@@ -58,7 +58,7 @@ function RootLayout() {
                 search={{ carton: undefined }}
                 className={navLinkClass}
               >
-                Predecir
+                Predicciones
               </Link>
               <Link to="/leaderboard" className={navLinkClass}>
                 Tabla
@@ -117,7 +117,7 @@ function RootLayout() {
           activeProps={{ style: { color: 'var(--accent-green)' } }}
         >
           <Target size={20} strokeWidth={1.75} />
-          <span>Predecir</span>
+          <span>Predicciones</span>
         </Link>
         <Link
           to="/leaderboard"

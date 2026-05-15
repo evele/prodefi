@@ -361,6 +361,9 @@ contract TournamentSmokeTest is BaseTest {
     }
 
     function _accessControlUnauthorized(address account, bytes32 role) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), account, role);
+        return
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), account, role
+            );
     }
 }

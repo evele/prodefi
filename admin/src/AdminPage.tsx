@@ -85,7 +85,15 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
   const { games } = useMemo(() => buildAllGroupGames(), [])
   const [gameSearch, setGameSearch] = useState('')
   const demoScores = useMemo<[number, number][]>(
-    () => [[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [0, 2], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3], [3, 2]],
+    () => {
+      const scores: [number, number][] = []
+      for (let team1Goals = 0; team1Goals <= 7; team1Goals += 1) {
+        for (let team2Goals = 0; team2Goals <= 7 - team1Goals; team2Goals += 1) {
+          scores.push([team1Goals, team2Goals])
+        }
+      }
+      return scores
+    },
     [],
   )
 
@@ -107,7 +115,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
     },
   })
 
-  const { data: gamesData, refetch: refetchGamesData } = useReadContracts({
+  const { data: gamesStatusData, refetch: refetchGamesStatus } = useReadContracts({
     contracts: games.map((game) => ({
       address: predictions,
       abi: PREDICTIONS_ABI,
@@ -117,16 +125,35 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
     query: { enabled: games.length > 0, refetchInterval: 10_000 },
   })
 
+  const { data: gameResultsData, refetch: refetchGameResults } = useReadContracts({
+    contracts: games.map((game) => ({
+      address: predictions,
+      abi: PREDICTIONS_ABI,
+      functionName: 'getGameResults' as const,
+      args: [game.id] as const,
+    })),
+    query: { enabled: games.length > 0, refetchInterval: 10_000 },
+  })
+
   const storedGamesById = useMemo(() => {
     return new Map(
       games.map((game, index) => {
-        const result = gamesData?.[index]?.result as
-          | { id: number; result: [number, number]; set: boolean }
-          | undefined
-        return [game.id, result]
+        const rawStatus = gamesStatusData?.[index]?.result as [number, boolean] | { id?: number; set?: boolean } | undefined
+        const rawResult = gameResultsData?.[index]?.result as [number, number] | undefined
+
+        const isSet = Array.isArray(rawStatus) ? Boolean(rawStatus[1]) : Boolean(rawStatus?.set)
+        const result = Array.isArray(rawResult) ? rawResult : [0, 0]
+
+        return [
+          game.id,
+          {
+            result,
+            set: isSet,
+          },
+        ]
       }),
     )
-  }, [games, gamesData])
+  }, [games, gameResultsData, gamesStatusData])
 
   // Local state for goal inputs per game
   const [goals, setGoals] = useState<Record<number, [string, string]>>({})
@@ -224,7 +251,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
         revertedMessage: 'Result update was rejected on-chain.',
         logLabel: hasStoredResult ? 'Admin update results' : 'Admin set results',
         onSuccess: async () => {
-          await refetchGamesData()
+          await Promise.all([refetchGamesStatus(), refetchGameResults()])
         },
       },
     )
@@ -294,7 +321,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
         revertedMessage: 'Batch result update was rejected on-chain.',
         logLabel: 'Admin set results batch',
         onSuccess: async () => {
-          await refetchGamesData()
+          await Promise.all([refetchGamesStatus(), refetchGameResults()])
         },
       },
     )
@@ -369,7 +396,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
           )}
         </div>
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {filteredGames.map(({ game, label }) => (
+          {filteredGames.map(({ game }) => (
             <div key={game.id} className="flex items-center gap-2 text-sm">
               <span className="w-8 text-gray-500">#{game.id}</span>
               <span className="w-28 truncate text-right">{teamsById[game.team1] ?? game.team1}</span>
@@ -403,7 +430,6 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
               >
                 {storedGamesById.get(game.id)?.set ? 'Update' : 'Set'}
               </Button>
-              <span className="hidden xl:inline w-52 truncate text-xs text-gray-400">{label}</span>
             </div>
           ))}
           {filteredGames.length === 0 && (
@@ -1066,6 +1092,8 @@ function CloseTournamentSection({
     [candidateTokenIds, positionData, positionVersionData, positionsVersion],
   )
 
+  const leaderboardTokenIds = useMemo(() => leaderboardEntries.map((entry) => entry.tokenId), [leaderboardEntries])
+
   const parsedDistribution = useMemo(() => parsePrizeDistributionInput(distributionInput), [distributionInput])
   const distributionIsValid = parsedDistribution.length > 0
     && parsedDistribution.every((value) => Number.isInteger(value) && value >= 0 && value <= 100)
@@ -1077,6 +1105,32 @@ function CloseTournamentSection({
     }
     return computeFinalPrizeAmounts(leaderboardEntries, prizePool, parsedDistribution)
   }, [distributionIsValid, leaderboardEntries, parsedDistribution, prizePool])
+
+  const { data: claimablePrizeData } = useReadContracts({
+    contracts: leaderboardTokenIds.map((tokenId) => ({
+      address: treasury,
+      abi: TREASURY_ABI,
+      functionName: 'getClaimablePrizeAmount' as const,
+      args: [parsedTournamentId, tokenId, tokenAddress] as const,
+    })),
+    query: {
+      enabled: parsedTournamentId > 0n && leaderboardTokenIds.length > 0,
+      refetchInterval: 10_000,
+    },
+  })
+
+  const onchainFinalPayouts = useMemo(() => {
+    return leaderboardEntries.map((entry, index) => ({
+      ...entry,
+      amount: (claimablePrizeData?.[index]?.result as bigint | undefined) ?? 0n,
+    }))
+  }, [claimablePrizeData, leaderboardEntries])
+
+  const hasLoadedFinalAmounts = (finalAmountTotal ?? 0n) > 0n
+  const displayedPayouts = hasLoadedFinalAmounts ? onchainFinalPayouts : (payoutPreview?.payouts ?? [])
+  const displayedAssignedTotal = hasLoadedFinalAmounts
+    ? onchainFinalPayouts.reduce((sum, entry) => sum + entry.amount, 0n)
+    : (payoutPreview?.totalAssigned ?? 0n)
 
   const finalPrizePayload = useMemo(() => {
     if (!payoutPreview || candidateTokenIds.length === 0) return null
@@ -1321,14 +1375,23 @@ function CloseTournamentSection({
             `Load Final Prizes` can be rerun before sealing. It overwrites every minted token for this tournament context, including prizes that now become `0`.
           </div>
 
-          {payoutPreview && (
+          {(payoutPreview || hasLoadedFinalAmounts) && (
             <div className="rounded-lg border border-border p-3 space-y-3">
               <div className="space-y-1 text-sm">
                 <div><span className="font-medium">Shared-rank preview:</span> {leaderboardEntries.length} ranked cartones</div>
                 <div><span className="font-medium">Tokens overwritten on load:</span> {candidateTokenIds.length}</div>
-                <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
-                <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(payoutPreview.totalAssigned, 6)).toFixed(2)} USDC</div>
-                <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                <div><span className="font-medium">Assigned to winners:</span> {Number(formatUnits(displayedAssignedTotal, 6)).toFixed(2)} USDC</div>
+                {!hasLoadedFinalAmounts && payoutPreview && (
+                  <>
+                    <div><span className="font-medium">Global reserve after sealing:</span> {Number(formatUnits((reservePool ?? 0n) + payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                    <div><span className="font-medium">Extra reserve from empty places / cent rounding:</span> {Number(formatUnits(payoutPreview.reserveAddition, 6)).toFixed(2)} USDC</div>
+                  </>
+                )}
+                {hasLoadedFinalAmounts && (
+                  <div className="text-xs text-gray-600">
+                    Showing exact on-chain final prize amounts loaded for each token. This no longer simulates payouts from the current pool.
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1346,9 +1409,9 @@ function CloseTournamentSection({
               </div>
 
               <div>
-                <div className="text-sm font-medium mb-1">Final payouts preview:</div>
+                <div className="text-sm font-medium mb-1">{hasLoadedFinalAmounts ? 'Final payouts loaded on-chain:' : 'Final payouts preview:'}</div>
                 <div className="max-h-56 overflow-y-auto text-xs text-gray-600 space-y-0.5">
-                  {payoutPreview.payouts.map((entry) => (
+                  {displayedPayouts.map((entry) => (
                     <div key={`payout-${entry.tokenId.toString()}`}>
                       #{entry.rank} — Token {entry.tokenId.toString()} · {Number(formatUnits(entry.amount, 6)).toFixed(2)} USDC
                     </div>
