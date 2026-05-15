@@ -190,7 +190,7 @@ Add/replace tests for:
 
 ### 2026-05-12
 
-- Plan created in `refactormt.md`.
+- Plan created in `docs/plans/refactormt.md`.
 - Architecture decisions locked:
   - simultaneous tournaments
   - shared `Treasury`

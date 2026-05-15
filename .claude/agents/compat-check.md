@@ -44,7 +44,7 @@ For each hook, note:
 - Dependencies on RainbowKit vs pure Wagmi
 
 ### Step 4: Check Platform References
-- Read `TECH_RESEARCH.md` if it exists for prior platform research
+- Read `docs/research/TECH_RESEARCH.md` if it exists for prior platform research
 - Read `DEVELOPMENT_PLAN.md` for planned mini app work
 - Search for any existing Farcaster or Lemon-related code/config
 
