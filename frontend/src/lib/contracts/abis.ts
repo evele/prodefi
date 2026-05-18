@@ -2103,6 +2103,29 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "setResultsBatch",
+    "inputs": [
+      {
+        "name": "gameIds",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
+      },
+      {
+        "name": "team1Goals",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
+      },
+      {
+        "name": "team2Goals",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setSubmissionDeadline",
     "inputs": [
       {
@@ -2772,6 +2795,11 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "BatchResultsOnlyOnAnvil",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DeadlineMustBeFuture",
     "inputs": []
   },
@@ -2940,6 +2968,11 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "TournamentClosedForCorrections",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TournamentSalesStillOpen",
     "inputs": []
   },
   {

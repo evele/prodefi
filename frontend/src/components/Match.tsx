@@ -137,7 +137,7 @@ export function Match({ game, disabled, readOnlyAppearance = false, onScoreChang
 
       {hasImprobableScore && (
         <p className="text-xs text-center" style={{ color: 'var(--accent-gold)' }}>
-          Resultado poco creible. Pegale una ultima mirada por las dudas.
+          Resultado muuy abultado. Pegale una ultima mirada por las dudas.
         </p>
       )}
 

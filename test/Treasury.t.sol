@@ -179,27 +179,24 @@ contract TreasuryTest is BaseTest {
         _setFinalPrizeAmountsAndSeal(tournamentId, token, tokenIds, amounts);
     }
 
-    /// @notice Setup complete scenario with predictions and positions (without closing)
-    function _setupCompleteScenarioWithTreasuryNoClose(uint256 tournamentId) internal {
-        // Setup cartons and predictions
+    function _setupSubmittedPredictionsScenario() internal {
         _mintCartonsToUsers();
 
-        // Submit predictions manually (like in _setupCompleteScenario but with owner control)
-        // User 1 - Perfect predictions
         Predictions.Prediction[] memory preds1 = _createValidGamePrediction();
         _submitCompletePredictions(user1, TOKEN_ID_1, preds1, [TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
 
-        // User 2 - Good predictions
         uint8[8] memory results2 = [2, 0, 1, 2, 0, 1, 2, 1];
         Predictions.Prediction[] memory preds2 = _createGamePrediction(results2);
         _submitCompletePredictions(user2, TOKEN_ID_2, preds2, [TEAM_1, TEAM_3, TEAM_2, TEAM_4]);
 
-        // User 3 - Poor predictions
         uint8[8] memory results3 = [1, 1, 2, 0, 1, 0, 1, 2];
         Predictions.Prediction[] memory preds3 = _createGamePrediction(results3);
         _submitCompletePredictions(user3, TOKEN_ID_3, preds3, [TEAM_5, TEAM_6, TEAM_7, TEAM_8]);
+    }
 
-        // Set official results (with admin permission, 1-based gameIds)
+    function _setOfficialResultsAndPositions() internal {
+        _closeSalesIfOpen(TOURNAMENT_ID_1);
+
         vm.startPrank(admin);
         predictions.setResults(1, 2, 1);
         predictions.setResults(2, 1, 1);
@@ -208,19 +205,26 @@ contract TreasuryTest is BaseTest {
         predictions.setOfficialWinners([TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
         vm.stopPrank();
 
-        // Calculate points and set positions (ordered from highest to lowest)
         uint256[] memory tokenIds = new uint256[](3);
-        tokenIds[0] = TOKEN_ID_1; // 1st place
-        tokenIds[1] = TOKEN_ID_2; // 2nd place
-        tokenIds[2] = TOKEN_ID_3; // 3rd place
+        tokenIds[0] = TOKEN_ID_1;
+        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[2] = TOKEN_ID_3;
 
         uint256[] memory points = _calculateAllUserPoints();
 
         vm.prank(admin);
         predictions.setPositions(tokenIds, points);
+    }
 
-        // Setup treasury (WITHOUT closing sales/finalizing)
+    function _setupScenarioWithOpenSales(uint256 tournamentId) internal {
+        _setupSubmittedPredictionsScenario();
         _depositFunds(tournamentId, INITIAL_DEPOSIT);
+    }
+
+    /// @notice Setup complete scenario with predictions and positions before tournament finalization
+    function _setupCompleteScenarioWithTreasuryNoClose(uint256 tournamentId) internal {
+        _setupScenarioWithOpenSales(tournamentId);
+        _setOfficialResultsAndPositions();
     }
 
     /// @notice Setup complete scenario with predictions and positions
@@ -740,10 +744,12 @@ contract TreasuryTest is BaseTest {
     function test_EdgeCase_RoundingInPrizeCalculation() public {
         _logTestInfo("Edge Case Rounding in Prize Calculation");
 
-        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setupScenarioWithOpenSales(TOURNAMENT_ID_1);
 
         // Deposit amount that will cause rounding
         _depositFunds(TOURNAMENT_ID_1, 333 wei); // Total becomes 1 ether + 333 wei
+
+        _setOfficialResultsAndPositions();
 
         uint256 totalPool = treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN);
         uint256 expectedPrize = (totalPool * 50) / 100; // Should round down
@@ -767,6 +773,9 @@ contract TreasuryTest is BaseTest {
         _logTestInfo("Edge Case Single Winner Takes All");
 
         _mintCarton(user1, TOKEN_ID_1);
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+        _closeSalesIfOpen(TOURNAMENT_ID_1);
+
         uint256[] memory tokenIds = new uint256[](1);
         tokenIds[0] = TOKEN_ID_1;
         uint256[] memory points = new uint256[](1);
@@ -782,8 +791,6 @@ contract TreasuryTest is BaseTest {
         predictions.setResults(4, 3, 0);
         predictions.setOfficialWinners([TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
         vm.stopPrank();
-
-        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
 
         uint8[] memory distribution = new uint8[](1);
         distribution[0] = 100;
@@ -976,7 +983,7 @@ contract TreasuryTest is BaseTest {
     function test_ClaimPrize_ERC20_Success() public {
         _logTestInfo("ClaimPrize ERC20 Success");
 
-        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setupScenarioWithOpenSales(TOURNAMENT_ID_1);
 
         // Deposit USDC and set distribution
         uint256 depositAmount = 1000 * 10 ** 6; // 1000 USDC
@@ -984,6 +991,8 @@ contract TreasuryTest is BaseTest {
         USDC.approve(address(treasury), depositAmount);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
         vm.stopPrank();
+
+        _setOfficialResultsAndPositions();
 
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
@@ -1009,13 +1018,15 @@ contract TreasuryTest is BaseTest {
     function test_ClaimPrize_ERC20_AlreadyClaimed() public {
         _logTestInfo("ClaimPrize ERC20 Already Claimed");
 
-        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setupScenarioWithOpenSales(TOURNAMENT_ID_1);
 
         uint256 depositAmount = 1000 * 10 ** 6;
         vm.startPrank(fundDepositor);
         USDC.approve(address(treasury), depositAmount);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
         vm.stopPrank();
+
+        _setOfficialResultsAndPositions();
 
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
@@ -1039,7 +1050,7 @@ contract TreasuryTest is BaseTest {
     function test_MultiAsset_SameTournament() public {
         _logTestInfo("Multi Asset Same Tournament");
 
-        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setupScenarioWithOpenSales(TOURNAMENT_ID_1);
 
         // Deposit USDC
         uint256 usdcAmount = 1000 * 10 ** 6;
@@ -1047,6 +1058,8 @@ contract TreasuryTest is BaseTest {
         USDC.approve(address(treasury), usdcAmount);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), usdcAmount);
         vm.stopPrank();
+
+        _setOfficialResultsAndPositions();
 
         // Set ETH and USDC distributions before finalization.
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
@@ -1290,7 +1303,7 @@ contract TreasuryTest is BaseTest {
     function test_CloseTournament_MultiAssetIndependence() public {
         _logTestInfo("CloseTournament Multi Asset Independence");
 
-        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setupScenarioWithOpenSales(TOURNAMENT_ID_1);
 
         // Setup USDC pool
         uint256 usdcAmount = 1000 * 10 ** 6;
@@ -1298,6 +1311,9 @@ contract TreasuryTest is BaseTest {
         USDC.approve(address(treasury), usdcAmount);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), usdcAmount);
         vm.stopPrank();
+
+        _setOfficialResultsAndPositions();
+
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
 
         _setDefaultPrizeDistribution(TOURNAMENT_ID_1);

@@ -1,25 +1,28 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit'
-import { http } from 'wagmi'
-import type { Chain } from 'viem'
+import { getDefaultConfig as getRainbowKitDefaultConfig } from '@rainbow-me/rainbowkit'
+import { getDefaultConfig as getOpenfortDefaultConfig } from '@openfort/react/wagmi'
+import { createConfig, http } from 'wagmi'
 
-const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo'
+import { appChain, appRpcUrl, canUseOpenfort, walletConnectProjectId } from './chains'
 
-const anvilChain: Chain = {
-  id: 31337,
-  name: 'Anvil',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: {
-    default: { http: ['http://127.0.0.1:8545'] },
-    public: { http: ['http://127.0.0.1:8545'] },
-  },
+const chains = [appChain] as const
+const transports = {
+  [appChain.id]: http(appRpcUrl),
 }
 
-export const config = getDefaultConfig({
-  appName: 'ProDefi',
-  projectId,
-  transports: {
-    [anvilChain.id]: http(anvilChain.rpcUrls.default.http[0]!),
-  },
-  chains: [anvilChain],
-  ssr: false,
-})
+export const config = canUseOpenfort
+  ? createConfig(
+      getOpenfortDefaultConfig({
+        appName: 'ProDefi',
+        walletConnectProjectId,
+        chains,
+        transports,
+        ssr: false,
+      })
+    )
+  : getRainbowKitDefaultConfig({
+      appName: 'ProDefi',
+      projectId: walletConnectProjectId,
+      transports,
+      chains,
+      ssr: false,
+    })

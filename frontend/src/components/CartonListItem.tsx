@@ -4,7 +4,7 @@ import type { PredictionStatus } from '../lib/types'
 import { TokenStatusBadge } from './TokenStatusBadge'
 
 const CTA_LABEL: Record<PredictionStatus, string> = {
-  none: 'Empezar',
+  none: 'Comenzar',
   partial: 'Continuar',
   complete: 'Ver',
   expired: 'Ver',
@@ -20,10 +20,12 @@ const STATUS_COPY: Record<PredictionStatus, string> = {
 export function CartonListItem({
   tokenId,
   status,
+  prizeStatus = 'none',
   highlighted = false,
 }: {
   tokenId: bigint
   status: PredictionStatus
+  prizeStatus?: 'none' | 'claimable' | 'claimed'
   highlighted?: boolean
 }) {
   const navigate = useNavigate()
@@ -44,6 +46,22 @@ export function CartonListItem({
             <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               Carton #{tokenId.toString()}
             </span>
+            {prizeStatus === 'claimable' && (
+              <span
+                className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(96, 165, 250, 0.14)', color: 'rgb(125, 211, 252)' }}
+              >
+                Premio
+              </span>
+            )}
+            {prizeStatus === 'claimed' && (
+              <span
+                className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(0, 230, 118, 0.12)', color: 'var(--accent-green)' }}
+              >
+                Reclamado
+              </span>
+            )}
             {highlighted && (
               <span
                 className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full"

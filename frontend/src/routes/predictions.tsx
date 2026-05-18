@@ -124,7 +124,7 @@ type BlockingStateCard = {
   detail: string
   tone: 'neutral' | 'warning'
   actionLabel?: string
-  actionTo?: '/' | '/admin/dev'
+  actionTo?: '/'
 }
 
 function getFlowCalloutToneStyles(tone: FlowCallout['tone']) {
@@ -158,7 +158,7 @@ export const Route = createFileRoute('/predictions')({
 })
 
 const DEADLINE_NOT_SET_MESSAGE =
-  'El deadline de envío no está configurado. Pide al admin que lo configure en /admin/dev.'
+  'El deadline de envío no está configurado. Pide al admin que lo configure en la consola administrativa.'
 const COMBINED_REVERT_MESSAGE = 'La predicción completa fue rechazada en cadena.'
 const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 
@@ -630,7 +630,7 @@ function PredictionsPage() {
       detail: !isConnected
         ? 'Conecta tu wallet para cargar tus cartones'
         : !hasOwnedCartons
-          ? 'Compra un carton para empezar'
+          ? 'Compra un carton para comenzar'
           : tokenId !== undefined && selectedCartonIsOwned
             ? `Carton #${tokenId.toString()} listo`
             : 'Elige con cual vas a jugar',
@@ -691,13 +691,11 @@ function PredictionsPage() {
   })()
 
   const canSubmitCombined = combinedSubmitBlockedMessage === null
-  const adminActionTo = import.meta.env.DEV ? '/admin/dev' as const : undefined
-
   const blockingState: BlockingStateCard | null = (() => {
     if (!isConnected) {
       return {
         eyebrow: 'Wallet desconectada',
-        title: 'Necesitas conectar tu wallet para empezar.',
+        title: 'Necesitas conectar tu wallet para comenzar.',
         detail: 'Cuando la conectes, esta pantalla cargara tus cartones y habilitara el flujo de envio.',
         tone: 'neutral',
       }
@@ -740,8 +738,8 @@ function PredictionsPage() {
         title: 'El deadline de envio todavia no esta configurado.',
         detail: 'Hasta que exista una fecha valida, la app mantiene bloqueado el envio para evitar estados ambiguos.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
@@ -751,8 +749,8 @@ function PredictionsPage() {
         title: 'Falta publicar la configuracion de equipos en cadena.',
         detail: 'La pantalla puede mostrar el fixture local, pero no deberia permitir envios hasta que ambos lados coincidan.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
@@ -760,10 +758,10 @@ function PredictionsPage() {
       return {
         eyebrow: 'Desincronizacion',
         title: 'La lista de equipos local no coincide con la version onchain.',
-        detail: 'Primero hay que alinear la configuracion para evitar que el usuario confirme una prediccion sobre datos inconsistentes.',
+        detail: 'No es posible enviar la predicción porque hubo falta sincronizar una configuración, intentá nuevamente más tarde.',
         tone: 'warning',
-        actionLabel: adminActionTo ? 'Abrir admin' : undefined,
-        actionTo: adminActionTo,
+        actionLabel: undefined,
+        actionTo: undefined,
       }
     }
 
@@ -791,7 +789,7 @@ function PredictionsPage() {
   const flowCallout: FlowCallout | null = (() => {
     if (!isConnected) {
       return {
-        eyebrow: 'Antes de empezar',
+        eyebrow: 'Antes de comenzar',
         title: 'Conecta tu wallet para abrir tus cartones.',
         detail: 'Desde aqui podras revisar estados, completar predicciones y enviarlas onchain.',
         tone: 'neutral',
@@ -933,7 +931,7 @@ function PredictionsPage() {
     : hasPartialSubmission
       ? 'Este cartón quedó en un estado parcial inesperado y ya no puede seguir editándose desde esta UI.'
     : !tokenId || !selectedCartonIsOwned
-      ? 'Selecciona un cartón válido para empezar a completar esta parte.'
+      ? 'Selecciona un cartón válido para comenzar a completar esta parte.'
       : !hasCompleteGamePredictions
         ? `Completa los ${remainingGamesCount} partido${remainingGamesCount === 1 ? '' : 's'} restante${remainingGamesCount === 1 ? '' : 's'}.`
         : 'Partidos completos. Sigue con el top 4 para habilitar el envío completo.'
@@ -1122,7 +1120,7 @@ function PredictionsPage() {
               <SelectContent>
                 {orderedOwnedCartons.map((entry) => (
                   <SelectItem key={entry.tokenId.toString()} value={entry.tokenId.toString()}>
-                    Carton #{entry.tokenId.toString()} · {entry.status === 'partial' ? 'pendiente' : entry.status === 'none' ? 'sin empezar' : entry.status === 'complete' ? 'completo' : 'vencido'}
+                    Carton #{entry.tokenId.toString()} · {entry.status === 'partial' ? 'pendiente' : entry.status === 'none' ? 'pendiente' : entry.status === 'complete' ? 'completo' : 'vencido'}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1364,7 +1362,7 @@ function PredictionsPage() {
         onClose={() => setIsImprobableScoresModalOpen(false)}
         title="Confirmar marcadores poco habituales"
         message={`Tenes ${improbableScoreSummaries.length} partido${improbableScoreSummaries.length === 1 ? '' : 's'} con resultados de goleada historica: ${improbableScoreSummaries.join(', ')}. ¿Confirmas que queres enviar estas predicciones?`}
-        confirmLabel="Sí, enviar la predicción completa"
+        confirmLabel="Sí, enviar la predicción"
         variant="warning"
         onConfirm={submitPredictionAndWinners}
       />

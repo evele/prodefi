@@ -44,10 +44,11 @@
 - Use `.env.example` patterns where possible; validate inputs and access control in changes.
 
 ## Agent-Specific Instructions
-- Follow `CLAUDE.md` for agent behavior, architecture, and persistent project knowledge.
+- Use `README.md` for project overview, architecture, and doc map.
 - Use `DEVELOPMENT_PLAN.md` for active tasks, priorities, and session planning.
+- Openfort reference notes live in `knowledge/openfort.md`; review them before changing the Openfort integration.
 - Do not duplicate content across files; update the canonical source instead.
-- Keep this AGENTS.md focused on contributor workflow; propose process updates via PR referencing those files.
+- Keep this AGENTS.md focused on contributor workflow; keep broader project context in `README.md` and active implementation details in `DEVELOPMENT_PLAN.md`.
 - English practice: When the user writes in English, interpret the intent and point out at most 1–2 key grammar/syntax errors, excluding minor punctuation fixes; avoid full rewrites unless requested.
 
 ## Notes (Dev-only UI & Lookups)

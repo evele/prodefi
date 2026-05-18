@@ -1,7 +1,7 @@
 # Development Plan
 
 **PURPOSE**: Project planning, task organization, and development roadmap.
-For permanent technical information about the project, see CLAUDE.md.
+For project overview and stable architecture notes, see README.md.
 
 *Last updated: May 12, 2026*
 
@@ -9,13 +9,13 @@ For permanent technical information about the project, see CLAUDE.md.
 
 ## Current Status
 
-### Smart Contracts: COMPLETE (151 tests passing)
+### Smart Contracts: COMPLETE (158 tests passing)
 
 | Contract | Tests | Status |
 |---|---|---|
 | Carton.sol (ERC1155) | 40 | Complete - tournament-aware mint/purchase flows, Treasury auto-deposit |
 | Treasury.sol | 57 | Complete - tournament lifecycle, claims, global reserve, tournament engines |
-| Predictions.sol | 48 | Complete - game/winner predictions, points, positions, tournament-scoped engine |
+| Predictions.sol | 55 | Complete - game/winner predictions, points, positions, tournament-scoped engine |
 | ERC20Integration | 3 | Complete - end-to-end USDC purchase flow |
 | Integration | 3 | Complete - full workflow, deadline enforcement |
 | ~~Counter (boilerplate)~~ | ~~2~~ | ~~Deleted (Feb 14)~~ |
@@ -68,7 +68,7 @@ Completed in code and tests:
 - retained reserve accounting moved to shared `globalReserve[asset]`
 - `Carton` core flows now support explicit `tournamentId` for mint/purchase
 - `Predictions` is now tournament-scoped with immutable `tournamentId`
-- full contract suite passes with the new architecture (`151` tests)
+- full contract suite passes with the new architecture (`158` tests)
 
 Product/frontend scope kept intentionally narrow for now:
 
@@ -76,7 +76,7 @@ Product/frontend scope kept intentionally narrow for now:
 - one active tournament UX at a time
 - historical claims use the token's real tournament context, even if predictions UI stays bound to the active engine
 
-Implementation notes for the refactor are tracked in `refactormt.md`.
+Implementation notes for the refactor are tracked in `docs/plans/refactormt.md`.
 
 ### Scoring Follow-up (May 2026)
 
@@ -100,7 +100,7 @@ Completed in code and tests:
   - total points when official winners exist but a carton never submitted winner picks
 - `/reglas` in `landing/site` now reflects the current scoring definition
 
-Payout / tie product decision locked (see `PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
+Payout / tie product decision locked (see `docs/plans/PRIZE_PAYOUT_IMPLEMENTATION_PLAN.md`):
 
 1. Final ranking is ordered only by total points.
 2. If two or more cartones tie on points, they share the position using standard competition ranking (`1, 2, 2, 4`).
@@ -332,53 +332,88 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 
 **Hipótesis inicial:** para ProDefi parece más prometedor investigar `ERC-4337` + `paymaster` que meta-transactions tradicionales tipo `EIP-2771`, porque permitiría subsidiar gas en flujos como submit de predicciones, claims y compra con USDC sin requerir saldo nativo.
 
-**Preguntas a responder antes de implementar:**
+**Preguntas a responder antes de implementar full production:**
 
-- **Chain objetivo**: confirmar si el deployment futuro será en una red con buen soporte de bundlers/paymasters (Base, Polygon, etc.)
+- **Chain objetivo**: confirmar la red final soportada por el proveedor elegido para embedded wallets + sponsorship
 - **Tipo de wallet**: definir si se apunta a EOAs tradicionales, embedded wallets, o smart accounts desde el inicio
 - **Cobertura del sponsorship**: decidir si subsidiar solo `submitPredictions` / `claimPrize`, o también `approve + buyCartonWithToken`
-- **Proveedor / stack**: comparar opciones concretas (`Alchemy Account Kit`, `ZeroDev`, `Biconomy`, Safe, etc.)
+- **Proveedor / stack**: comparar opciones concretas (`Openfort`, `Privy`, `Dynamic`, `Para`, `Alchemy Account Kit`, `ZeroDev`, `Biconomy`, Safe, etc.)
 - **Impacto en frontend**: revisar si conviene reemplazar parcialmente el flujo Wagmi/RainbowKit actual por un stack con smart accounts
 - **Impacto en contratos**: verificar si el modelo actual funciona sin cambios relevantes bajo `ERC-4337` y qué casos sí requerirían adaptación
 - **Alternativas**: dejar documentado cuándo tendría sentido evaluar `EIP-2771` o `EIP-7702` en vez de 4337
 
-Estado: **Pendiente de investigación dedicada — requiere foco técnico específico antes de tomar decisión**
+**Decisión tomada (dev spike):** avanzar con `Openfort` como proveedor inicial por costo/feature set. Se prioriza `email/social login + embedded wallet`, dejando la elección final de red para después.
 
-### Next Session Plan: Smart Accounts + Social Login
+**Spike ejecutado en frontend (May 2026):**
+
+- Se instaló `@openfort/react` en `frontend/`.
+- Se integró una primera capa de `OpenfortProvider` + `OpenfortWagmiBridge` en `frontend/src/components/providers.tsx`.
+- Se agregó config reusable de chain/env en `frontend/src/lib/chains.ts`.
+- Se actualizó `frontend/src/lib/wagmi.ts` para usar Openfort cuando haya keys configuradas y la chain esté soportada, con fallback al flujo actual de `RainbowKit` cuando no.
+- Se reemplazó el `ConnectButton` de la app shell por `frontend/src/components/WalletButton.tsx`, con soporte para:
+  - `email OTP`
+  - `Google`
+  - wallet externa opcional
+- Se agregó `frontend/.env.example` con variables para chain, RPC y keys de Openfort.
+- El build de `frontend/` pasa después de la integración.
+
+**Importante:** Openfort no quedó activado ciegamente sobre `Anvil`. Mientras no existan keys reales de Openfort y una chain soportada/configurada, el frontend sigue cayendo al flujo anterior con RainbowKit para no romper desarrollo local.
+
+**Bloqueos / próximos pasos para activarlo de verdad:**
+
+1. Elegir una chain soportada por Openfort para embedded wallets + sponsorship.
+2. Deployar contratos de ProDefi en esa red/testnet.
+3. Cargar en `frontend/.env`:
+   - `VITE_OPENFORT_PUBLISHABLE_KEY`
+   - `VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY`
+   - `VITE_CHAIN_ID`
+   - `VITE_RPC_URL`
+   - direcciones de contratos (`VITE_CARTON_ADDRESS`, `VITE_PREDICTIONS_ADDRESS`, `VITE_TREASURY_ADDRESS`, `VITE_USDC_ADDRESS`)
+4. Probar login real con Openfort y validar que `wagmi` siga resolviendo la cuenta embebida correctamente.
+5. Elegir el primer flujo transaccional para sponsorship real. Orden sugerido:
+   - `submitPredictionAndWinners`
+   - `claimPrize`
+   - `buyCartonWithToken`
+
+Estado: **Spike inicial integrado en frontend — pendiente activar con keys + red + contratos desplegados**
+
+### Next Session Plan: Openfort Activation
 
 Goal for the next session:
 
-- evaluate whether ProDefi should move toward a smart-account-first onboarding flow with social login and sponsored gas
+- turn the current Openfort frontend spike into a real end-to-end dev/testnet flow
 
 Tomorrow's priorities:
 
-1. Define the desired product shape before choosing a provider
-   - social login only vs social + email + passkeys
-   - invisible embedded wallet vs visible smart account UX
-   - whether the user should ever need a traditional seed phrase during onboarding
-2. Compare concrete stacks
-   - start with options like `Alchemy Account Kit`, `ZeroDev`, `Biconomy`, `Privy`, `Dynamic`, `Web3Auth`, and Safe-based flows
-   - document which ones support both smart accounts and social login cleanly
-3. Map the exact ProDefi flows that would benefit from sponsorship
+1. Pick the first real Openfort-compatible chain/testnet
+   - prefer a network with strong embedded wallet + sponsorship support
+   - keep the choice pragmatic; user-facing chain can be revisited later
+2. Deploy ProDefi contracts there and update frontend envs
+3. Map the exact ProDefi flows that should benefit from sponsorship first
    - `submitPredictionAndWinners`
    - `claimPrize`
    - `buyCartonWithToken`
    - possible USDC approve replacement paths (`permit`, session keys, or bundling)
-4. Check integration impact on the current frontend stack
-   - what stays from `wagmi` / `RainbowKit`
-   - what would need replacing for auth, account state, and transaction execution
-5. Decide what the first implementation spike should be
-   - likely target: login + smart account creation + one sponsored action on localhost/dev
+4. Validate the current frontend bridge
+   - confirm `useAccount`, reads, and writes still work with the embedded wallet path
+   - remove or reduce RainbowKit fallback once the Openfort path is stable
+5. Implement the first real sponsored action
+   - likely target: login + embedded wallet creation + one sponsored action on testnet/dev
 
 Key evaluation questions:
 
-- Can we get social login + smart accounts without making the wallet model confusing?
-- Can the chosen stack sponsor gas while keeping the current contract model untouched?
+- Can Openfort stay compatible with the current `wagmi`-based read/write model without a large route refactor?
+- Can sponsorship cover the first selected flow without changing the current contract model?
 - Is there a realistic path to remove the explicit USDC `approve` friction from the happy path?
-- Which provider gives the cleanest UX in Spanish first, with an easy English expansion later?
+- When the Openfort path is stable, should the app remain mixed (`Openfort + external wallets`) or become embedded-first?
 
 ### Post-MVP (Nice to have)
 
+- GitHub Actions CI/CD for root contracts + landing deploy
+  - run `forge test` in CI on PRs and before any deploy job
+  - on merge/push to `main`, deploy Firebase hosting only if Foundry tests pass first
+  - define required secrets/credentials for Firebase deploy in GitHub Actions
+  - confirm whether the deploy target should be only `landing/site` or also functions when backend changes land
 - ERC20 allowlist per tournament
 - `totalClaimed` telemetry + `remainingPool` view
 - Admin remainder withdrawal (0-10% after close)
@@ -434,16 +469,17 @@ Key evaluation questions:
 - **Oct 14, 2025**: Tournament lifecycle (`closeTournament` + snapshot), 106 tests
 - **Oct 15, 2025**: MockERC20, deploy automation, frontend multi-asset UI
 - **Feb 9, 2026**: Fixed 2 stale tests (team ID 33->49), identified contract bugs, full project review
-- **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, DEAD_CODE_REVIEW.md creado
+- **Feb 13, 2026**: Dead code audit (Predictions + Treasury), discusion.md obsoleta, `docs/archive/DEAD_CODE_REVIEW.md` creado
 - **Feb 14, 2026**: Dead code cleanup ejecutado (picks, Game struct, MAX_INT, teamGroup system, Counter boilerplate). teamsHash consolidado (id+name+groupId). Frontend actualizado: single hash verification. 116 tests passing
 - **Feb 18, 2026**: Real leaderboard (on-chain positions, points, prize pools, "You" badge). Prize claiming UI (ClaimSection per carton in /predictions, ETH + USDC, hidden until closed). MVP flow complete end-to-end.
 - **Apr 15, 2026**: USDC-only cleanup completed. ETH purchase disabled onchain, deploy/product flow aligned to USDC-only, and product-facing prize/claim/admin UX updated while keeping native balance visible for gas awareness.
 - **Apr 8, 2026**: UX iteration on home/predictions. Added purchase -> prediction handoff, actionable-carton prioritization, clearer carton status surfacing, and automatic selection of the best carton to continue.
 - **Apr 15, 2026**: Predictions UX iteration. Added combined submit path, restored incomplete-match submit blocking, reset drafts on carton change/success, unified submitted predictions into the same panels, and improved read-only legibility for already-sent values.
-- **May 12, 2026**: Core multi-tournament refactor completed. `Treasury` now resolves tournament-scoped competition engines, uses shared `globalReserve`, and validates claims by `tokenTournamentId`. `Carton` and `Predictions` were updated to explicit/tournament-scoped flows; full contract suite now passes with 151 tests.
+- **May 12, 2026**: Core multi-tournament refactor completed. `Treasury` now resolves tournament-scoped competition engines, uses shared `globalReserve`, and validates claims by `tokenTournamentId`. `Carton` and `Predictions` were updated to explicit/tournament-scoped flows; full contract suite now passes with 158 tests.
 - **May 12, 2026**: Fixture UX upgraded. Added official FIFA group-stage schedule data, timezone-aware kickoff conversion, cleaner prediction-match metadata layout, and 3 main fixture tabs (`Por grupo`, `Por fecha`, `Posiciones`) with `localStorage` persistence.
 
 ## Related Documents
 
-- See CLAUDE.md for persistent project knowledge and architecture.
+- See README.md for project overview, architecture, and doc map.
 - See AGENTS.md for contributor workflow, commands, and conventions.
+- See `knowledge/openfort.md` as the canonical reference before changing the Openfort integration.
