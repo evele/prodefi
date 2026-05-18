@@ -14,9 +14,6 @@ landing/site/.astro/
 # Docs
 docs/
 
-# Vite cache
-admin/.vite/
-
 # Dotenv file
 .env
 
