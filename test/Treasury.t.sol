@@ -106,7 +106,7 @@ contract TreasuryTest is BaseTest {
     /// @notice Deposit funds to treasury
     function _depositFunds(uint256 tournamentId, uint256 amount) internal {
         vm.prank(fundDepositor);
-        treasury.depositFromSales{value: amount}(tournamentId);
+        treasury.depositFromSales{ value: amount }(tournamentId);
     }
 
     /// @notice Set default prize distribution (50%, 30%, 15%, 5%) for ETH
@@ -291,7 +291,7 @@ contract TreasuryTest is BaseTest {
         );
 
         vm.prank(unauthorized);
-        treasury.depositFromSales{value: INITIAL_DEPOSIT}(TOURNAMENT_ID_1);
+        treasury.depositFromSales{ value: INITIAL_DEPOSIT }(TOURNAMENT_ID_1);
     }
 
     function test_DepositFromSales_AdminCanDeposit() public {
@@ -300,7 +300,7 @@ contract TreasuryTest is BaseTest {
         vm.deal(admin, INITIAL_DEPOSIT);
 
         vm.prank(admin);
-        treasury.depositFromSales{value: INITIAL_DEPOSIT}(TOURNAMENT_ID_1);
+        treasury.depositFromSales{ value: INITIAL_DEPOSIT }(TOURNAMENT_ID_1);
 
         assertEq(treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN), _prizeableAmount(INITIAL_DEPOSIT));
     }
@@ -311,7 +311,7 @@ contract TreasuryTest is BaseTest {
         vm.expectRevert(Treasury.ZeroAmount.selector);
 
         vm.prank(fundDepositor);
-        treasury.depositFromSales{value: 0}(TOURNAMENT_ID_1);
+        treasury.depositFromSales{ value: 0 }(TOURNAMENT_ID_1);
     }
 
     // ========== SET PRIZE DISTRIBUTION TESTS ==========

@@ -2,21 +2,38 @@ import * as React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { AuthProvider, OpenfortProvider, RecoveryMethod } from '@openfort/react'
+import { AccountTypeEnum, AuthProvider, OpenfortProvider, RecoveryMethod } from '@openfort/react'
 import { OpenfortWagmiBridge } from '@openfort/react/wagmi'
 import { Toaster } from 'sonner'
 
-import { canUseOpenfort, openfortPublishableKey, openfortShieldPublishableKey, appChainId } from '../lib/chains'
+import { appChainId, canUseOpenfort, enableOpenfortWalletAuth, openfortEthereumFeeSponsorshipId, openfortPublishableKey, openfortShieldPublishableKey } from '../lib/chains'
+import { OpenfortAuthCallbackHandler } from './OpenfortAuthCallbackHandler'
+import { OpenfortChainSync } from './OpenfortChainSync'
+import { OpenfortDebugPanel } from './OpenfortDebugPanel'
 import { config } from '../lib/wagmi';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const authProviders = enableOpenfortWalletAuth
+    ? [AuthProvider.EMAIL_OTP, AuthProvider.WALLET]
+    : [AuthProvider.EMAIL_OTP]
+
   const openfortWalletConfig = canUseOpenfort
     ? {
         shieldPublishableKey: openfortShieldPublishableKey!,
-        ethereum: { chainId: appChainId },
+        ethereum: {
+          chainId: appChainId,
+          ...(openfortEthereumFeeSponsorshipId
+            ? {
+                ethereumFeeSponsorshipId: {
+                  [appChainId]: openfortEthereumFeeSponsorshipId,
+                },
+                accountType: AccountTypeEnum.DELEGATED_ACCOUNT,
+              }
+            : {}),
+        },
       }
     : null
 
@@ -30,9 +47,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
               walletConfig={openfortWalletConfig}
               uiConfig={{
                 appName: 'ProDefi',
-                authProviders: [AuthProvider.EMAIL_OTP, AuthProvider.GOOGLE, AuthProvider.WALLET],
+                authProviders,
                 walletRecovery: {
-                  defaultMethod: RecoveryMethod.PASSKEY,
+                  defaultMethod: RecoveryMethod.PASSWORD,
                   allowedMethods: [RecoveryMethod.PASSKEY, RecoveryMethod.PASSWORD],
                 },
                 mode: 'dark',
@@ -40,7 +57,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 termsOfServiceUrl: 'https://prodefi.online/reglas/',
                 privacyPolicyUrl: 'https://prodefi.online/',
               }}
+              debugMode={import.meta.env.DEV ? {
+                openfortReactDebugMode: true,
+                shieldDebugMode: true,
+                debugRoutes: false,
+              } : undefined}
             >
+              <OpenfortAuthCallbackHandler />
+              <OpenfortChainSync />
+              <OpenfortDebugPanel />
               <Toaster />
               {children}
             </OpenfortProvider>

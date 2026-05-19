@@ -114,10 +114,10 @@ abstract contract BaseTest is Test {
     /// @notice Create a valid game prediction array (1-based gameIds)
     function _createValidGamePrediction() internal pure returns (Predictions.Prediction[] memory) {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
-        preds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
-        preds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
-        preds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
-        preds[3] = Predictions.Prediction({gameId: 4, result: [uint8(3), uint8(0)]});
+        preds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(2), uint8(1)] });
+        preds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(1)] });
+        preds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(2)] });
+        preds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(3), uint8(0)] });
         return preds;
     }
 
@@ -131,7 +131,7 @@ abstract contract BaseTest is Test {
     {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
-            preds[i] = Predictions.Prediction({gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]]});
+            preds[i] = Predictions.Prediction({ gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]] });
         }
         return preds;
     }

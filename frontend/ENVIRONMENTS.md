@@ -44,6 +44,31 @@ El frontend solo activa Openfort si se cumplen ambas condiciones:
 
 Si alguna de esas condiciones falla, la app vuelve automaticamente al flujo legacy con `RainbowKit`.
 
+## Sponsorship de gas
+
+Para que las transacciones del wallet embebido pidan gas sponsorship a Openfort, define tambien:
+
+- `VITE_OPENFORT_ETHEREUM_FEE_SPONSORSHIP_ID=pol_...`
+
+Ese valor debe ser el `pol_...` que configuraste en Openfort para la red activa.
+
+Cuando esta variable existe y Openfort esta activo, el frontend:
+
+- adjunta automaticamente el sponsorship ID a las transacciones EVM
+- fuerza `accountType` a `DELEGATED_ACCOUNT`, que si soporta gas sponsorship
+
+Si la variable no existe, la app sigue comportandose como hoy: la wallet paga su propio gas y el usuario necesita ETH nativo.
+
+## Wallet auth externa en Openfort
+
+Por defecto, el frontend usa Openfort en modo embedded-only para evitar reconexiones inestables de WalletConnect/relay al recargar.
+
+Si necesitas volver a habilitar login con wallet externa dentro del modal de Openfort, define:
+
+- `VITE_OPENFORT_ENABLE_WALLET_AUTH=true`
+
+Y mantiene tambien un `VITE_WALLETCONNECT_PROJECT_ID` valido.
+
 ## Uso recomendado
 
 - Usar `legacy` para iterar contratos, hacer deploy local y probar con EOA sin depender de testnet

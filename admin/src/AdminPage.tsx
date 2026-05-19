@@ -42,6 +42,9 @@ function useAdminWrite() {
 type AdminPermissions = {
   predictionsOwner?: Address
   isPredictionsOwner: boolean
+  cartonAdminRole?: `0x${string}`
+  hasCartonAdminRole: boolean
+  cartonMinterRole?: `0x${string}`
   treasuryAdminRole?: `0x${string}`
   hasTreasuryAdminRole: boolean
   treasuryManagerRole?: `0x${string}`
@@ -71,6 +74,17 @@ function CapabilityBadge({ allowed }: { allowed: boolean }) {
     >
       {allowed ? 'Allowed' : 'Blocked'}
     </span>
+  )
+}
+
+function RoleIdDisplay({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="font-medium">{label}</div>
+      <div className="rounded-md border px-2 py-1 font-mono text-xs break-all" style={{ borderColor: 'var(--border-color)' }}>
+        {value ?? '—'}
+      </div>
+    </div>
   )
 }
 
@@ -1465,7 +1479,148 @@ function CloseTournamentSection({
 
 // --- Main Admin Page ---
 
+function isAddressLike(value: string): value is Address {
+  return /^0x[a-fA-F0-9]{40}$/.test(value)
+}
+
+function MinterRoleSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasCartonAdminRole' | 'cartonAdminRole' | 'cartonMinterRole'>
+}) {
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const { execute, isBusy } = useAdminWrite()
+  const { address } = useAccount()
+  const [targetAddress, setTargetAddress] = useState('')
+
+  const normalizedTargetAddress = useMemo(() => {
+    const trimmed = targetAddress.trim()
+    return isAddressLike(trimmed) ? (trimmed as Address) : undefined
+  }, [targetAddress])
+
+  const { data: targetHasMinterRole = false, refetch: refetchTargetHasMinterRole } = useReadContract<boolean>({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'hasRole',
+    args: permissions.cartonMinterRole && normalizedTargetAddress ? [permissions.cartonMinterRole, normalizedTargetAddress] : undefined,
+    query: { enabled: Boolean(permissions.cartonMinterRole && normalizedTargetAddress), refetchInterval: 10_000 },
+  })
+
+  const { data: connectedHasMinterRole = false, refetch: refetchConnectedHasMinterRole } = useReadContract<boolean>({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'hasRole',
+    args: permissions.cartonMinterRole && address ? [permissions.cartonMinterRole, address] : undefined,
+    query: { enabled: Boolean(permissions.cartonMinterRole && address), refetchInterval: 10_000 },
+  })
+
+  const refreshRoleState = async () => {
+    await Promise.all([refetchTargetHasMinterRole(), refetchConnectedHasMinterRole()])
+  }
+
+  const grantMinterRole = () => {
+    if (!permissions.cartonMinterRole || !normalizedTargetAddress) {
+      toast.error('Provide a valid target wallet address.')
+      return
+    }
+
+    void execute(
+      {
+        address: carton,
+        abi: CARTON_ABI,
+        functionName: 'grantRole',
+        args: [permissions.cartonMinterRole, normalizedTargetAddress],
+      },
+      {
+        toastId: `admin-grant-minter-${normalizedTargetAddress}`,
+        pendingMessage: 'Waiting for MINTER_ROLE grant confirmation...',
+        successMessage: 'MINTER_ROLE granted.',
+        revertedMessage: 'MINTER_ROLE grant was rejected on-chain.',
+        logLabel: 'Admin grant carton minter role',
+        onSuccess: refreshRoleState,
+      },
+    )
+  }
+
+  const revokeMinterRole = () => {
+    if (!permissions.cartonMinterRole || !normalizedTargetAddress) {
+      toast.error('Provide a valid target wallet address.')
+      return
+    }
+
+    void execute(
+      {
+        address: carton,
+        abi: CARTON_ABI,
+        functionName: 'revokeRole',
+        args: [permissions.cartonMinterRole, normalizedTargetAddress],
+      },
+      {
+        toastId: `admin-revoke-minter-${normalizedTargetAddress}`,
+        pendingMessage: 'Waiting for MINTER_ROLE revoke confirmation...',
+        successMessage: 'MINTER_ROLE revoked.',
+        revertedMessage: 'MINTER_ROLE revoke was rejected on-chain.',
+        logLabel: 'Admin revoke carton minter role',
+        onSuccess: refreshRoleState,
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Carton Roles</CardTitle>
+        <CardDescription>Grant or revoke `MINTER_ROLE` for the wallet that will issue cartones.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2 text-sm md:grid-cols-2">
+          <div>
+            <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasCartonAdminRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Connected wallet has MINTER_ROLE:</span>{' '}
+            <span className={connectedHasMinterRole ? 'text-green-600' : 'text-red-600'}>
+              {String(connectedHasMinterRole)}
+            </span>
+          </div>
+          <RoleIdDisplay label="Carton admin role id" value={permissions.cartonAdminRole} />
+          <RoleIdDisplay label="Carton minter role id" value={permissions.cartonMinterRole} />
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Target wallet</div>
+          <div className="flex gap-2 items-center">
+            <Input
+              value={targetAddress}
+              onChange={(e) => setTargetAddress(e.target.value)}
+              placeholder="0x..."
+            />
+            <Button onClick={grantMinterRole} disabled={!permissions.hasCartonAdminRole || !normalizedTargetAddress || isBusy}>
+              {isBusy ? 'Granting...' : 'Grant MINTER_ROLE'}
+            </Button>
+            <Button variant="secondary" onClick={revokeMinterRole} disabled={!permissions.hasCartonAdminRole || !normalizedTargetAddress || isBusy}>
+              {isBusy ? 'Revoking...' : 'Revoke'}
+            </Button>
+          </div>
+          <div className="text-xs text-gray-600">
+            {normalizedTargetAddress
+              ? `Target has MINTER_ROLE: ${String(targetHasMinterRole)}`
+              : 'Enter a valid wallet address to inspect and manage its role.'}
+          </div>
+          {!permissions.hasCartonAdminRole && (
+            <div className="text-sm text-red-600">Granting or revoking `MINTER_ROLE` requires `Carton.DEFAULT_ADMIN_ROLE`.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function AdminPage() {
+  const carton = CONTRACT_ADDRESSES.CARTON
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { address, isConnected } = useAccount()
@@ -1488,6 +1643,18 @@ export function AdminPage() {
     functionName: 'DEFAULT_ADMIN_ROLE',
   })
 
+  const { data: cartonAdminRole } = useReadContract<`0x${string}`>({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'DEFAULT_ADMIN_ROLE',
+  })
+
+  const { data: cartonMinterRole } = useReadContract<`0x${string}`>({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'MINTER_ROLE',
+  })
+
   const { data: treasuryManagerRole } = useReadContract<`0x${string}`>({
     address: treasury,
     abi: TREASURY_ABI,
@@ -1502,6 +1669,14 @@ export function AdminPage() {
     query: { enabled: Boolean(treasuryAdminRole && address), refetchInterval: 10_000 },
   })
 
+  const { data: hasCartonAdminRole = false } = useReadContract<boolean>({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'hasRole',
+    args: cartonAdminRole && address ? [cartonAdminRole, address] : undefined,
+    query: { enabled: Boolean(cartonAdminRole && address), refetchInterval: 10_000 },
+  })
+
   const { data: hasTreasuryManagerRole = false } = useReadContract<boolean>({
     address: treasury,
     abi: TREASURY_ABI,
@@ -1514,12 +1689,15 @@ export function AdminPage() {
     () => ({
       predictionsOwner: owner,
       isPredictionsOwner,
+      cartonAdminRole,
+      hasCartonAdminRole,
+      cartonMinterRole,
       treasuryAdminRole,
       hasTreasuryAdminRole,
       treasuryManagerRole,
       hasTreasuryManagerRole,
     }),
-    [hasTreasuryAdminRole, hasTreasuryManagerRole, isPredictionsOwner, owner, treasuryAdminRole, treasuryManagerRole],
+    [cartonAdminRole, cartonMinterRole, hasCartonAdminRole, hasTreasuryAdminRole, hasTreasuryManagerRole, isPredictionsOwner, owner, treasuryAdminRole, treasuryManagerRole],
   )
 
   const capabilities = useMemo<AdminCapability[]>(
@@ -1543,6 +1721,12 @@ export function AdminPage() {
         allowed: permissions.isPredictionsOwner,
       },
       {
+        label: 'Carton minter role management',
+        detail: 'grant/revoke `MINTER_ROLE` for minting wallets',
+        required: 'Carton.DEFAULT_ADMIN_ROLE',
+        allowed: permissions.hasCartonAdminRole,
+      },
+      {
         label: 'Treasury distribution',
         detail: 'set distribution, load final prizes, seal final prizes',
         required: 'Treasury.DEFAULT_ADMIN_ROLE',
@@ -1555,7 +1739,7 @@ export function AdminPage() {
         allowed: permissions.hasTreasuryManagerRole,
       },
     ],
-    [permissions.hasTreasuryAdminRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
+    [permissions.hasCartonAdminRole, permissions.hasTreasuryAdminRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
   )
 
   // Teams hash state
@@ -1729,6 +1913,12 @@ export function AdminPage() {
               </span>
             </div>
             <div>
+              <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
+              <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasCartonAdminRole)}
+              </span>
+            </div>
+            <div>
               <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
               <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
                 {String(permissions.hasTreasuryAdminRole)}
@@ -1740,9 +1930,12 @@ export function AdminPage() {
                 {String(permissions.hasTreasuryManagerRole)}
               </span>
             </div>
-            <div><span className="font-medium">Treasury admin role id:</span> {permissions.treasuryAdminRole ?? '—'}</div>
-            <div><span className="font-medium">Treasury manager role id:</span> {permissions.treasuryManagerRole ?? '—'}</div>
+            <RoleIdDisplay label="Carton admin role id" value={permissions.cartonAdminRole} />
+            <RoleIdDisplay label="Carton minter role id" value={permissions.cartonMinterRole} />
+            <RoleIdDisplay label="Treasury admin role id" value={permissions.treasuryAdminRole} />
+            <RoleIdDisplay label="Treasury manager role id" value={permissions.treasuryManagerRole} />
             {!permissions.isPredictionsOwner && <div className="text-red-600">Predictions config, results, winners, and positions require the `Predictions.owner()` wallet.</div>}
+            {!permissions.hasCartonAdminRole && <div className="text-red-600">Mint wallet role management requires `Carton.DEFAULT_ADMIN_ROLE`.</div>}
             {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
             {!permissions.hasTreasuryManagerRole && <div className="text-red-600">Closing sales and finalizing the tournament require `Treasury.TOURNAMENT_MANAGER_ROLE`.</div>}
           </div>
@@ -1813,6 +2006,7 @@ export function AdminPage() {
       <SetResultsSection canManagePredictions={permissions.isPredictionsOwner} />
       <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />
       <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />
+      <MinterRoleSection permissions={permissions} />
       <CloseTournamentSection permissions={permissions} />
     </div>
   )
