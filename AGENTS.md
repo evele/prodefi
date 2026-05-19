@@ -16,6 +16,7 @@
   - `anvil` — local EVM node for development.
   - Deploy (local/example): `forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast`
   - Alt: `./deploy.sh` if provided for scripted deploys.
+  - Base Sepolia local workflow usually uses the Forge keystore account `deployer` rather than raw `PRIVATE_KEY`. For `cast`/deploy commands, prefer `--account deployer` plus `--password-file "$ETH_PASSWORD"` when needed, and use `BASE_SEPOLIA_RPC_URL` (or `https://sepolia.base.org` explicitly) for RPC.
 - Frontend (inside `frontend/`)
   - `npm run dev` — start Vite dev server.
   - `npm run build` — type-check and build.
@@ -50,6 +51,7 @@
 - Do not duplicate content across files; update the canonical source instead.
 - Keep this AGENTS.md focused on contributor workflow; keep broader project context in `README.md` and active implementation details in `DEVELOPMENT_PLAN.md`.
 - English practice: When the user writes in English, interpret the intent and point out at most 1–2 key grammar/syntax errors, excluding minor punctuation fixes; avoid full rewrites unless requested.
+- MockUSDC on Base Sepolia is mintable. Current testnet deployment uses `0xd7D7895B9acF093b842Ceed37Ac4763793Dd110C`; sending `100` mock USDC means calling `mint(address,uint256)` with `100000000` (6 decimals).
 
 ## Notes (Dev-only UI & Lookups)
 - Admin page exists only for development at `/admin/dev`; the navbar link is rendered only when `import.meta.env.DEV` is true. Do not expose/admin-link in production builds.

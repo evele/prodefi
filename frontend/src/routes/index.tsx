@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { hasOpenfortGasSponsorship } from '../lib/chains'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 import { PRIZE_BANDS } from '../lib/prize-payout'
@@ -99,6 +100,7 @@ function HomePage() {
 
   const gasReadinessNotice = (() => {
     if (!isConnected || nativeBalance.isLoading) return null
+    if (hasOpenfortGasSponsorship) return null
     if (nativeBalance.value > 0n) return null
 
     return {

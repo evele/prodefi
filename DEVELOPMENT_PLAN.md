@@ -26,7 +26,7 @@ For project overview and stable architecture notes, see README.md.
 
 | Feature | Route | Status |
 |---|---|---|
-| Buy carton (USDC-only + approve flow) | `/` | Done |
+| Buy carton (crypto-native onchain path: approve + buy) | `/` | Done |
 | View owned cartones | `/` | Done |
 | Prize pools display (USDC) | `/` | Done |
 | Submission deadline countdown | `/` | Done |
@@ -41,6 +41,56 @@ For project overview and stable architecture notes, see README.md.
 | Admin: set positions | `/admin/dev` | Done |
 | Admin: close tournament | `/admin/dev` | Done |
 | Admin: set teams hash/deadline | `/admin/dev` | Done |
+
+### Payment / Minting Flow (Canonical Product Direction)
+
+This is the intended product flow and should be treated as the canonical direction for future work:
+
+There are two valid product checkout paths that should coexist:
+
+#### Path A — Crypto-native / international users
+
+1. User logs in with Openfort.
+2. User uses the normal onchain flow.
+3. User pays through the existing crypto path (`approve + buyCartonWithToken()` or its future equivalent).
+
+Notes:
+
+- This path remains valid and desirable for crypto-native users.
+- It is also the fallback for users outside Argentina or anyone who cannot use Mercado Pago.
+- Gas sponsorship can improve UX here, but it is not a hard requirement for the path to exist.
+
+#### Path B — Fiat users (Mercado Pago)
+
+1. User signs up / logs in with Openfort and gets an embedded wallet.
+2. User pays in fiat through Mercado Pago.
+3. Firebase receives the payment confirmation/webhook.
+4. Backend logic running in Firebase mints the `Carton` NFT directly to the wallet address that completed the purchase.
+
+Important implications:
+
+- End users are **not** expected to hold USDC in the Mercado Pago path.
+- The current `USDC approve + buyCartonWithToken()` path is still a real product path for crypto-native / international users, even if it is also being used today as a dev/testnet validation flow.
+- The wallet that calls `Carton.mint(...)` or `Carton.mintForTournament(...)` must hold `MINTER_ROLE`.
+- This minting signer does **not** need to be the contract owner; it can be a separate privileged minter wallet.
+- Firebase Functions counts as the backend for this flow; no additional traditional backend is required beyond that server-side mint trigger.
+- Implementation details for the dedicated minter wallet and `MINTER_ROLE` flow live in [`docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md`](docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md).
+
+### Next Major Product Work: Fiat Checkout Integration
+
+The next major product integration should focus on the Mercado Pago path, not on replacing the already-validated crypto-native path.
+
+Implementation targets:
+
+1. Frontend checkout intent creation with wallet address + tournament context.
+2. Firebase Function that creates the Mercado Pago checkout/preference.
+3. Firebase webhook/confirmation flow that verifies approved payments.
+4. Server-side mint trigger calling `Carton.mintForTournament(...)` to the paying user's Openfort wallet.
+5. Dedicated minter wallet with `MINTER_ROLE` separated from the owner/admin wallet.
+
+See [`docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md`](docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md) for the wallet/role setup that should land before the Mercado Pago mint trigger.
+
+This should be treated as the canonical path for non-crypto users in Argentina, while keeping the onchain USDC flow available for crypto-native and international users.
 
 ### Known Bugs in Contracts — FIXED
 
@@ -115,21 +165,21 @@ Next implementation follow-up:
 3. Replace the old default payout assumptions with the fixed 32-place pyramid
 4. Replace one-shot `setPositions(...)` admin usage with a batched leaderboard publication flow for large fields
 
-### Recently Completed: USDC-Only Cleanup (Apr 2026)
+### Recently Completed: Onchain USDC Checkout Cleanup (Apr 2026)
 
 Completed in code:
 
 - `src/Carton.sol`: `buyCarton()` is disabled onchain; purchases go through `buyCartonWithToken()`
 - `script/Deploy.s.sol`: deploy/setup now configures only USDC acceptance, price, and prize distribution
-- `frontend/src/routes/index.tsx`: home buy flow is USDC-only with approve + buy UX
-- `frontend/src/routes/leaderboard.tsx` and `frontend/src/components/ClaimSection.tsx`: product-facing pool/prize/claim UI shows USDC only
-- `frontend/src/routes/admin.dev.tsx`: close-tournament flow is aligned to USDC-only admin usage
-- `frontend/src/lib/transaction-errors.ts`: purchase/claim errors now reflect the USDC-only product flow
+- `frontend/src/routes/index.tsx`: home buy flow supports the current onchain USDC approve + buy UX
+- `frontend/src/routes/leaderboard.tsx` and `frontend/src/components/ClaimSection.tsx`: pool/prize/claim UI currently shows USDC only
+- `frontend/src/routes/admin.dev.tsx`: close-tournament flow is aligned to current USDC-denominated admin usage
+- `frontend/src/lib/transaction-errors.ts`: purchase/claim errors now reflect the current onchain USDC flow
 - `test/Carton.t.sol`: ETH purchase tests updated to expect `EthPurchaseDisabled`
 
 Important note:
 
-- Treasury internals still support multi-asset pools; the product/deploy flow is now USDC-only
+- Treasury internals still support multi-asset pools; the currently shipped onchain checkout flow is USDC-only
 - Native ETH is still relevant for gas, so keeping gas-awareness in the UI remains intentional
 
 ### Next Session Plan: Prediction Screen Polish
@@ -172,7 +222,7 @@ Verification for the next frontend pass:
 The complete tournament flow is:
 
 1. Admin configures torneo (teams, groups, deadline) --> **DONE**
-2. Users compran cartones (USDC-only) --> **DONE**
+2. Users compran cartones por el path onchain crypto-native (USDC approve + buy) --> **DONE**
 3. Users envian predicciones (partidos + ganadores) --> **DONE**
 4. Admin setea resultados de partidos --> **DONE**
 5. Admin setea ganadores oficiales --> **DONE**
@@ -213,7 +263,7 @@ The complete tournament flow is:
 - ~~Read `hasUserClaimed(tournamentId, tokenId)` for claim status~~
 - ~~Call `claimPrize(tournamentId, tokenId, token)` with button~~
 - ~~Show claimable prize amounts in UI~~
-- `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed, currently USDC-only
+- `ClaimSection` component in `/predictions`, per selected carton, hidden until tournament closed, currently USDC-denominated
 
 ### Pre-MVP: Validation & Traction (Pending Decision)
 
@@ -232,7 +282,7 @@ Context: the MVP flow is functionally complete, so the next highest-leverage wor
 - Submitted predictions are now rendered inside the same `Partidos` / `Ganadores` panels, with hidden send CTAs once that section is already onchain
 - Switching cartons and successful submits now reset local drafts correctly instead of leaking previous values
 - Read-only submitted prediction values now keep legibility instead of looking dimmed
-- Home and predictions now surface explicit native-gas warnings when the connected wallet has no ETH, clarifying that the USDC-only product flow still requires gas for approvals, submits, and claims
+- Home and predictions now surface explicit native-gas warnings when the connected wallet has no ETH, clarifying that the current onchain flow still requires gas for approvals, submits, and claims
 
 #### Next UX sprint recommendation (Priority Order)
 
@@ -326,6 +376,22 @@ En lugar de (o además de) una landing, ProDefi podría desplegarse como Mini Ap
 
 Estado: **Opción identificada — pendiente de decisión sobre qué plataforma priorizar**
 
+### Openfort / Gas Sponsorship Status (May 2026)
+
+Validated in the current testnet spike:
+
+- Openfort embedded login is working on Base Sepolia.
+- Embedded wallet creation is working.
+- Delegated account flow is working.
+- Gas sponsorship wiring is working when the Openfort fee sponsorship policy matches the transaction.
+- Onchain USDC `approve + buyCartonWithToken()` was successfully validated through the Openfort path.
+
+Important product framing:
+
+- Gas sponsorship improves the crypto-native / international onchain path.
+- Gas sponsorship does **not** replace the Mercado Pago + Firebase + mint path for non-crypto users.
+- These two paths should coexist, not compete.
+
 ### Investigación futura: Gas sponsorship / Account Abstraction
 
 Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH nativo, evaluar una capa de gas sponsorship antes de seguir puliendo UX de compra.
@@ -342,7 +408,7 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 - **Impacto en contratos**: verificar si el modelo actual funciona sin cambios relevantes bajo `ERC-4337` y qué casos sí requerirían adaptación
 - **Alternativas**: dejar documentado cuándo tendría sentido evaluar `EIP-2771` o `EIP-7702` en vez de 4337
 
-**Decisión tomada (dev spike):** avanzar con `Openfort` como proveedor inicial por costo/feature set. Se prioriza `email/social login + embedded wallet`, dejando la elección final de red para después.
+**Decisión tomada (dev spike):** avanzar con `Openfort` como proveedor inicial por costo/feature set. Se prioriza `email/social login + embedded wallet`.
 
 **Spike ejecutado en frontend (May 2026):**
 
@@ -359,52 +425,28 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 
 **Importante:** Openfort no quedó activado ciegamente sobre `Anvil`. Mientras no existan keys reales de Openfort y una chain soportada/configurada, el frontend sigue cayendo al flujo anterior con RainbowKit para no romper desarrollo local.
 
-**Bloqueos / próximos pasos para activarlo de verdad:**
+**Estado actual del spike:**
 
-1. Elegir una chain soportada por Openfort para embedded wallets + sponsorship.
-2. Deployar contratos de ProDefi en esa red/testnet.
-3. Cargar en `frontend/.env`:
-   - `VITE_OPENFORT_PUBLISHABLE_KEY`
-   - `VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY`
-   - `VITE_CHAIN_ID`
-   - `VITE_RPC_URL`
-   - direcciones de contratos (`VITE_CARTON_ADDRESS`, `VITE_PREDICTIONS_ADDRESS`, `VITE_TREASURY_ADDRESS`, `VITE_USDC_ADDRESS`)
-4. Probar login real con Openfort y validar que `wagmi` siga resolviendo la cuenta embebida correctamente.
-5. Elegir el primer flujo transaccional para sponsorship real. Orden sugerido:
+- Base Sepolia selected and deployed.
+- Frontend envs and contracts wired.
+- Login, embedded wallet, sponsorship, approve, and buy flow validated.
+
+**Próximos pasos relevantes:**
+
+1. Finish validating the remaining Openfort user flows:
    - `submitPredictionAndWinners`
    - `claimPrize`
-   - `buyCartonWithToken`
-
-Estado: **Spike inicial integrado en frontend — pendiente activar con keys + red + contratos desplegados**
-
-### Next Session Plan: Openfort Activation
-
-Goal for the next session:
-
-- turn the current Openfort frontend spike into a real end-to-end dev/testnet flow
-
-Tomorrow's priorities:
-
-1. Pick the first real Openfort-compatible chain/testnet
-   - prefer a network with strong embedded wallet + sponsorship support
-   - keep the choice pragmatic; user-facing chain can be revisited later
-2. Deploy ProDefi contracts there and update frontend envs
-3. Map the exact ProDefi flows that should benefit from sponsorship first
-   - `submitPredictionAndWinners`
-   - `claimPrize`
-   - `buyCartonWithToken`
-   - possible USDC approve replacement paths (`permit`, session keys, or bundling)
-4. Validate the current frontend bridge
-   - confirm `useAccount`, reads, and writes still work with the embedded wallet path
-   - remove or reduce RainbowKit fallback once the Openfort path is stable
-5. Implement the first real sponsored action
-   - likely target: login + embedded wallet creation + one sponsored action on testnet/dev
+2. Define the production split explicitly in implementation:
+   - Path A: crypto-native / international onchain checkout
+   - Path B: Mercado Pago + Firebase + server-side mint
+3. Implement the Mercado Pago + Firebase mint path.
+4. After both paths are stable, tighten sponsorship policies and reduce fallback complexity where possible.
 
 Key evaluation questions:
 
 - Can Openfort stay compatible with the current `wagmi`-based read/write model without a large route refactor?
 - Can sponsorship cover the first selected flow without changing the current contract model?
-- Is there a realistic path to remove the explicit USDC `approve` friction from the happy path?
+- Is there a realistic path to remove the explicit USDC `approve` friction from the crypto-native happy path?
 - When the Openfort path is stable, should the app remain mixed (`Openfort + external wallets`) or become embedded-first?
 
 ### Post-MVP (Nice to have)
@@ -425,7 +467,7 @@ Key evaluation questions:
 ### Tournament lifecycle consolidation
 
 - Lifecycle state is tournament-wide: `closeSales(tournamentId)` blocks new purchases/deposits, while `finalizeTournament(tournamentId)` snapshots configured prize assets and enables claims.
-- Prize accounting remains token-based inside `Treasury` (`prizePools`, `prizePoolDistributions`, claims), but the product/frontend is USDC-only for now.
+- Prize accounting remains token-based inside `Treasury` (`prizePools`, `prizePoolDistributions`, claims), and the currently shipped onchain UX is USDC-denominated for now.
 - Prize distribution is intended to be set after sales close, when the final pool is known. Distribution may sum to less than 100% to leave room for development, donation, jackpot, or other reserves.
 - Results can be set onchain as matches are played. Provisional rankings can be computed offchain for display, while final positions are set onchain once and become the source of truth for prize claims.
 - Deferred integrity improvements: challenge window before finalization, batched final-position verification, and `resultsHash`/`leaderboardHash` commitments for the offchain ranking calculation.

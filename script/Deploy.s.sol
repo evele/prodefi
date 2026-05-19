@@ -8,19 +8,25 @@ import {Treasury} from "../src/Treasury.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 
 contract DeployScript is Script {
+    error MissingDeployer();
+
     function run() public {
-        // Usar la primera cuenta de Anvil como deployer
-        uint256 deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
         // Hash ancla para los equipos (off-chain metadata). Suministrado por env o 0x0 por defecto
         bytes32 teamsHash = vm.envOr("TEAMS_HASH", bytes32(0));
 
-        vm.startBroadcast(deployerPrivateKey);
+        address deployer;
+        if (deployerPrivateKey != 0) {
+            deployer = vm.addr(deployerPrivateKey);
+            vm.startBroadcast(deployerPrivateKey);
+        } else {
+            deployer = vm.envOr("DEPLOYER_ADDRESS", address(0));
+            if (deployer == address(0)) revert MissingDeployer();
+            vm.startBroadcast();
+        }
 
         console.log("Deploying contracts...");
-        console.log("Deployer address:", vm.addr(deployerPrivateKey));
-
-        address deployer = vm.addr(deployerPrivateKey);
+        console.log("Deployer address:", deployer);
 
         // Deploy Carton (ERC1155) - necesita 3 parámetros: admin, pauser, minter
         Carton carton = new Carton(deployer, deployer, deployer);

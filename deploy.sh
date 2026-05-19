@@ -10,6 +10,10 @@ if [ -n "$TEAMS_HASH" ]; then
   echo "🔗 Using TEAMS_HASH: $TEAMS_HASH"
 fi
 
+if [ -z "${PRIVATE_KEY:-}" ]; then
+  export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+fi
+
 # Ejecutar el deploy script y capturar la salida
 DEPLOY_OUTPUT=$(forge script script/Deploy.s.sol --fork-url http://localhost:8545 --broadcast 2>&1)
 
