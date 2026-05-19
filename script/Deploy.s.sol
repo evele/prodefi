@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {Script, console} from "forge-std/Script.sol";
-import {Carton} from "../src/Carton.sol";
-import {Predictions} from "../src/Predictions.sol";
-import {Treasury} from "../src/Treasury.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { MockERC20 } from "../src/mocks/MockERC20.sol";
 
 contract DeployScript is Script {
     error MissingDeployer();

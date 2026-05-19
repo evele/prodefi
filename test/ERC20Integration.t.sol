@@ -2,10 +2,10 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
-import {Carton} from "../src/Carton.sol";
-import {Treasury} from "../src/Treasury.sol";
-import {Predictions} from "../src/Predictions.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
+import { Carton } from "../src/Carton.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { Predictions } from "../src/Predictions.sol";
+import { MockERC20 } from "../src/mocks/MockERC20.sol";
 
 contract ERC20IntegrationTest is Test {
     Carton public carton;
@@ -47,7 +47,7 @@ contract ERC20IntegrationTest is Test {
         vm.startPrank(user1);
         vm.deal(user1, 1 ether);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.1 ether}();
+        carton.buyCarton{ value: 0.1 ether }();
 
         vm.stopPrank();
     }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Carton} from "./Carton.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Carton } from "./Carton.sol";
 
 interface ICompetitionEngine {
     function isReadyForFinalization() external view returns (bool);
@@ -191,7 +191,7 @@ contract Treasury is AccessControl {
 
         if (token == address(0)) {
             // ETH transfer
-            (bool success,) = payable(msg.sender).call{value: prize_amount}("");
+            (bool success,) = payable(msg.sender).call{ value: prize_amount }("");
             if (!success) revert ETHTransferFailed();
         } else {
             // ERC20 transfer
