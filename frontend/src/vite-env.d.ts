@@ -12,8 +12,10 @@ interface ImportMetaEnv {
   readonly VITE_TREASURY_ADDRESS: string
   readonly VITE_USDC_ADDRESS: string
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string
+  readonly VITE_OPENFORT_ENABLE_WALLET_AUTH?: string
   readonly VITE_OPENFORT_PUBLISHABLE_KEY?: string
   readonly VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY?: string
+  readonly VITE_OPENFORT_ETHEREUM_FEE_SPONSORSHIP_ID?: string
 }
 
 interface ImportMeta {

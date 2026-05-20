@@ -10,6 +10,7 @@ import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { toast } from 'sonner'
+import { hasOpenfortGasSponsorship } from '../lib/chains'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
@@ -895,6 +896,7 @@ function PredictionsPage() {
 
   const gasReadinessNotice = (() => {
     if (!isConnected || nativeBalance.isLoading || !hasOwnedCartons || isExpired) return null
+    if (hasOpenfortGasSponsorship) return null
     if (nativeBalance.value > 0n) return null
 
     return {

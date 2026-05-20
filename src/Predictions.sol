@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC1155 } from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICartonTournamentContext {
     function treasury() external view returns (address);
@@ -396,7 +396,7 @@ contract Predictions is Ownable {
             if (usedGameId[gameId]) revert DuplicateGameId();
             if (games[gameId].set) revert ResultsAlreadySet();
             usedGameId[gameId] = true;
-            predictions[tokenId].push(Prediction({gameId: gameId, result: _prediction[i].result}));
+            predictions[tokenId].push(Prediction({ gameId: gameId, result: _prediction[i].result }));
         }
 
         emit PredictionsSubmitted(sender, tokenId);
@@ -548,7 +548,7 @@ contract Predictions is Ownable {
             if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
         }
 
-        winnersPredictions[tokenId] = WinnersPrediction({teams: teams, set: true});
+        winnersPredictions[tokenId] = WinnersPrediction({ teams: teams, set: true });
 
         emit WinnersPredicted(sender, tokenId, teams);
     }
@@ -581,7 +581,7 @@ contract Predictions is Ownable {
             }
         }
 
-        officialWinners = OfficialWinners({teams: teams, set: true});
+        officialWinners = OfficialWinners({ teams: teams, set: true });
 
         emit OfficialWinnersSet(teams);
     }

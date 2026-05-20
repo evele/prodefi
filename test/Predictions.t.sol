@@ -31,10 +31,10 @@ contract PredictionsTest is Test {
 
     function _buildValidPredictions() internal pure returns (Predictions.Prediction[] memory arr) {
         arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(2), uint8(1)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
     }
 
     function _mintTournamentToken(address owner, uint256 tournamentId) internal returns (uint256) {
@@ -63,10 +63,10 @@ contract PredictionsTest is Test {
 
         // Create a Prediction array of length 4 (1-based gameIds)
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(2), uint8(1)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
 
         // Simulate user calling submitPrediction
         vm.prank(user);
@@ -94,10 +94,10 @@ contract PredictionsTest is Test {
 
     function testOnlyOwnerCannotSubmit() public {
         Predictions.Prediction[] memory arr2 = new Predictions.Prediction[](4);
-        arr2[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr2[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr2[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
-        arr2[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr2[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr2[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr2[2] = Predictions.Prediction({ gameId: 3, result: [uint8(2), uint8(1)] });
+        arr2[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
 
         // Simulate that a non-owner calls and should revert
         vm.prank(address(0xDEAD));
@@ -135,10 +135,10 @@ contract PredictionsTest is Test {
 
         // 2) Crear array de predicciones (1-based gameIds)
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(2), uint8(1)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
 
         // 3) Simular que el usuario envía las predicciones antes del deadline
         vm.prank(user);
@@ -156,10 +156,10 @@ contract PredictionsTest is Test {
 
         // 2) Crear array de predicciones
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(2), uint8(1)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(2), uint8(1)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
 
         // 3) Saltar al día después del deadline
         vm.warp(deadline + 1);
@@ -183,10 +183,10 @@ contract PredictionsTest is Test {
         preds.setResults(4, 0, 3);
 
         Predictions.Prediction[] memory arr5 = new Predictions.Prediction[](4);
-        arr5[0] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr5[1] = Predictions.Prediction({gameId: 2, result: [uint8(0), uint8(0)]});
-        arr5[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(0)]});
-        arr5[3] = Predictions.Prediction({gameId: 4, result: [uint8(0), uint8(0)]});
+        arr5[0] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr5[1] = Predictions.Prediction({ gameId: 2, result: [uint8(0), uint8(0)] });
+        arr5[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(0)] });
+        arr5[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
         vm.prank(user);
         vm.expectRevert(Predictions.ResultsAlreadySet.selector);
         preds.submitPrediction(TOKEN_ID, arr5);
@@ -196,10 +196,10 @@ contract PredictionsTest is Test {
 
     function testSubmitPrediction_GameIdZero() public {
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 0, result: [uint8(1), uint8(0)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(1), uint8(0)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 0, result: [uint8(1), uint8(0)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(1), uint8(0)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(1), uint8(0)] });
 
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidGameId.selector);
@@ -208,10 +208,10 @@ contract PredictionsTest is Test {
 
     function testSubmitPrediction_GameIdOutOfRange() public {
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(1), uint8(0)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 3, result: [uint8(1), uint8(0)]});
-        arr[3] = Predictions.Prediction({gameId: 5, result: [uint8(1), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(1), uint8(0)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 3, result: [uint8(1), uint8(0)] });
+        arr[3] = Predictions.Prediction({ gameId: 5, result: [uint8(1), uint8(0)] });
 
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidGameId.selector);
@@ -220,10 +220,10 @@ contract PredictionsTest is Test {
 
     function testSubmitPrediction_DuplicateGameId() public {
         Predictions.Prediction[] memory arr = new Predictions.Prediction[](4);
-        arr[0] = Predictions.Prediction({gameId: 1, result: [uint8(1), uint8(0)]});
-        arr[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(0)]});
-        arr[2] = Predictions.Prediction({gameId: 1, result: [uint8(0), uint8(1)]});
-        arr[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(1), uint8(0)] });
+        arr[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(0)] });
+        arr[2] = Predictions.Prediction({ gameId: 1, result: [uint8(0), uint8(1)] });
+        arr[3] = Predictions.Prediction({ gameId: 4, result: [uint8(1), uint8(0)] });
 
         vm.prank(user);
         vm.expectRevert(Predictions.DuplicateGameId.selector);
@@ -320,10 +320,10 @@ contract PredictionsTest is Test {
     function testPointsCalculation() public {
         // Hacer predicción de partidos (1-based gameIds)
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
-        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
-        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
-        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
-        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+        gamePreds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(2), uint8(1)] });
+        gamePreds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(1)] });
+        gamePreds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(2)] });
+        gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         // First submit predictions before setting results
         vm.prank(user);
@@ -375,10 +375,10 @@ contract PredictionsTest is Test {
 
     function testMatchPointsClampAtZeroAndKeepOutcomeBonus() public {
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
-        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(5), uint8(5)]});
-        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(6), uint8(5)]});
-        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(1)]});
-        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(1), uint8(0)]});
+        gamePreds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(5), uint8(5)] });
+        gamePreds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(6), uint8(5)] });
+        gamePreds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(1)] });
+        gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(1), uint8(0)] });
 
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
@@ -419,10 +419,10 @@ contract PredictionsTest is Test {
 
     function testTotalPointsIgnoreMissingWinnerPrediction() public {
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
-        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
-        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
-        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
-        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+        gamePreds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(2), uint8(1)] });
+        gamePreds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(1)] });
+        gamePreds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(2)] });
+        gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
@@ -438,10 +438,10 @@ contract PredictionsTest is Test {
 
     function testPartialResultsCanBeRecalculated() public {
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
-        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
-        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
-        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
-        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+        gamePreds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(2), uint8(1)] });
+        gamePreds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(1)] });
+        gamePreds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(2)] });
+        gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
@@ -1004,10 +1004,10 @@ contract PredictionsTest is Test {
 
     function testResultCorrectionChangesRecalculatedTotal() public {
         Predictions.Prediction[] memory gamePreds = new Predictions.Prediction[](4);
-        gamePreds[0] = Predictions.Prediction({gameId: 1, result: [uint8(2), uint8(1)]});
-        gamePreds[1] = Predictions.Prediction({gameId: 2, result: [uint8(1), uint8(1)]});
-        gamePreds[2] = Predictions.Prediction({gameId: 3, result: [uint8(0), uint8(2)]});
-        gamePreds[3] = Predictions.Prediction({gameId: 4, result: [uint8(2), uint8(2)]});
+        gamePreds[0] = Predictions.Prediction({ gameId: 1, result: [uint8(2), uint8(1)] });
+        gamePreds[1] = Predictions.Prediction({ gameId: 2, result: [uint8(1), uint8(1)] });
+        gamePreds[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(2)] });
+        gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
@@ -1024,7 +1024,7 @@ contract PredictionsTest is Test {
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
 
-        treasury.depositFromSales{value: 1 ether}(1);
+        treasury.depositFromSales{ value: 1 ether }(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         treasury.closeSales(1);
 

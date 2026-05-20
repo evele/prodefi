@@ -5,7 +5,9 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address
 
 function ensureAddress(value: string | undefined, key: string): Address {
   if (!value || !value.startsWith('0x')) {
-    throw new Error(`Missing or invalid ${key} in frontend/.env. Run ./deploy.sh to populate it.`)
+    throw new Error(
+      `Missing or invalid ${key} in frontend env. Run ./deploy.sh for Anvil or ./deploy-base-sepolia.sh for Openfort testnet.`
+    )
   }
   return value as Address
 }

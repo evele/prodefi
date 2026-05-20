@@ -28,9 +28,11 @@ export const appChain: Chain = {
 }
 
 export const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo'
+export const enableOpenfortWalletAuth = import.meta.env.VITE_OPENFORT_ENABLE_WALLET_AUTH !== 'false'
 
 export const openfortPublishableKey = import.meta.env.VITE_OPENFORT_PUBLISHABLE_KEY
 export const openfortShieldPublishableKey = import.meta.env.VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY
+export const openfortEthereumFeeSponsorshipId = import.meta.env.VITE_OPENFORT_ETHEREUM_FEE_SPONSORSHIP_ID?.trim() || undefined
 
 const OPENFORT_SUPPORTED_CHAIN_IDS = new Set([
   1,
@@ -56,6 +58,7 @@ const OPENFORT_SUPPORTED_CHAIN_IDS = new Set([
 export const isOpenfortConfigured = Boolean(openfortPublishableKey && openfortShieldPublishableKey)
 export const isOpenfortSupportedChain = OPENFORT_SUPPORTED_CHAIN_IDS.has(appChainId)
 export const canUseOpenfort = isOpenfortConfigured && isOpenfortSupportedChain
+export const hasOpenfortGasSponsorship = canUseOpenfort && Boolean(openfortEthereumFeeSponsorshipId)
 
 if (import.meta.env.DEV && isOpenfortConfigured && !isOpenfortSupportedChain) {
   console.warn(

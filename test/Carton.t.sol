@@ -170,7 +170,7 @@ contract CartonTest is BaseTest {
         vm.deal(user, 1 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.1 ether}();
+        carton.buyCarton{ value: 0.1 ether }();
     }
 
     function testBuyCartonWithToken() public {
@@ -205,21 +205,21 @@ contract CartonTest is BaseTest {
         vm.deal(user, 1 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.15 ether}();
+        carton.buyCarton{ value: 0.15 ether }();
     }
 
     function testBuyCartonInsufficientPaymentStillRevertsAsDisabled() public {
         vm.deal(user, 0.05 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.05 ether}();
+        carton.buyCarton{ value: 0.05 ether }();
     }
 
     function testBuyCartonPriceNotSetStillRevertsAsDisabled() public {
         vm.deal(user, 1 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.1 ether}();
+        carton.buyCarton{ value: 0.1 ether }();
     }
 
     function testSetCartonPrice() public {
@@ -368,7 +368,7 @@ contract CartonTest is BaseTest {
         vm.deal(user, 1 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.1 ether}();
+        carton.buyCarton{ value: 0.1 ether }();
 
         assertEq(carton.balanceOf(user, 1), 0);
         assertEq(treasury.prizePools(1, address(0)), 0);
@@ -430,7 +430,7 @@ contract CartonTest is BaseTest {
         vm.deal(user, 1 ether);
         vm.prank(user);
         vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{value: 0.1 ether}();
+        carton.buyCarton{ value: 0.1 ether }();
     }
 
     function testBuyCartonWithToken_WithoutTreasuryConfigured() public {

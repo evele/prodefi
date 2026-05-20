@@ -1,0 +1,19 @@
+---
+title: OpenSigner
+description: OpenSigner is an open-source, self-hostable wallet key management system that issues non-custodial cryptographic keys using Shamir's Secret Sharing scheme.
+---
+
+
+import { HomePage } from 'vocs/components'
+
+<HomePage.Root>
+    <HomePage.Logo />
+    <HomePage.Tagline>Open-Source Key Management</HomePage.Tagline>
+    <HomePage.Description>
+        An open-source, self-hostable wallet key management system that issues non-custodial keys to your users. 
+    </HomePage.Description>
+    <HomePage.Buttons>
+        <HomePage.Button href="/introduction/about" variant="accent">Get started</HomePage.Button>
+        <HomePage.Button href="https://github.com/openfort-xyz/opensigner">GitHub</HomePage.Button>
+    </HomePage.Buttons>
+</HomePage.Root>
