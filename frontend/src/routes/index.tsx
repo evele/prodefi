@@ -420,7 +420,7 @@ function HomePage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
 
       {/* ─── Deadline banner ─── */}
       {deadline !== undefined && deadline > 0n && (

@@ -3,6 +3,7 @@ import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { useUserBalance } from '../hooks/useBalance'
 import { Home, Target, Trophy, Calendar } from 'lucide-react'
 import { WalletButton } from '../components/WalletButton'
+import { RecoveryUpgradeBanner } from '../components/RecoveryUpgradeBanner'
 
 function RootLayout() {
   const { isConnected, eth, usdc } = useUserBalance()
@@ -76,6 +77,9 @@ function RootLayout() {
 
       {/* ─── Page Content ─── */}
       <main className="container mx-auto px-4 py-6 pb-28 md:pb-10">
+        <div className="mx-auto mb-6 w-full max-w-2xl">
+          <RecoveryUpgradeBanner />
+        </div>
         <Outlet />
       </main>
 

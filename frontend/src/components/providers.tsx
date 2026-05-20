@@ -37,6 +37,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }
     : null
 
+  const openfortUiConfig = {
+    appName: 'ProDefi',
+    authProviders,
+    language: 'es-ES',
+    walletRecovery: {
+      defaultMethod: RecoveryMethod.PASSKEY,
+      allowedMethods: [RecoveryMethod.PASSKEY, RecoveryMethod.PASSWORD],
+    },
+    mode: 'dark',
+    theme: 'midnight',
+    termsOfServiceUrl: 'https://prodefi.online/reglas/',
+    privacyPolicyUrl: 'https://prodefi.online/',
+  } as any
+
   return (
     <QueryClientProvider client={queryClient}>
       <WagmiProvider config={config}>
@@ -45,18 +59,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <OpenfortProvider
               publishableKey={openfortPublishableKey!}
               walletConfig={openfortWalletConfig}
-              uiConfig={{
-                appName: 'ProDefi',
-                authProviders,
-                walletRecovery: {
-                  defaultMethod: RecoveryMethod.PASSWORD,
-                  allowedMethods: [RecoveryMethod.PASSKEY, RecoveryMethod.PASSWORD],
-                },
-                mode: 'dark',
-                theme: 'midnight',
-                termsOfServiceUrl: 'https://prodefi.online/reglas/',
-                privacyPolicyUrl: 'https://prodefi.online/',
-              }}
+              uiConfig={openfortUiConfig}
               debugMode={import.meta.env.DEV ? {
                 openfortReactDebugMode: true,
                 shieldDebugMode: true,
