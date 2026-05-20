@@ -3,7 +3,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { LogOut } from 'lucide-react'
 import { useSignOut, useUI, useUser } from '@openfort/react'
 import { useEthereumEmbeddedWallet } from '@openfort/react/ethereum'
-import { useAccount } from 'wagmi'
+import { useAccount, useDisconnect } from 'wagmi'
 
 import { canUseOpenfort } from '../lib/chains'
 
@@ -46,6 +46,7 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
   const { activeWallet } = useEthereumEmbeddedWallet()
   const { address: bridgeAddress, isConnected: isBridgeConnected } = useAccount()
   const { signOut, isLoading: isSigningOut } = useSignOut()
+  const { disconnect, isPending: isDisconnecting } = useDisconnect()
 
   const hasOpenfortSession = Boolean(user)
   const hasConnectedWallet = isConnected || isBridgeConnected
@@ -58,6 +59,16 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
   }, [displayAddress, user?.email])
 
   const primaryLabel = isLoading ? 'Cargando...' : hasOpenfortAccess ? label : 'Entrar'
+  const isClosingAccess = isSigningOut || isDisconnecting
+
+  const closeAccess = () => {
+    if (hasOpenfortSession) {
+      void signOut()
+      return
+    }
+
+    disconnect()
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -80,12 +91,14 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
       >
         {primaryLabel}
       </button>
-      {hasOpenfortSession && !mobile && (
+      {hasOpenfortAccess && (
         <button
           type="button"
-          onClick={() => void signOut()}
-          disabled={isSigningOut}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors"
+          onClick={closeAccess}
+          disabled={isClosingAccess}
+          className={mobile
+            ? 'inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors'
+            : 'inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors'}
           style={{
             borderColor: 'var(--border-color)',
             color: 'var(--text-secondary)',

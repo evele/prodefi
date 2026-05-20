@@ -194,6 +194,32 @@ cast send <carton_address> \
 
 This plan intentionally stops before Mercado Pago implementation, but it prepares the exact wallet model Firebase will need later.
 
+### Same-Project Naming Convention
+
+If both testnet and mainnet minting live inside the same Firebase project, keep them split by explicit names instead of one generic function.
+
+Recommended function names:
+
+1. `mintCartonTestnet`
+2. `mintCartonMainnet`
+
+Recommended Firebase secret / config names:
+
+1. `TEST_MINTER_WALLET_PRIVATE_KEY`
+2. `TEST_MINTER_RPC_URL`
+3. `TEST_MINTER_ENDPOINT_TOKEN`
+4. `TEST_CARTON_ADDRESS`
+5. `TEST_CHAIN_ID`
+6. `PROD_MINTER_WALLET_PRIVATE_KEY`
+7. `PROD_MINTER_RPC_URL`
+8. `PROD_MINTER_ENDPOINT_TOKEN`
+9. `PROD_CARTON_ADDRESS`
+10. `PROD_CHAIN_ID`
+
+This keeps both environments in one Firebase project while still making it obvious which function, signer, RPC, and contract belong to testnet versus production.
+
+For extra safety, the testnet function can also hardcode the current canonical Base Sepolia `Carton` address and refuse to start if `TEST_CARTON_ADDRESS` does not match it. Mirror the same pattern for mainnet once the production `Carton` deployment is final.
+
 Expected future server-side flow:
 
 1. Firebase verifies approved payment.
