@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_TREASURY_ADDRESS: string
   readonly VITE_USDC_ADDRESS: string
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string
+  readonly VITE_FIREBASE_FUNCTIONS_BASE_URL?: string
+  readonly VITE_MERCADO_PAGO_USE_SANDBOX?: string
   readonly VITE_OPENFORT_ENABLE_WALLET_AUTH?: string
   readonly VITE_OPENFORT_PUBLISHABLE_KEY?: string
   readonly VITE_OPENFORT_SHIELD_PUBLISHABLE_KEY?: string

@@ -28,6 +28,19 @@ Los templates versionados son:
 - `.env.legacy.example`
 - `.env.openfort.example`
 
+## Variables nuevas para Firebase / Mercado Pago
+
+Para el checkout ARS via Firebase Functions, define tambien:
+
+- `VITE_FIREBASE_FUNCTIONS_BASE_URL=https://southamerica-east1-<firebase-project>.cloudfunctions.net`
+- `VITE_MERCADO_PAGO_USE_SANDBOX=false`
+
+Notas:
+
+- `VITE_FIREBASE_FUNCTIONS_BASE_URL` es la base publica donde viven `createOrder` y `getOrderStatus`
+- `VITE_MERCADO_PAGO_USE_SANDBOX` decide si el frontend redirige a `sandboxInitPoint` o a `initPoint`
+- por defecto conviene `false` y probar con `initPoint` + credenciales de prueba + buyer test user en una ventana de incógnito
+
 Los archivos locales sugeridos para cada flujo son:
 
 - `.env.legacy.local`

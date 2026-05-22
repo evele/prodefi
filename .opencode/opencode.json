@@ -11,7 +11,7 @@
         "--dir",
         "/home/compu/Proyectos/prodefi"
       ],
-      "enabled": true
+      "enabled": false
     },
     "mercadopago": {
       "type": "remote",

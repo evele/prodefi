@@ -629,7 +629,7 @@ function PredictionsPage() {
       label: 'Selecciona un carton',
       done: tokenId !== undefined && selectedCartonIsOwned,
       detail: !isConnected
-        ? 'Conecta tu wallet para cargar tus cartones'
+        ? 'Conéctate para cargar tus cartones'
         : !hasOwnedCartons
           ? 'Compra un carton para comenzar'
           : tokenId !== undefined && selectedCartonIsOwned
@@ -791,7 +791,7 @@ function PredictionsPage() {
     if (!isConnected) {
       return {
         eyebrow: 'Antes de comenzar',
-        title: 'Conecta tu wallet para abrir tus cartones.',
+        title: 'Conéctate para abrir tus cartones.',
         detail: 'Desde aqui podras revisar estados, completar predicciones y enviarlas onchain.',
         tone: 'neutral',
       }
@@ -1088,7 +1088,7 @@ function PredictionsPage() {
             style={{ background: selectorEmptyStyles.background, border: selectorEmptyStyles.border }}
           >
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-              Conecta tu wallet para ver tus cartones.
+              Conéctate para ver tus cartones.
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               Apenas la conectes, esta pantalla prioriza el carton mas accionable y te muestra el siguiente paso para terminarlo.

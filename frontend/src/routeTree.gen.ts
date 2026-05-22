@@ -13,6 +13,7 @@ import { Route as PredictionsRouteImport } from './routes/predictions'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as FixturesRouteImport } from './routes/fixtures'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CheckoutResultRouteImport } from './routes/checkout.result'
 
 const PredictionsRoute = PredictionsRouteImport.update({
   id: '/predictions',
@@ -34,18 +35,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckoutResultRoute = CheckoutResultRouteImport.update({
+  id: '/checkout/result',
+  path: '/checkout/result',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/fixtures': typeof FixturesRoute
   '/leaderboard': typeof LeaderboardRoute
   '/predictions': typeof PredictionsRoute
+  '/checkout/result': typeof CheckoutResultRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/fixtures': typeof FixturesRoute
   '/leaderboard': typeof LeaderboardRoute
   '/predictions': typeof PredictionsRoute
+  '/checkout/result': typeof CheckoutResultRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,25 @@ export interface FileRoutesById {
   '/fixtures': typeof FixturesRoute
   '/leaderboard': typeof LeaderboardRoute
   '/predictions': typeof PredictionsRoute
+  '/checkout/result': typeof CheckoutResultRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/fixtures' | '/leaderboard' | '/predictions'
+  fullPaths:
+    | '/'
+    | '/fixtures'
+    | '/leaderboard'
+    | '/predictions'
+    | '/checkout/result'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/fixtures' | '/leaderboard' | '/predictions'
-  id: '__root__' | '/' | '/fixtures' | '/leaderboard' | '/predictions'
+  to: '/' | '/fixtures' | '/leaderboard' | '/predictions' | '/checkout/result'
+  id:
+    | '__root__'
+    | '/'
+    | '/fixtures'
+    | '/leaderboard'
+    | '/predictions'
+    | '/checkout/result'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +87,7 @@ export interface RootRouteChildren {
   FixturesRoute: typeof FixturesRoute
   LeaderboardRoute: typeof LeaderboardRoute
   PredictionsRoute: typeof PredictionsRoute
+  CheckoutResultRoute: typeof CheckoutResultRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkout/result': {
+      id: '/checkout/result'
+      path: '/checkout/result'
+      fullPath: '/checkout/result'
+      preLoaderRoute: typeof CheckoutResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   FixturesRoute: FixturesRoute,
   LeaderboardRoute: LeaderboardRoute,
   PredictionsRoute: PredictionsRoute,
+  CheckoutResultRoute: CheckoutResultRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

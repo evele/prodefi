@@ -5,6 +5,7 @@ const logger = require('firebase-functions/logger')
 const { defineSecret, defineString } = require('firebase-functions/params')
 const { onRequest } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
+const { MercadoPagoConfig, Payment, Preference } = require('mercadopago')
 const { createPublicClient, createWalletClient, getAddress, http, isAddress } = require('viem')
 const { privateKeyToAccount } = require('viem/accounts')
 const { base, baseSepolia } = require('viem/chains')
@@ -29,6 +30,14 @@ const TEST_MINTER_RPC_URL = defineSecret('TEST_MINTER_RPC_URL')
 const TEST_MINTER_ENDPOINT_TOKEN = defineSecret('TEST_MINTER_ENDPOINT_TOKEN')
 const TEST_CARTON_ADDRESS = defineString('TEST_CARTON_ADDRESS')
 const TEST_CHAIN_ID = defineString('TEST_CHAIN_ID')
+
+const MERCADO_PAGO_ACCESS_TOKEN = defineSecret('MERCADO_PAGO_ACCESS_TOKEN')
+const MERCADO_PAGO_SUCCESS_URL = defineString('MERCADO_PAGO_SUCCESS_URL')
+const MERCADO_PAGO_PENDING_URL = defineString('MERCADO_PAGO_PENDING_URL')
+const MERCADO_PAGO_FAILURE_URL = defineString('MERCADO_PAGO_FAILURE_URL')
+const MERCADO_PAGO_NOTIFICATION_URL = defineString('MERCADO_PAGO_NOTIFICATION_URL')
+const MERCADO_PAGO_WEBHOOK_SECRET = defineSecret('MERCADO_PAGO_WEBHOOK_SECRET')
+const MERCADO_PAGO_MINT_ENVIRONMENT = defineString('MERCADO_PAGO_MINT_ENVIRONMENT')
 
 const PROD_MINTER_WALLET_PRIVATE_KEY = defineSecret('PROD_MINTER_WALLET_PRIVATE_KEY')
 const PROD_MINTER_RPC_URL = defineSecret('PROD_MINTER_RPC_URL')
@@ -70,7 +79,7 @@ const MAINNET_MINT_CONFIG = {
   environment: 'mainnet',
   label: 'Base Mainnet',
   expectedChainId: base.id,
-  expectedCartonAddress: null,
+  expectedCartonAddress: null, // TODO: add here the right one to validate
   requestCollection: 'cartonMintRequests_mainnet',
   privateKeySecret: PROD_MINTER_WALLET_PRIVATE_KEY,
   rpcUrlSecret: PROD_MINTER_RPC_URL,
@@ -78,6 +87,22 @@ const MAINNET_MINT_CONFIG = {
   cartonAddressParam: PROD_CARTON_ADDRESS,
   chainIdParam: PROD_CHAIN_ID,
 }
+
+const ORDERS_COLLECTION = 'orders'
+const MERCADO_PAGO_ITEM_TITLE = 'Cartón Prodefi'
+const MERCADO_PAGO_CURRENCY_ID = 'ARS'
+const MERCADO_PAGO_UNIT_PRICE_ARS = 2000
+const SUPPORTED_PAYMENT_RAIL = 'fiat_ars'
+const SUPPORTED_PAYMENT_PROVIDER = 'mercadopago'
+const MERCADO_PAGO_PENDING_STATUSES = new Set(['pending', 'in_process', 'in_mediation'])
+const MERCADO_PAGO_FAILURE_STATUSES = new Set(['cancelled', 'rejected', 'refunded', 'charged_back'])
+const MERCADO_PAGO_EXCLUDED_PAYMENT_TYPES = [
+  'credit_card',
+  'prepaid_card',
+  'ticket',
+  'atm',
+  'bank_transfer',
+]
 
 function normalizeEmail(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -136,6 +161,10 @@ function buildMintDocId(environment, requestId) {
   return crypto.createHash('sha256').update(`${environment}:${requestId}`).digest('hex')
 }
 
+function buildOrderId() {
+  return `ord_${crypto.randomUUID().replace(/-/g, '')}`
+}
+
 function resolveChain(chainId, rpcUrl, label) {
   if (chainId === base.id) return base
   if (chainId === baseSepolia.id) return baseSepolia
@@ -155,10 +184,13 @@ function resolveChain(chainId, rpcUrl, label) {
   }
 }
 
-function getMinterRuntime(config) {
+function getMinterRuntime(config, options = {}) {
+  const requireEndpointToken = options.requireEndpointToken !== false
   const privateKey = getRequiredString(config.privateKeySecret.value(), `${config.environment} private key`)
   const rpcUrl = getRequiredString(config.rpcUrlSecret.value(), `${config.environment} rpc url`)
-  const endpointToken = getRequiredString(config.endpointTokenSecret.value(), `${config.environment} endpoint token`)
+  const endpointToken = requireEndpointToken
+    ? getRequiredString(config.endpointTokenSecret.value(), `${config.environment} endpoint token`)
+    : null
   const cartonAddress = getAddress(getRequiredString(config.cartonAddressParam.value(), `${config.environment} carton address`))
   const chainId = parsePositiveInteger(config.chainIdParam.value())
 
@@ -216,6 +248,527 @@ function parseMintPayload(body) {
   }
 }
 
+function parseOptionalString(value) {
+  if (typeof value !== 'string') return ''
+  return value.trim()
+}
+
+function parseCreateOrderPayload(body) {
+  const walletAddressRaw = parseOptionalString(body?.walletAddress)
+  const tournamentId = parsePositiveInteger(body?.tournamentId)
+  const quantity = body?.quantity === undefined ? 1 : parsePositiveInteger(body?.quantity)
+  const paymentRail = parseOptionalString(body?.paymentRail) || SUPPORTED_PAYMENT_RAIL
+  const openfortUserId = parseOptionalString(body?.openfortUserId)
+
+  if (!walletAddressRaw || !isAddress(walletAddressRaw)) {
+    return { error: 'invalid-wallet-address' }
+  }
+
+  if (!tournamentId) {
+    return { error: 'invalid-tournament-id' }
+  }
+
+  if (!quantity) {
+    return { error: 'invalid-quantity' }
+  }
+
+  if (paymentRail !== SUPPORTED_PAYMENT_RAIL) {
+    return { error: 'unsupported-payment-rail' }
+  }
+
+  if (quantity !== 1) {
+    return { error: 'quantity-not-supported-yet' }
+  }
+
+  return {
+    walletAddress: getAddress(walletAddressRaw),
+    tournamentId,
+    quantity,
+    paymentRail,
+    openfortUserId: openfortUserId || null,
+  }
+}
+
+function getMercadoPagoPreferenceRuntime() {
+  return {
+    accessToken: getRequiredString(MERCADO_PAGO_ACCESS_TOKEN.value(), 'mercado pago access token'),
+    successUrl: getRequiredString(MERCADO_PAGO_SUCCESS_URL.value(), 'mercado pago success url'),
+    pendingUrl: getRequiredString(MERCADO_PAGO_PENDING_URL.value(), 'mercado pago pending url'),
+    failureUrl: getRequiredString(MERCADO_PAGO_FAILURE_URL.value(), 'mercado pago failure url'),
+    notificationUrl: getRequiredString(MERCADO_PAGO_NOTIFICATION_URL.value(), 'mercado pago notification url'),
+  }
+}
+
+function getMercadoPagoMintConfig() {
+  const environment = parseOptionalString(MERCADO_PAGO_MINT_ENVIRONMENT.value()).toLowerCase()
+
+  if (environment === 'testnet') return TESTNET_MINT_CONFIG
+  if (environment === 'mainnet') return MAINNET_MINT_CONFIG
+
+  throw new Error('mercado pago mint environment must be testnet or mainnet')
+}
+
+function getMercadoPagoWebhookRuntime() {
+  return {
+    accessToken: getRequiredString(MERCADO_PAGO_ACCESS_TOKEN.value(), 'mercado pago access token'),
+    webhookSecret: getRequiredString(MERCADO_PAGO_WEBHOOK_SECRET.value(), 'mercado pago webhook secret'),
+    mintConfig: getMercadoPagoMintConfig(),
+  }
+}
+
+function buildCheckoutStatusUrl(baseUrl, orderId) {
+  const url = new URL(baseUrl)
+  url.searchParams.set('orderId', orderId)
+  return url.toString()
+}
+
+function shouldUseMercadoPagoAutoReturn(successUrl) {
+  try {
+    return new URL(successUrl).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function buildOrderResponse(order) {
+  return {
+    ok: true,
+    orderId: order.orderId,
+    status: order.status,
+    paymentRail: order.paymentRail,
+    provider: order.provider,
+    walletAddress: order.walletAddress,
+    tournamentId: order.tournamentId,
+    quantity: order.quantity,
+    unitPriceArs: order.unitPriceArs,
+    totalAmountArs: order.totalAmountArs,
+    initPoint: order.initPoint || null,
+    sandboxInitPoint: order.sandboxInitPoint || null,
+    paymentId: order.paymentId || null,
+    paymentStatus: order.paymentStatus || null,
+    paymentStatusDetail: order.paymentStatusDetail || null,
+    merchantOrderId: order.merchantOrderId || null,
+    liveMode: typeof order.liveMode === 'boolean' ? order.liveMode : null,
+    mintTxHash: order.mintTxHash || null,
+    lastError: order.lastError || null,
+  }
+}
+
+async function createMercadoPagoPreference(runtime, order) {
+  const client = new MercadoPagoConfig({ accessToken: runtime.accessToken })
+  const preference = new Preference(client)
+  const successUrl = buildCheckoutStatusUrl(runtime.successUrl, order.orderId)
+  const pendingUrl = buildCheckoutStatusUrl(runtime.pendingUrl, order.orderId)
+  const failureUrl = buildCheckoutStatusUrl(runtime.failureUrl, order.orderId)
+  const preferencePayload = {
+    items: [
+      {
+        id: order.orderId,
+        title: MERCADO_PAGO_ITEM_TITLE,
+        quantity: order.quantity,
+        currency_id: MERCADO_PAGO_CURRENCY_ID,
+        unit_price: order.unitPriceArs,
+      },
+    ],
+    external_reference: order.externalReference,
+    back_urls: {
+      success: successUrl,
+      pending: pendingUrl,
+      failure: failureUrl,
+    },
+    payment_methods: {
+      excluded_payment_types: MERCADO_PAGO_EXCLUDED_PAYMENT_TYPES.map((id) => ({ id })),
+    },
+    notification_url: runtime.notificationUrl,
+    metadata: {
+      orderId: order.orderId,
+      walletAddress: order.walletAddress,
+      tournamentId: String(order.tournamentId),
+      quantity: String(order.quantity),
+      ...(order.openfortUserId ? { openfortUserId: order.openfortUserId } : {}),
+    },
+  }
+
+  if (shouldUseMercadoPagoAutoReturn(successUrl)) {
+    preferencePayload.auto_return = 'approved'
+  }
+
+  try {
+    return await preference.create({
+      body: preferencePayload,
+      requestOptions: {
+        idempotencyKey: order.orderId,
+      },
+    })
+  } catch (error) {
+    throw new Error(
+      `mercado-pago-preference-failed:${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+}
+
+function serializeError(error) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }
+  }
+
+  return {
+    message: String(error),
+  }
+}
+
+function normalizeMercadoPagoId(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value))
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : ''
+  }
+
+  return ''
+}
+
+function parseMercadoPagoSignature(headerValue) {
+  const rawValue = typeof headerValue === 'string' ? headerValue.trim() : ''
+  if (!rawValue) {
+    return { ts: '', v1: '' }
+  }
+
+  return rawValue.split(',').reduce(
+    (signature, part) => {
+      const [keyRaw, valueRaw] = part.split('=', 2)
+      const key = keyRaw?.trim().toLowerCase()
+      const value = valueRaw?.trim() || ''
+
+      if (key === 'ts') signature.ts = value
+      if (key === 'v1') signature.v1 = value.toLowerCase()
+
+      return signature
+    },
+    { ts: '', v1: '' }
+  )
+}
+
+function buildMercadoPagoSignatureManifest(paymentId, requestId, timestamp) {
+  const parts = []
+
+  if (paymentId) parts.push(`id:${paymentId}`)
+  if (requestId) parts.push(`request-id:${requestId}`)
+  if (timestamp) parts.push(`ts:${timestamp}`)
+
+  return `${parts.join(';')};`
+}
+
+function timingSafeEqualHex(left, right) {
+  if (!left || !right) return false
+
+  try {
+    const leftBuffer = Buffer.from(left, 'hex')
+    const rightBuffer = Buffer.from(right, 'hex')
+
+    if (!leftBuffer.length || leftBuffer.length !== rightBuffer.length) {
+      return false
+    }
+
+    return crypto.timingSafeEqual(leftBuffer, rightBuffer)
+  } catch {
+    return false
+  }
+}
+
+function getMercadoPagoNotificationPaymentId(req) {
+  return normalizeMercadoPagoId(req.query?.['data.id']) || normalizeMercadoPagoId(req.body?.data?.id)
+}
+
+function verifyMercadoPagoWebhookSignature(req, secret) {
+  const { ts, v1 } = parseMercadoPagoSignature(req.get('x-signature'))
+  const requestId = parseOptionalString(req.get('x-request-id'))
+  const manifest = buildMercadoPagoSignatureManifest(normalizeMercadoPagoId(req.query?.['data.id']), requestId, ts)
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(manifest)
+    .digest('hex')
+
+  return timingSafeEqualHex(expectedSignature, v1)
+}
+
+async function fetchMercadoPagoPayment(runtime, paymentId) {
+  const client = new MercadoPagoConfig({ accessToken: runtime.accessToken })
+  const payment = new Payment(client)
+
+  try {
+    return await payment.get({ id: paymentId })
+  } catch (error) {
+    throw new Error(
+      `mercado-pago-payment-fetch-failed:${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+}
+
+function getOrderStatusFromMercadoPagoPayment(paymentStatus) {
+  if (paymentStatus === 'approved') return 'paid'
+  if (MERCADO_PAGO_PENDING_STATUSES.has(paymentStatus)) return 'awaiting_payment_confirmation'
+  if (MERCADO_PAGO_FAILURE_STATUSES.has(paymentStatus)) return 'failed'
+  return 'awaiting_payment_confirmation'
+}
+
+function buildMercadoPagoPaymentPatch(payment) {
+  return {
+    paymentId: normalizeMercadoPagoId(payment?.id) || null,
+    paymentStatus: parseOptionalString(payment?.status) || null,
+    paymentStatusDetail: parseOptionalString(payment?.status_detail) || null,
+    merchantOrderId: normalizeMercadoPagoId(payment?.order?.id) || null,
+    liveMode: typeof payment?.live_mode === 'boolean' ? payment.live_mode : null,
+    lastWebhookAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }
+}
+
+async function applyMercadoPagoPaymentUpdate(orderRef, paymentPatch) {
+  const targetStatus = getOrderStatusFromMercadoPagoPayment(paymentPatch.paymentStatus || '')
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(orderRef)
+    if (!snapshot.exists) return
+
+    const currentStatus = parseOptionalString(snapshot.data()?.status)
+    const shouldPreserveTerminalState = currentStatus === 'fulfilled' || currentStatus === 'minting'
+
+    transaction.set(
+      orderRef,
+      {
+        ...paymentPatch,
+        ...(shouldPreserveTerminalState ? {} : { status: targetStatus }),
+      },
+      { merge: true }
+    )
+  })
+}
+
+async function reserveOrderForApprovedPayment(orderRef, paymentPatch, orderId) {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(orderRef)
+    if (!snapshot.exists) {
+      return { type: 'missing' }
+    }
+
+    const existing = snapshot.data() || {}
+    const currentStatus = parseOptionalString(existing.status)
+    const mintRequestId = parseOptionalString(existing.mintRequestId) || orderId
+    const mergedOrder = {
+      ...existing,
+      ...paymentPatch,
+      orderId,
+      mintRequestId,
+    }
+
+    if (currentStatus === 'fulfilled') {
+      transaction.set(orderRef, paymentPatch, { merge: true })
+      return { type: 'already-fulfilled', order: mergedOrder }
+    }
+
+    if (currentStatus === 'minting') {
+      transaction.set(orderRef, paymentPatch, { merge: true })
+      return { type: 'already-minting', order: mergedOrder }
+    }
+
+    transaction.set(
+      orderRef,
+      {
+        ...paymentPatch,
+        status: 'minting',
+        mintRequestId,
+        lastError: null,
+      },
+      { merge: true }
+    )
+
+    return {
+      type: 'reserved',
+      order: {
+        ...mergedOrder,
+        status: 'minting',
+      },
+    }
+  })
+}
+
+async function finalizeOrderAsFulfilled(orderRef, paymentPatch, mintRequestId, txHash) {
+  await orderRef.set(
+    {
+      ...paymentPatch,
+      status: 'fulfilled',
+      mintRequestId,
+      mintTxHash: txHash || null,
+      fulfilledAt: FieldValue.serverTimestamp(),
+      lastError: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  )
+}
+
+async function keepOrderMinting(orderRef, paymentPatch, mintRequestId, txHash, lastError = null) {
+  await orderRef.set(
+    {
+      ...paymentPatch,
+      status: 'minting',
+      mintRequestId,
+      mintTxHash: txHash || null,
+      lastError,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  )
+}
+
+async function failOrderAfterApprovedPayment(orderRef, paymentPatch, mintRequestId, errorMessage) {
+  await orderRef.set(
+    {
+      ...paymentPatch,
+      status: 'failed',
+      mintRequestId,
+      lastError: errorMessage,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  )
+}
+
+async function createOrder(req, res) {
+  res.set('Cache-Control', 'no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ ok: false, error: 'method-not-allowed' })
+    return
+  }
+
+  let runtime
+  let mintEnvironment
+  try {
+    runtime = getMercadoPagoPreferenceRuntime()
+    mintEnvironment = getMercadoPagoMintConfig().environment
+  } catch (error) {
+    logger.error('mercado pago config failed', { error: serializeError(error) })
+    res.status(500).json({ ok: false, error: 'mercado-pago-config-invalid' })
+    return
+  }
+
+  const payload = parseCreateOrderPayload(req.body)
+  if (payload.error) {
+    res.status(400).json({ ok: false, error: payload.error })
+    return
+  }
+
+  const orderId = buildOrderId()
+  const orderRef = db.collection(ORDERS_COLLECTION).doc(orderId)
+  const order = {
+    orderId,
+    status: 'pending_payment',
+    environment: mintEnvironment,
+    paymentRail: payload.paymentRail,
+    provider: SUPPORTED_PAYMENT_PROVIDER,
+    tournamentId: payload.tournamentId,
+    walletAddress: payload.walletAddress,
+    quantity: payload.quantity,
+    unitPriceArs: MERCADO_PAGO_UNIT_PRICE_ARS,
+    totalAmountArs: MERCADO_PAGO_UNIT_PRICE_ARS * payload.quantity,
+    title: MERCADO_PAGO_ITEM_TITLE,
+    currencyId: MERCADO_PAGO_CURRENCY_ID,
+    externalReference: orderId,
+    openfortUserId: payload.openfortUserId,
+  }
+
+  try {
+    await orderRef.set({
+      ...order,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    const preference = await createMercadoPagoPreference(runtime, order)
+
+    await orderRef.set(
+      {
+        preferenceId: preference.id || null,
+        initPoint: preference.init_point || null,
+        sandboxInitPoint: preference.sandbox_init_point || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    res.status(201).json(
+      buildOrderResponse({
+        ...order,
+        initPoint: preference.init_point || null,
+        sandboxInitPoint: preference.sandbox_init_point || null,
+      })
+    )
+  } catch (error) {
+    const errorDetails = serializeError(error)
+    logger.error('create order failed', {
+      error: errorDetails,
+      tournamentId: payload.tournamentId,
+      walletAddress: payload.walletAddress,
+      quantity: payload.quantity,
+      orderId,
+    })
+
+    await orderRef.set(
+      {
+        ...order,
+        status: 'failed',
+        lastError: errorDetails.message,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    res.status(500).json({ ok: false, error: 'create-order-failed' })
+  }
+}
+
+async function getOrderStatus(req, res) {
+  res.set('Cache-Control', 'no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ ok: false, error: 'method-not-allowed' })
+    return
+  }
+
+  const orderId = parseOptionalString(req.query?.orderId)
+  if (!orderId) {
+    res.status(400).json({ ok: false, error: 'missing-order-id' })
+    return
+  }
+
+  const snapshot = await db.collection(ORDERS_COLLECTION).doc(orderId).get()
+  if (!snapshot.exists) {
+    res.status(404).json({ ok: false, error: 'order-not-found' })
+    return
+  }
+
+  const data = snapshot.data() || {}
+  res.status(200).json(buildOrderResponse(data))
+}
+
 function buildExistingMintResponse(existing) {
   const txHash = typeof existing.txHash === 'string' ? existing.txHash : null
 
@@ -237,6 +790,129 @@ function buildExistingMintResponse(existing) {
       status: existing.status || 'pending',
       txHash,
     },
+  }
+}
+
+async function submitMintRequest(config, runtime, payload) {
+  const requestRef = db.collection(config.requestCollection).doc(buildMintDocId(config.environment, payload.requestId))
+  const reservation = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(requestRef)
+
+    if (snapshot.exists) {
+      const existing = snapshot.data() || {}
+      if (['pending', 'submitted', 'confirmed'].includes(existing.status)) {
+        return { type: 'existing', data: existing }
+      }
+
+      transaction.update(requestRef, {
+        requestId: payload.requestId,
+        recipient: payload.recipient,
+        tournamentId: payload.tournamentId,
+        environment: config.environment,
+        chainId: runtime.chain.id,
+        cartonAddress: runtime.cartonAddress,
+        minterAddress: runtime.account.address,
+        status: 'pending',
+        txHash: null,
+        lastError: null,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      return { type: 'reserved' }
+    }
+
+    transaction.create(requestRef, {
+      requestId: payload.requestId,
+      recipient: payload.recipient,
+      tournamentId: payload.tournamentId,
+      environment: config.environment,
+      chainId: runtime.chain.id,
+      cartonAddress: runtime.cartonAddress,
+      minterAddress: runtime.account.address,
+      status: 'pending',
+      txHash: null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    return { type: 'reserved' }
+  })
+
+  if (reservation.type === 'existing') {
+    return buildExistingMintResponse(reservation.data).body
+  }
+
+  let txHash = null
+
+  try {
+    const liveChainId = await runtime.publicClient.getChainId()
+    if (liveChainId !== config.expectedChainId) {
+      throw new Error(`unexpected chain id ${liveChainId}; expected ${config.expectedChainId}`)
+    }
+
+    txHash = await runtime.walletClient.writeContract({
+      address: runtime.cartonAddress,
+      abi: CARTON_MINTER_ABI,
+      functionName: 'mintForTournament',
+      args: [payload.recipient, BigInt(payload.tournamentId), 1n, '0x'],
+    })
+
+    await requestRef.update({
+      status: 'submitted',
+      txHash,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    const receipt = await runtime.publicClient.waitForTransactionReceipt({ hash: txHash })
+    if (receipt.status !== 'success') {
+      throw new Error(`mint transaction ended with status ${receipt.status}`)
+    }
+
+    await requestRef.update({
+      status: 'confirmed',
+      txHash,
+      blockNumber: receipt.blockNumber.toString(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    return {
+      ok: true,
+      status: 'confirmed',
+      environment: config.environment,
+      requestId: payload.requestId,
+      txHash,
+    }
+  } catch (error) {
+    logger.error(`carton mint failed: ${config.environment}`, {
+      error: serializeError(error),
+      requestId: payload.requestId,
+      recipient: payload.recipient,
+      tournamentId: payload.tournamentId,
+      txHash,
+    })
+
+    await requestRef.set(
+      {
+        status: txHash ? 'submitted' : 'failed',
+        txHash,
+        lastError: error instanceof Error ? error.message : 'unknown-error',
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    if (txHash) {
+      return {
+        ok: false,
+        status: 'submitted',
+        environment: config.environment,
+        requestId: payload.requestId,
+        txHash,
+        error: 'mint-submitted-check-firestore',
+      }
+    }
+
+    throw error
   }
 }
 
@@ -264,7 +940,7 @@ function createMintHandler(config) {
       try {
         runtime = getMinterRuntime(config)
       } catch (error) {
-        logger.error(`mint config failed: ${config.environment}`, { error })
+        logger.error(`mint config failed: ${config.environment}`, { error: serializeError(error) })
         res.status(500).json({ ok: false, error: 'minter-config-invalid' })
         return
       }
@@ -281,141 +957,147 @@ function createMintHandler(config) {
         return
       }
 
-      const requestRef = db.collection(config.requestCollection).doc(buildMintDocId(config.environment, payload.requestId))
-      const reservation = await db.runTransaction(async (transaction) => {
-        const snapshot = await transaction.get(requestRef)
-
-        if (snapshot.exists) {
-          const existing = snapshot.data() || {}
-          if (['pending', 'submitted', 'confirmed'].includes(existing.status)) {
-            return { type: 'existing', data: existing }
-          }
-
-          transaction.update(requestRef, {
-            requestId: payload.requestId,
-            recipient: payload.recipient,
-            tournamentId: payload.tournamentId,
-            environment: config.environment,
-            chainId: runtime.chain.id,
-            cartonAddress: runtime.cartonAddress,
-            minterAddress: runtime.account.address,
-            status: 'pending',
-            txHash: null,
-            lastError: null,
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-
-          return { type: 'reserved' }
-        }
-
-        transaction.create(requestRef, {
-          requestId: payload.requestId,
-          recipient: payload.recipient,
-          tournamentId: payload.tournamentId,
-          environment: config.environment,
-          chainId: runtime.chain.id,
-          cartonAddress: runtime.cartonAddress,
-          minterAddress: runtime.account.address,
-          status: 'pending',
-          txHash: null,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-
-        return { type: 'reserved' }
-      })
-
-      if (reservation.type === 'existing') {
-        const existingResponse = buildExistingMintResponse(reservation.data)
-        res.status(existingResponse.httpStatus).json(existingResponse.body)
-        return
-      }
-
-      let txHash = null
-
       try {
-        const liveChainId = await runtime.publicClient.getChainId()
-        if (liveChainId !== config.expectedChainId) {
-          throw new Error(`unexpected chain id ${liveChainId}; expected ${config.expectedChainId}`)
-        }
-
-        txHash = await runtime.walletClient.writeContract({
-          address: runtime.cartonAddress,
-          abi: CARTON_MINTER_ABI,
-          functionName: 'mintForTournament',
-          args: [payload.recipient, BigInt(payload.tournamentId), 1n, '0x'],
-        })
-
-        await requestRef.update({
-          status: 'submitted',
-          txHash,
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-
-        const receipt = await runtime.publicClient.waitForTransactionReceipt({ hash: txHash })
-        if (receipt.status !== 'success') {
-          throw new Error(`mint transaction ended with status ${receipt.status}`)
-        }
-
-        await requestRef.update({
-          status: 'confirmed',
-          txHash,
-          blockNumber: receipt.blockNumber.toString(),
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-
-        res.status(200).json({
-          ok: true,
-          status: 'confirmed',
-          environment: config.environment,
-          requestId: payload.requestId,
-          txHash,
-        })
+        const result = await submitMintRequest(config, runtime, payload)
+        const httpStatus = result.status === 'confirmed' || result.status === 'already-confirmed' ? 200 : 202
+        res.status(httpStatus).json(result)
       } catch (error) {
-        const errorDetails = error instanceof Error
-          ? {
-              name: error.name,
-              message: error.message,
-              stack: error.stack,
-            }
-          : {
-              message: String(error),
-            }
-
-        logger.error(`carton mint failed: ${config.environment}`, {
-          error: errorDetails,
+        logger.error(`mint handler failed: ${config.environment}`, {
+          error: serializeError(error),
           requestId: payload.requestId,
-          recipient: payload.recipient,
-          tournamentId: payload.tournamentId,
-          txHash,
         })
-
-        await requestRef.set(
-          {
-            status: txHash ? 'submitted' : 'failed',
-            txHash,
-            lastError: error instanceof Error ? error.message : 'unknown-error',
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        )
-
-        if (txHash) {
-          res.status(202).json({
-            ok: false,
-            status: 'submitted',
-            environment: config.environment,
-            requestId: payload.requestId,
-            txHash,
-            error: 'mint-submitted-check-firestore',
-          })
-          return
-        }
-
         res.status(500).json({ ok: false, error: 'mint-failed' })
       }
     }
   )
+}
+
+async function mercadoPagoWebhook(req, res) {
+  res.set('Cache-Control', 'no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ ok: false, error: 'method-not-allowed' })
+    return
+  }
+
+  let runtime
+  try {
+    runtime = getMercadoPagoWebhookRuntime()
+  } catch (error) {
+    logger.error('mercado pago webhook config failed', { error: serializeError(error) })
+    res.status(500).json({ ok: false, error: 'mercado-pago-webhook-config-invalid' })
+    return
+  }
+
+  const notificationType = parseOptionalString(req.query?.type) || parseOptionalString(req.body?.type)
+  if (notificationType && notificationType !== 'payment') {
+    res.status(200).json({ ok: true, ignored: true, reason: 'unsupported-notification-type' })
+    return
+  }
+
+  const paymentId = getMercadoPagoNotificationPaymentId(req)
+  if (!paymentId) {
+    res.status(200).json({ ok: true, ignored: true, reason: 'missing-payment-id' })
+    return
+  }
+
+  if (!verifyMercadoPagoWebhookSignature(req, runtime.webhookSecret)) {
+    logger.warn('mercado pago webhook signature mismatch', { paymentId })
+    res.status(401).json({ ok: false, error: 'invalid-signature' })
+    return
+  }
+
+  let orderRef = null
+  let paymentPatch = null
+  let mintRequestId = ''
+
+  try {
+    const payment = await fetchMercadoPagoPayment(runtime, paymentId)
+    paymentPatch = buildMercadoPagoPaymentPatch(payment)
+
+    const externalReference = parseOptionalString(payment?.external_reference)
+    if (!externalReference) {
+      logger.warn('mercado pago payment missing external reference', { paymentId, paymentStatus: paymentPatch.paymentStatus })
+      res.status(200).json({ ok: true, ignored: true, reason: 'missing-external-reference' })
+      return
+    }
+
+    orderRef = db.collection(ORDERS_COLLECTION).doc(externalReference)
+    const orderSnapshot = await orderRef.get()
+    if (!orderSnapshot.exists) {
+      logger.warn('mercado pago order not found', { paymentId, externalReference })
+      res.status(200).json({ ok: true, ignored: true, reason: 'order-not-found' })
+      return
+    }
+
+    if (paymentPatch.paymentStatus !== 'approved') {
+      await applyMercadoPagoPaymentUpdate(orderRef, paymentPatch)
+      res.status(200).json({ ok: true, status: paymentPatch.paymentStatus || 'updated' })
+      return
+    }
+
+    const mintReservation = await reserveOrderForApprovedPayment(orderRef, paymentPatch, externalReference)
+    if (mintReservation.type === 'missing') {
+      res.status(200).json({ ok: true, ignored: true, reason: 'order-not-found' })
+      return
+    }
+
+    if (mintReservation.type === 'already-fulfilled') {
+      res.status(200).json({ ok: true, status: 'fulfilled' })
+      return
+    }
+
+    if (mintReservation.type === 'already-minting') {
+      res.status(200).json({ ok: true, status: 'minting' })
+      return
+    }
+
+    const order = mintReservation.order
+    mintRequestId = order.mintRequestId
+    const mintRuntime = getMinterRuntime(runtime.mintConfig, { requireEndpointToken: false })
+    const mintResult = await submitMintRequest(runtime.mintConfig, mintRuntime, {
+      requestId: order.mintRequestId,
+      recipient: getAddress(order.walletAddress),
+      tournamentId: Number(order.tournamentId),
+    })
+
+    if (mintResult.status === 'confirmed' || mintResult.status === 'already-confirmed') {
+      await finalizeOrderAsFulfilled(orderRef, paymentPatch, order.mintRequestId, mintResult.txHash || null)
+      res.status(200).json({ ok: true, status: 'fulfilled', txHash: mintResult.txHash || null })
+      return
+    }
+
+    await keepOrderMinting(
+      orderRef,
+      paymentPatch,
+      order.mintRequestId,
+      mintResult.txHash || null,
+      typeof mintResult.error === 'string' ? mintResult.error : null
+    )
+    res.status(202).json({ ok: true, status: 'minting', txHash: mintResult.txHash || null })
+  } catch (error) {
+    logger.error('mercado pago webhook failed', {
+      error: serializeError(error),
+      paymentId,
+      mintRequestId,
+    })
+
+    if (orderRef && paymentPatch && mintRequestId) {
+      await failOrderAfterApprovedPayment(
+        orderRef,
+        paymentPatch,
+        mintRequestId,
+        error instanceof Error ? error.message : 'mercado-pago-webhook-failed'
+      )
+    }
+
+    res.status(500).json({ ok: false, error: 'mercado-pago-webhook-failed' })
+  }
 }
 
 async function enforceRateLimit(rateLimitKey, userAgent, now) {
@@ -539,6 +1221,32 @@ exports.waitlist = onRequest({ cors: true, invoker: 'public' }, async (req, res)
     res.status(500).json({ ok: false, error: 'internal' })
   }
 })
+
+exports.createOrder = onRequest(
+  {
+    cors: true,
+    invoker: 'public',
+    secrets: [MERCADO_PAGO_ACCESS_TOKEN],
+  },
+  createOrder
+)
+
+exports.getOrderStatus = onRequest({ cors: true, invoker: 'public' }, getOrderStatus)
+
+exports.mercadoPagoWebhook = onRequest(
+  {
+    invoker: 'public',
+    secrets: [
+      MERCADO_PAGO_ACCESS_TOKEN,
+      MERCADO_PAGO_WEBHOOK_SECRET,
+      TEST_MINTER_WALLET_PRIVATE_KEY,
+      TEST_MINTER_RPC_URL,
+      PROD_MINTER_WALLET_PRIVATE_KEY,
+      PROD_MINTER_RPC_URL,
+    ],
+  },
+  mercadoPagoWebhook
+)
 
 exports.mintCartonTestnet = createMintHandler(TESTNET_MINT_CONFIG)
 exports.mintCartonMainnet = createMintHandler(MAINNET_MINT_CONFIG)
