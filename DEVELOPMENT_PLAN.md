@@ -3,7 +3,7 @@
 **PURPOSE**: Project planning, task organization, and development roadmap.
 For project overview and stable architecture notes, see README.md.
 
-*Last updated: May 12, 2026*
+*Last updated: May 20, 2026*
 
 ---
 
@@ -91,6 +91,28 @@ Implementation targets:
 See [`docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md`](docs/plans/MINTER_ROLE_IMPLEMENTATION_PLAN.md) for the wallet/role setup that should land before the Mercado Pago mint trigger.
 
 This should be treated as the canonical path for non-crypto users in Argentina, while keeping the onchain USDC flow available for crypto-native and international users.
+
+### Firebase / Server-side Mint Status (May 2026)
+
+Validated in the current testnet spike:
+
+- `functions/src/index.js` now exposes explicit same-project mint endpoints:
+  - `mintCartonTestnet`
+  - `mintCartonMainnet`
+- Testnet minting uses a dedicated server-side minter wallet model and no longer depends on the frontend to submit the mint.
+- The testnet function is hardened to Base Sepolia only:
+  - `chainId` must be `84532`
+  - `TEST_CARTON_ADDRESS` must match the current canonical Base Sepolia `Carton` deployment
+- Endpoint access is protected with a bearer token secret (`TEST_MINTER_ENDPOINT_TOKEN`).
+- Mint requests are tracked in Firestore with idempotency by `requestId` (`cartonMintRequests_testnet`).
+- Error handling was fixed so failed onchain writes no longer crash the logger on `BigInt` serialization.
+- A full isolated HTTP test already succeeded against Base Sepolia, confirming that Firebase can call `Carton.mintForTournament(...)` server-side with a dedicated `MINTER_ROLE` wallet.
+
+Immediate next backend step:
+
+1. Create the Firebase function that builds the Mercado Pago checkout/preference.
+2. Implement the Mercado Pago webhook/confirmation flow that verifies approved payments and triggers the server-side mint.
+3. Persist the payment-to-mint linkage in Firestore (`payment id`, `wallet`, `tournamentId`, `mint tx hash`, fulfillment status).
 
 ### Known Bugs in Contracts — FIXED
 
@@ -430,17 +452,27 @@ Si el objetivo pasa a ser reducir fricción de onboarding y permitir uso sin ETH
 - Base Sepolia selected and deployed.
 - Frontend envs and contracts wired.
 - Login, embedded wallet, sponsorship, approve, and buy flow validated.
+- Navbar logout/disconnect control restored for both desktop and mobile.
+- Recovery default switched to `PASSKEY` with `PASSWORD` kept only as fallback.
+- Added an in-app recovery upgrade banner for users whose wallet still depends only on password.
+- Attempted `es-ES` locale wiring for the Openfort modal; current SDK/runtime behavior still needs confirmation because the modal continued rendering in English during local validation.
+- External wallet auth through the Openfort modal still has an unresolved refresh inconsistency:
+  - `email OTP / embedded` reconnect is acceptable after `F5`
+  - `wallet / EOA` reconnect can leave a partially rehydrated connection where the button still shows an address but the app is not fully connected
+  - this should be solved in the connection restore/persistence layer (`frontend/src/lib/wagmi.ts` and related Openfort/wagmi wiring), not with more UI-only work in `WalletButton.tsx`
 
 **Próximos pasos relevantes:**
 
 1. Finish validating the remaining Openfort user flows:
    - `submitPredictionAndWinners`
    - `claimPrize`
-2. Define the production split explicitly in implementation:
+2. Resolve the remaining `wallet / EOA` refresh restore bug in the Openfort connection layer before considering the external-wallet path stable.
+3. Confirm whether the Openfort modal language can be forced reliably in the current SDK version or if this is a package limitation to accept for now.
+4. Define the production split explicitly in implementation:
    - Path A: crypto-native / international onchain checkout
    - Path B: Mercado Pago + Firebase + server-side mint
-3. Implement the Mercado Pago + Firebase mint path.
-4. After both paths are stable, tighten sponsorship policies and reduce fallback complexity where possible.
+5. Implement the Mercado Pago + Firebase mint path.
+6. After both paths are stable, tighten sponsorship policies and reduce fallback complexity where possible.
 
 Key evaluation questions:
 

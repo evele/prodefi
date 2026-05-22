@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useUser } from '@openfort/react'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../lib/contracts'
 import { formatUnits } from 'viem'
+import { toast } from 'sonner'
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
+import { PurchaseCartonModal } from '../components/PurchaseCartonModal'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
-import { hasOpenfortGasSponsorship } from '../lib/chains'
+import { canUseOpenfort, hasOpenfortGasSponsorship } from '../lib/chains'
+import { createCheckoutOrder, getMercadoPagoCheckoutUrl } from '../lib/orders'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 import { PRIZE_BANDS } from '../lib/prize-payout'
@@ -17,13 +21,18 @@ export const Route = createFileRoute('/')({
   component: HomePage,
 })
 
+const ARS_CARTON_PRICE_LABEL = '$2.000'
+
 function HomePage() {
   const navigate = useNavigate()
+  const openfortUser = canUseOpenfort ? useUser().user : null
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
-  const { eth: nativeBalance, usdc: usdcBalance } = useUserBalance()
+  const { eth: nativeBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
   const approveWrite = useSimulatedContractWrite()
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false)
+  const [isCreatingArsOrder, setIsCreatingArsOrder] = useState(false)
 
   const { data: activeTournamentId } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -66,7 +75,7 @@ function HomePage() {
 
   const buyButtonText = () => {
     if (!isConnected) return 'Conecta tu wallet para comprar'
-    return isBuying ? 'Comprando…' : 'Comprar con USDC'
+    return 'Comprar cartón'
   }
 
   const approvalBlockedMessage = (() => {
@@ -93,10 +102,12 @@ function HomePage() {
 
   const canBuy = buyBlockedMessage === null
 
-  const balanceDisplay = () => {
-    if (!isConnected) return null
-    return usdcBalance.isLoading ? '…' : `${usdcBalance.amount} ${usdcBalance.symbol}`
-  }
+  const arsBlockedMessage = (() => {
+    if (!isConnected) return 'Debes conectarte primero.'
+    if (tournamentId === 0n) return 'No hay un torneo activo configurado para emitir cartones.'
+    if (isCreatingArsOrder) return 'redirigiendo a Mercado Pago.'
+    return null
+  })()
 
   const gasReadinessNotice = (() => {
     if (!isConnected || nativeBalance.isLoading) return null
@@ -206,7 +217,42 @@ function HomePage() {
   }
 
   const handleBuyClick = () => {
-    buyCartonWithUsdc()
+    setIsPurchaseModalOpen(true)
+  }
+
+  const handleArsCheckout = async () => {
+    if (!normalizedAddress) {
+      toast.error('Conéctate antes de pagar en pesos.')
+      return
+    }
+
+    if (tournamentId === 0n) {
+      toast.error('No hay un torneo activo disponible para emitir cartones.')
+      return
+    }
+
+    setIsCreatingArsOrder(true)
+
+    try {
+      const order = await createCheckoutOrder({
+        walletAddress: normalizedAddress,
+        tournamentId: Number(tournamentId),
+        quantity: 1,
+        paymentRail: 'fiat_ars',
+        ...(openfortUser?.id ? { openfortUserId: openfortUser.id } : {}),
+      })
+
+      const checkoutUrl = getMercadoPagoCheckoutUrl(order)
+      if (!checkoutUrl) {
+        throw new Error('missing-checkout-url')
+      }
+
+      window.location.assign(checkoutUrl)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'create-order-failed'
+      toast.error(`No pudimos iniciar el checkout en pesos: ${message}`)
+      setIsCreatingArsOrder(false)
+    }
   }
 
   const { data: cartonsUser, refetch: refetchCartonsUser } = useReadContract({
@@ -497,11 +543,10 @@ function HomePage() {
             Comprar Cartón
           </h2>
           <span className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
-            USDC only
+            ARS + USDC
           </span>
         </div>
 
-        {/* Price */}
         <div className="flex items-baseline gap-3">
           <span
             className="text-3xl font-bold"
@@ -509,47 +554,83 @@ function HomePage() {
           >
             {priceDisplay}
           </span>
-          {isConnected && balanceDisplay() && (
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Saldo: {balanceDisplay()}
-            </span>
-          )}
+          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            o {ARS_CARTON_PRICE_LABEL} por Mercado Pago
+          </span>
         </div>
 
-        {/* Approve USDC */}
-        {needsApproval && (
-          <>
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={approvalBlockedMessage !== null}
-              onClick={approveUsdc}
-            >
-              {isApproving ? 'Aprobando…' : 'Aprobar USDC'}
-            </Button>
-            {approvalBlockedMessage && (
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                {approvalBlockedMessage}
-              </p>
-            )}
-          </>
-        )}
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Elige entre pagar en pesos con Mercado Pago o seguir por el camino crypto nativo con USDC onchain.
+        </p>
 
-        {/* Buy button */}
         <Button
           className="w-full h-11 text-base font-semibold"
-          disabled={!canBuy}
+          disabled={!isConnected || tournamentId === 0n}
           onClick={handleBuyClick}
-          style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
+          style={isConnected && tournamentId > 0n ? { boxShadow: 'var(--glow-green)' } : undefined}
         >
           {buyButtonText()}
         </Button>
-        {buyBlockedMessage && (
+        {(!isConnected || tournamentId === 0n) && (
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {buyBlockedMessage}
+            {!isConnected
+              ? 'Conéctate para elegir cómo pagar y fijar la dirección que recibirá el cartón.'
+              : 'No hay un torneo activo configurado para vender cartones ahora mismo.'}
           </p>
         )}
       </div>
+
+      <PurchaseCartonModal
+        isOpen={isPurchaseModalOpen}
+        onClose={() => {
+          if (isCreatingArsOrder) return
+          setIsPurchaseModalOpen(false)
+        }}
+        arsPriceLabel={ARS_CARTON_PRICE_LABEL}
+        usdcPriceLabel={priceDisplay}
+        walletAddressLabel={normalizedAddress ?? 'Wallet no conectada'}
+        arsActionLabel="Comprar con Mercado Pago"
+        onArsCheckout={() => { void handleArsCheckout() }}
+        isCreatingArsOrder={isCreatingArsOrder}
+        arsBlockedMessage={arsBlockedMessage}
+        gasNotice={gasReadinessNotice}
+        approvalAction={
+          needsApproval ? (
+            <>
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={approvalBlockedMessage !== null}
+                onClick={approveUsdc}
+              >
+                {isApproving ? 'Aprobando…' : 'Aprobar USDC'}
+              </Button>
+              {approvalBlockedMessage && (
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {approvalBlockedMessage}
+                </p>
+              )}
+            </>
+          ) : null
+        }
+        usdcAction={
+          <>
+            <Button
+              className="h-11 w-full text-base font-semibold"
+              disabled={!canBuy}
+              onClick={buyCartonWithUsdc}
+              style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
+            >
+              {isBuying ? 'Comprando…' : 'Comprar con USDC'}
+            </Button>
+            {buyBlockedMessage && (
+              <p className="text-xs mb-[-28px]" style={{ color: 'var(--text-secondary)' }}>
+                {buyBlockedMessage}
+              </p>
+            )}
+          </>
+        }
+      />
 
       {/* ─── Mis Cartones ─── */}
       {isConnected && (

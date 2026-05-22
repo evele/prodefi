@@ -38,4 +38,7 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
+  server: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
 }))

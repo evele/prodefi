@@ -17,10 +17,14 @@ export const config = canUseOpenfort
         connectors: enableOpenfortWalletAuth ? undefined : [embeddedWalletConnector()],
         transports,
         walletConnectProjectId: enableOpenfortWalletAuth ? walletConnectProjectId : undefined,
-        // Openfort's embedded connector can be restored from storage without methods
-        // that wagmi later expects (for example, getChainId). Keep Openfort sessions
-        // in Openfort itself and avoid persisting wagmi connector state.
-        storage: null,
+        // TODO(openfort-eoa-refresh): OTP / embedded session restore is acceptable,
+        // but external wallet auth through the Openfort modal still rehydrates
+        // inconsistently after F5. The real fix belongs here in the connection
+        // restore/persistence layer, not in UI-level button workarounds.
+        // Embedded-only mode stays opt-in to avoid restoring stale wagmi connector state.
+        // When external wallet auth is enabled, allow wagmi persistence so EOA sessions
+        // survive a hard refresh instead of appearing disconnected after F5.
+        ...(enableOpenfortWalletAuth ? {} : { storage: null }),
         ssr: false,
       })
     )

@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { LogOut } from 'lucide-react'
-import { useSignOut, useUI, useUser } from '@openfort/react'
+import { embeddedWalletId, useSignOut, useUI, useUser } from '@openfort/react'
 import { useEthereumEmbeddedWallet } from '@openfort/react/ethereum'
 import { useAccount, useDisconnect } from 'wagmi'
 
@@ -40,13 +40,24 @@ function clearStaleOpenfortParams() {
   }
 }
 
+function clearStaleEmbeddedWagmiState() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.removeItem('wagmi.store')
+    window.localStorage.removeItem('wagmi.recentConnectorId')
+  } catch {
+    // Ignore storage access failures and still try a runtime disconnect.
+  }
+}
+
 function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
   const { open, openProfile } = useUI()
   const { user, isConnected, isLoading } = useUser()
-  const { activeWallet } = useEthereumEmbeddedWallet()
-  const { address: bridgeAddress, isConnected: isBridgeConnected } = useAccount()
+  const { activeWallet, status: embeddedStatus } = useEthereumEmbeddedWallet()
+  const { address: bridgeAddress, connector, isConnected: isBridgeConnected } = useAccount()
   const { signOut, isLoading: isSigningOut } = useSignOut()
-  const { disconnect, isPending: isDisconnecting } = useDisconnect()
+  const { disconnect, disconnectAsync, isPending: isDisconnecting } = useDisconnect()
 
   const hasOpenfortSession = Boolean(user)
   const hasConnectedWallet = isConnected || isBridgeConnected
@@ -61,13 +72,43 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
   const primaryLabel = isLoading ? 'Cargando...' : hasOpenfortAccess ? label : 'Entrar'
   const isClosingAccess = isSigningOut || isDisconnecting
 
-  const closeAccess = () => {
-    if (hasOpenfortSession) {
-      void signOut()
-      return
+  useEffect(() => {
+    const shouldClearStaleEmbeddedConnection =
+      connector?.id === embeddedWalletId &&
+      isBridgeConnected &&
+      !hasOpenfortSession &&
+      embeddedStatus === 'disconnected' &&
+      activeWallet === null
+
+    if (!shouldClearStaleEmbeddedConnection) return
+
+    clearStaleEmbeddedWagmiState()
+
+    void disconnectAsync().catch(() => {
+      disconnect()
+    })
+  }, [
+    activeWallet,
+    connector?.id,
+    disconnect,
+    disconnectAsync,
+    embeddedStatus,
+    hasOpenfortSession,
+    isBridgeConnected,
+  ])
+
+  const closeAccess = async () => {
+    if (hasConnectedWallet) {
+      try {
+        await disconnectAsync()
+      } catch {
+        disconnect()
+      }
     }
 
-    disconnect()
+    if (hasOpenfortSession) {
+      await signOut()
+    }
   }
 
   return (
@@ -75,7 +116,7 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
       <button
         type="button"
         onClick={() => {
-          if (hasOpenfortAccess) {
+          if (hasOpenfortSession) {
             openProfile()
             return
           }
@@ -94,7 +135,7 @@ function OpenfortWalletButton({ mobile = false }: { mobile?: boolean }) {
       {hasOpenfortAccess && (
         <button
           type="button"
-          onClick={closeAccess}
+          onClick={() => { void closeAccess() }}
           disabled={isClosingAccess}
           className={mobile
             ? 'inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors'
