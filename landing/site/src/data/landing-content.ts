@@ -163,8 +163,8 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         {
           eyebrow: 'Pozo',
           title: 'Pozo en aumento',
-          description: 'El 95% de lo recaudado por cartones integra el pozo premiable de esa edición.',
-          note: 'El 5% restante cubre infraestructura, mantenimiento y subsidio de gas.',
+          description: 'Cada cartón nuevo hace crecer el pozo.',
+          note: 'El detalle del cálculo y de los medios de pago está publicado en las reglas.',
         },
         {
           eyebrow: 'Puestos',
@@ -339,8 +339,8 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         {
           eyebrow: 'Pool',
           title: 'Growing pool',
-          description: '95% of all entry sales goes into that edition\'s prize pool.',
-          note: 'The remaining 5% covers infrastructure, maintenance and gas subsidy.',
+          description: 'Every new entry grows the prize pool.',
+          note: 'The calculation details and payment methods are published in the rules.',
         },
         {
           eyebrow: 'Places',

@@ -10,6 +10,11 @@ function formatValue(value: string | number | boolean | undefined | null) {
   return String(value)
 }
 
+function shouldShowOpenfortDebugPanel() {
+  if (typeof window === 'undefined') return false
+  return new URL(window.location.href).searchParams.get('openfortDebug') === 'true'
+}
+
 export function OpenfortDebugPanel() {
   const { user } = useUser()
   const { activeWallet, status } = useEthereumEmbeddedWallet()
@@ -36,7 +41,7 @@ export function OpenfortDebugPanel() {
     [activeWallet, address, chainId, connector?.id, isConnected, status, user?.email, user?.id, walletClient?.chain?.id]
   )
 
-  if (!import.meta.env.DEV || !canUseOpenfort) return null
+  if (!import.meta.env.DEV || !canUseOpenfort || !shouldShowOpenfortDebugPanel()) return null
 
   return (
     <aside
