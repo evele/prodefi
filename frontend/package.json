@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build",
     "build:legacy": "tsc -b && vite build --mode legacy",
     "build:openfort": "tsc -b && vite build --mode openfort",
+    "build:hosting:test": "VITE_FIREBASE_FUNCTIONS_BASE_URL=/api tsc -b && vite build --mode openfort --outDir dist-test",
     "lint": "eslint .",
     "preview": "vite preview"
   },
