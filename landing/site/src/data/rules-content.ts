@@ -178,8 +178,8 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
         eyebrow: 'Premios',
         title: 'Pozo, reparto y cobros',
         items: [
-          'El 95% de lo recaudado por cartones integra el pozo de esa edición.',
-          'El 5% restante queda fuera del pozo para infraestructura y mantenimiento.',
+          'El pozo de cada edición se compone del monto neto efectivamente acreditado por cada cartón confirmado.',
+          'Ese monto puede variar según el medio de pago, costos de procesamiento, conversión y operación.',
           'Los primeros 32 puestos del ranking final son premiados.',
           'La cantidad de premiados no cambia con el tamaño de los inscriptos: cambian los montos según el pozo final.',
           'Los premios se liquidan en USDC.',
@@ -209,7 +209,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
     quickSummary: {
       eyebrow: 'Resumen rápido',
       body:
-        'Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás la predicción de ganadores, esa parte suma 0. El 95% de lo recaudado integra el pozo de esa edición y el 5% restante cubre infraestructura y mantenimiento. Los primeros 32 puestos cobran un porcentajes fijos del pozo. Si hay empate en puntos, comparten posición con lógica `1, 2, 2, 4` y reparten en partes iguales los premios de los puestos que ocuparon.',
+        'Por partido el rango va de 0 a 10. Nunca restás puntos por errarle muy lejos. El campeón vale 25, el subcampeón 18 y el tercer y cuarto puesto valen 10 cada uno. Si no enviás la predicción de ganadores, esa parte suma 0. El pozo de cada edición se compone del monto neto efectivamente acreditado por cada cartón confirmado, que puede variar según el medio de pago, costos de procesamiento, conversión y operación. Los primeros 32 puestos cobran porcentajes fijos del pozo. Si hay empate en puntos, comparten posición con lógica `1, 2, 2, 4` y reparten en partes iguales los premios de los puestos que ocuparon.',
     },
     footer: {
       sections: {
@@ -323,8 +323,8 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
         eyebrow: 'Prizes',
         title: 'Pool, payouts and claiming',
         items: [
-          '95% of all entry revenue goes into that edition\'s prize pool.',
-          'The remaining 5% stays outside the pool to cover infrastructure and maintenance.',
+          'Each edition\'s prize pool is made up of the net amount effectively credited for each confirmed entry.',
+          'That amount may vary depending on the payment method, processing costs, conversion and operational costs.',
           'The first 32 places on the final leaderboard are paid.',
           'The number of paid places does not scale with field size: only the prize amounts grow with the final pool.',
           'Prizes are paid in USDC.',
@@ -354,7 +354,7 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
     quickSummary: {
       eyebrow: 'Quick summary',
       body:
-        'Match scoring ranges from 0 to 10. You never lose points for a bad miss. The champion is worth 25, the runner-up 18, and third and fourth are worth 10 each. If you do not submit winner picks, that section scores 0. 95% of revenue goes into the edition pool and the remaining 5% covers infrastructure and maintenance. The top 32 places get paid through a fixed percentual payout scheme. If entries tie on points, they share the position using `1, 2, 2, 4` logic and split the affected prize block equally.',
+        'Match scoring ranges from 0 to 10. You never lose points for a bad miss. The champion is worth 25, the runner-up 18, and third and fourth are worth 10 each. If you do not submit winner picks, that section scores 0. Each edition\'s prize pool is made up of the net amount effectively credited for each confirmed entry, which may vary depending on the payment method, processing costs, conversion and operational costs. The top 32 places get paid through a fixed percentual payout scheme. If entries tie on points, they share the position using `1, 2, 2, 4` logic and split the affected prize block equally.',
     },
     footer: {
       sections: {
