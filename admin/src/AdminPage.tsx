@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useReadContract, useReadContracts } from './lib/wallet'
-import { formatUnits, type Address } from 'viem'
+import { formatUnits, parseUnits, type Address } from 'viem'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Input } from './components/ui/input'
 import { Button } from './components/ui/button'
-import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI } from '../../frontend/src/lib/contracts'
+import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../../frontend/src/lib/contracts'
 import { toast } from 'sonner'
 import { computeTeamsHash, teams2026, teamsById } from '../../frontend/src/lib/teams'
 import { teams2026Config } from '../../frontend/src/lib/teams2026.config'
@@ -47,6 +47,8 @@ type AdminPermissions = {
   cartonMinterRole?: `0x${string}`
   treasuryAdminRole?: `0x${string}`
   hasTreasuryAdminRole: boolean
+  treasuryFundDepositorRole?: `0x${string}`
+  hasTreasuryFundDepositorRole: boolean
   treasuryManagerRole?: `0x${string}`
   hasTreasuryManagerRole: boolean
 }
@@ -61,6 +63,23 @@ type AdminCapability = {
 function truncateAddress(address?: string) {
   if (!address) return '—'
   return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
+function parseUsdcAmount(value: string) {
+  const trimmed = value.trim()
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return undefined
+
+  try {
+    const parsed = parseUnits(trimmed, 6)
+    return parsed > 0n ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function formatUsdc(value?: bigint) {
+  if (value === undefined) return '—'
+  return `${Number(formatUnits(value, 6)).toFixed(2)} USDC`
 }
 
 function CapabilityBadge({ allowed }: { allowed: boolean }) {
@@ -976,6 +995,305 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
   )
 }
 
+function TreasuryFundingSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasTreasuryAdminRole' | 'hasTreasuryFundDepositorRole'>
+}) {
+  const treasury = CONTRACT_ADDRESSES.TREASURY
+  const tokenAddress = CONTRACT_ADDRESSES.USDC
+  const { address } = useAccount()
+  const { execute, isBusy } = useAdminWrite()
+
+  const [tournamentId, setTournamentId] = useState('1')
+  const [amountInput, setAmountInput] = useState('')
+
+  const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
+  const parsedAmount = useMemo(() => parseUsdcAmount(amountInput), [amountInput])
+
+  const { data: reserveBps } = useReadContract<bigint>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'reserveBps',
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: salesClosed } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'salesClosed',
+    args: [parsedTournamentId],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: tournamentFinalized } = useReadContract({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'tournamentFinalized',
+    args: [parsedTournamentId],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: prizePool, refetch: refetchPrizePool } = useReadContract<bigint>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'getPrizePool',
+    args: [parsedTournamentId, tokenAddress],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: reservePool, refetch: refetchReservePool } = useReadContract<bigint>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'getGlobalReserve',
+    args: [tokenAddress],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const { data: walletBalance, refetch: refetchWalletBalance } = useReadContract<bigint>({
+    address: tokenAddress,
+    abi: USDC_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address), refetchInterval: 10_000 },
+  })
+
+  const { data: allowance, refetch: refetchAllowance } = useReadContract<bigint>({
+    address: tokenAddress,
+    abi: USDC_ABI,
+    functionName: 'allowance',
+    args: address ? [address, treasury] : undefined,
+    query: { enabled: Boolean(address), refetchInterval: 10_000 },
+  })
+
+  const reserveBpsValue = Number(reserveBps ?? 0n)
+  const reserveCut = parsedAmount ? (parsedAmount * BigInt(reserveBpsValue)) / 10_000n : 0n
+  const prizePoolCut = parsedAmount ? parsedAmount - reserveCut : 0n
+  const needsApproval = parsedAmount !== undefined && (allowance ?? 0n) < parsedAmount
+  const hasEnoughWalletBalance = parsedAmount !== undefined && (walletBalance ?? 0n) >= parsedAmount
+  const hasEnoughReserve = parsedAmount !== undefined && (reservePool ?? 0n) >= parsedAmount
+
+  const refreshFundingReads = async () => {
+    await Promise.all([refetchWalletBalance(), refetchAllowance(), refetchPrizePool(), refetchReservePool()])
+  }
+
+  const approveUsdc = () => {
+    if (!parsedAmount) {
+      toast.error('Enter a valid USDC amount greater than zero.')
+      return
+    }
+
+    void execute(
+      {
+        address: tokenAddress,
+        abi: USDC_ABI,
+        functionName: 'approve',
+        args: [treasury, parsedAmount],
+      },
+      {
+        toastId: 'admin-approve-treasury-usdc',
+        pendingMessage: 'Waiting for USDC approval confirmation...',
+        successMessage: 'USDC approval saved for Treasury.',
+        revertedMessage: 'USDC approval was rejected on-chain.',
+        onSuccess: refreshFundingReads,
+        logLabel: 'Admin approve Treasury USDC',
+      },
+    )
+  }
+
+  const depositExternalUsdc = () => {
+    if (parsedTournamentId === 0n) {
+      toast.error('Enter a valid tournament ID.')
+      return
+    }
+    if (!parsedAmount) {
+      toast.error('Enter a valid USDC amount greater than zero.')
+      return
+    }
+    if (!hasEnoughWalletBalance) {
+      toast.error('Connected wallet does not have enough USDC for this deposit.')
+      return
+    }
+    if (needsApproval) {
+      toast.error('Approve USDC for Treasury before depositing.')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'depositFromSalesERC20',
+        args: [parsedTournamentId, tokenAddress, parsedAmount],
+      },
+      {
+        toastId: `admin-treasury-deposit-${parsedTournamentId.toString()}`,
+        pendingMessage: 'Depositing external USDC into Treasury...',
+        successMessage: 'External USDC deposited into Treasury.',
+        revertedMessage: 'Treasury USDC deposit was rejected on-chain.',
+        onSuccess: refreshFundingReads,
+        logLabel: 'Admin Treasury external USDC deposit',
+      },
+    )
+  }
+
+  const seedFromReserve = () => {
+    if (parsedTournamentId === 0n) {
+      toast.error('Enter a valid tournament ID.')
+      return
+    }
+    if (!parsedAmount) {
+      toast.error('Enter a valid USDC amount greater than zero.')
+      return
+    }
+    if (!hasEnoughReserve) {
+      toast.error('Global reserve does not have enough USDC for this seed.')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'seedTournamentFromReserve',
+        args: [parsedTournamentId, tokenAddress, parsedAmount],
+      },
+      {
+        toastId: `admin-seed-reserve-${parsedTournamentId.toString()}`,
+        pendingMessage: 'Seeding tournament pool from reserve...',
+        successMessage: 'Tournament pool seeded from global reserve.',
+        revertedMessage: 'Reserve seeding was rejected on-chain.',
+        onSuccess: async () => {
+          await Promise.all([refetchPrizePool(), refetchReservePool()])
+        },
+        logLabel: 'Admin seed tournament from reserve',
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Treasury Funding</CardTitle>
+        <CardDescription>Top up the USDC pool from the connected wallet before sales close, or move already-retained reserve into a tournament pool.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <div className="text-sm">
+            <span className="font-medium">Has FUND_DEPOSITOR_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryFundDepositorRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryFundDepositorRole)}
+            </span>
+          </div>
+          <div className="text-sm">
+            <span className="font-medium">Has Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryAdminRole)}
+            </span>
+          </div>
+
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-medium w-24">Tournament ID</span>
+            <Input
+              type="number"
+              min={1}
+              className="w-24"
+              value={tournamentId}
+              onChange={(e) => setTournamentId(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-medium w-24">USDC Amount</span>
+            <Input
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+              placeholder="100.00"
+            />
+          </div>
+
+          <div className="text-sm space-y-1">
+            <div><span className="font-medium">Wallet USDC:</span> {formatUsdc(walletBalance)}</div>
+            <div><span className="font-medium">Allowance to Treasury:</span> {formatUsdc(allowance)}</div>
+            <div><span className="font-medium">Prizeable Pool:</span> {formatUsdc(prizePool)}</div>
+            <div><span className="font-medium">Global Reserve:</span> {formatUsdc(reservePool)}</div>
+            <div><span className="font-medium">Reserve split:</span> {reserveBpsValue / 100}%</div>
+            <div>
+              <span className="font-medium">Sales Closed:</span>{' '}
+              <span className={salesClosed ? 'text-yellow-600' : 'text-green-600'}>
+                {String(Boolean(salesClosed))}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Finalized:</span>{' '}
+              <span className={tournamentFinalized ? 'text-green-600' : 'text-yellow-600'}>
+                {String(Boolean(tournamentFinalized))}
+              </span>
+            </div>
+          </div>
+
+          {parsedAmount && (
+            <div className="rounded-lg border border-border p-3 text-xs space-y-1">
+              <div><span className="font-medium">Deposit split preview:</span> {formatUsdc(prizePoolCut)} to prize pool + {formatUsdc(reserveCut)} to global reserve.</div>
+              <div><span className="font-medium">Reserve seed preview:</span> {formatUsdc(parsedAmount)} moved 1:1 from global reserve into the tournament pool.</div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={approveUsdc}
+              disabled={!parsedAmount || !address || !needsApproval || isBusy}
+            >
+              {isBusy ? 'Working...' : needsApproval ? 'Approve USDC' : 'USDC Approved'}
+            </Button>
+            <Button
+              onClick={depositExternalUsdc}
+              disabled={
+                !permissions.hasTreasuryFundDepositorRole
+                || parsedTournamentId === 0n
+                || !parsedAmount
+                || !hasEnoughWalletBalance
+                || needsApproval
+                || Boolean(salesClosed)
+                || Boolean(tournamentFinalized)
+                || isBusy
+              }
+            >
+              {isBusy ? 'Depositing...' : 'Deposit External USDC'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={seedFromReserve}
+              disabled={
+                !permissions.hasTreasuryAdminRole
+                || parsedTournamentId === 0n
+                || !parsedAmount
+                || !hasEnoughReserve
+                || Boolean(tournamentFinalized)
+                || isBusy
+              }
+            >
+              {isBusy ? 'Seeding...' : 'Seed From Reserve'}
+            </Button>
+          </div>
+
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            `Deposit External USDC` calls `depositFromSalesERC20`, so the configured reserve split still applies. After sales close, use `Seed From Reserve` instead.
+          </div>
+
+          {!permissions.hasTreasuryFundDepositorRole && (
+            <div className="text-sm text-red-600">External USDC deposits require `Treasury.FUND_DEPOSITOR_ROLE`.</div>
+          )}
+          {!permissions.hasTreasuryAdminRole && (
+            <div className="text-sm text-red-600">Seeding a tournament from reserve requires `Treasury.DEFAULT_ADMIN_ROLE`.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // --- Close Tournament Section ---
 
 function CloseTournamentSection({
@@ -1661,6 +1979,12 @@ export function AdminPage() {
     functionName: 'TOURNAMENT_MANAGER_ROLE',
   })
 
+  const { data: treasuryFundDepositorRole } = useReadContract<`0x${string}`>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'FUND_DEPOSITOR_ROLE',
+  })
+
   const { data: hasTreasuryAdminRole = false } = useReadContract<boolean>({
     address: treasury,
     abi: TREASURY_ABI,
@@ -1685,6 +2009,14 @@ export function AdminPage() {
     query: { enabled: Boolean(treasuryManagerRole && address), refetchInterval: 10_000 },
   })
 
+  const { data: hasTreasuryFundDepositorRole = false } = useReadContract<boolean>({
+    address: treasury,
+    abi: TREASURY_ABI,
+    functionName: 'hasRole',
+    args: treasuryFundDepositorRole && address ? [treasuryFundDepositorRole, address] : undefined,
+    query: { enabled: Boolean(treasuryFundDepositorRole && address), refetchInterval: 10_000 },
+  })
+
   const permissions = useMemo<AdminPermissions>(
     () => ({
       predictionsOwner: owner,
@@ -1694,10 +2026,12 @@ export function AdminPage() {
       cartonMinterRole,
       treasuryAdminRole,
       hasTreasuryAdminRole,
+      treasuryFundDepositorRole,
+      hasTreasuryFundDepositorRole,
       treasuryManagerRole,
       hasTreasuryManagerRole,
     }),
-    [cartonAdminRole, cartonMinterRole, hasCartonAdminRole, hasTreasuryAdminRole, hasTreasuryManagerRole, isPredictionsOwner, owner, treasuryAdminRole, treasuryManagerRole],
+    [cartonAdminRole, cartonMinterRole, hasCartonAdminRole, hasTreasuryAdminRole, hasTreasuryFundDepositorRole, hasTreasuryManagerRole, isPredictionsOwner, owner, treasuryAdminRole, treasuryFundDepositorRole, treasuryManagerRole],
   )
 
   const capabilities = useMemo<AdminCapability[]>(
@@ -1727,8 +2061,14 @@ export function AdminPage() {
         allowed: permissions.hasCartonAdminRole,
       },
       {
+        label: 'Treasury external funding',
+        detail: 'approve USDC and deposit external funds before sales close',
+        required: 'Treasury.FUND_DEPOSITOR_ROLE',
+        allowed: permissions.hasTreasuryFundDepositorRole,
+      },
+      {
         label: 'Treasury distribution',
-        detail: 'set distribution, load final prizes, seal final prizes',
+        detail: 'seed reserve, set distribution, load final prizes, seal final prizes',
         required: 'Treasury.DEFAULT_ADMIN_ROLE',
         allowed: permissions.hasTreasuryAdminRole,
       },
@@ -1739,7 +2079,7 @@ export function AdminPage() {
         allowed: permissions.hasTreasuryManagerRole,
       },
     ],
-    [permissions.hasCartonAdminRole, permissions.hasTreasuryAdminRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
+    [permissions.hasCartonAdminRole, permissions.hasTreasuryAdminRole, permissions.hasTreasuryFundDepositorRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
   )
 
   // Teams hash state
@@ -1925,6 +2265,12 @@ export function AdminPage() {
               </span>
             </div>
             <div>
+              <span className="font-medium">Treasury FUND_DEPOSITOR_ROLE:</span>{' '}
+              <span className={permissions.hasTreasuryFundDepositorRole ? 'text-green-600' : 'text-red-600'}>
+                {String(permissions.hasTreasuryFundDepositorRole)}
+              </span>
+            </div>
+            <div>
               <span className="font-medium">Treasury TOURNAMENT_MANAGER_ROLE:</span>{' '}
               <span className={permissions.hasTreasuryManagerRole ? 'text-green-600' : 'text-red-600'}>
                 {String(permissions.hasTreasuryManagerRole)}
@@ -1933,10 +2279,12 @@ export function AdminPage() {
             <RoleIdDisplay label="Carton admin role id" value={permissions.cartonAdminRole} />
             <RoleIdDisplay label="Carton minter role id" value={permissions.cartonMinterRole} />
             <RoleIdDisplay label="Treasury admin role id" value={permissions.treasuryAdminRole} />
+            <RoleIdDisplay label="Treasury fund depositor role id" value={permissions.treasuryFundDepositorRole} />
             <RoleIdDisplay label="Treasury manager role id" value={permissions.treasuryManagerRole} />
             {!permissions.isPredictionsOwner && <div className="text-red-600">Predictions config, results, winners, and positions require the `Predictions.owner()` wallet.</div>}
             {!permissions.hasCartonAdminRole && <div className="text-red-600">Mint wallet role management requires `Carton.DEFAULT_ADMIN_ROLE`.</div>}
-            {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
+            {!permissions.hasTreasuryFundDepositorRole && <div className="text-red-600">External USDC deposits require `Treasury.FUND_DEPOSITOR_ROLE`.</div>}
+            {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Reserve seeding, prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
             {!permissions.hasTreasuryManagerRole && <div className="text-red-600">Closing sales and finalizing the tournament require `Treasury.TOURNAMENT_MANAGER_ROLE`.</div>}
           </div>
 
@@ -2007,6 +2355,7 @@ export function AdminPage() {
       <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />
       <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />
       <MinterRoleSection permissions={permissions} />
+      <TreasuryFundingSection permissions={permissions} />
       <CloseTournamentSection permissions={permissions} />
     </div>
   )
