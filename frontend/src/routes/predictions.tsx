@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowDownRight, CheckCircle2, Clock3, LockKeyhole } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ConfirmModal } from '../components/ui/modal'
 import { TeamInfoSheet } from '../components/TeamInfoSheet'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
-import { GroupsView } from '../components/GroupsView'
+import { PredictionGroupCarousel } from '../components/PredictionGroupCarousel'
 import { ClaimSection } from '../components/ClaimSection'
 import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
@@ -22,6 +22,8 @@ import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { useUserBalance } from '../hooks/useBalance'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapCombinedPredictionErrorToMessage } from '../lib/transaction-errors'
+
+const SHOW_GROUP_STRIP = true
 
 function normalizeCartonParam(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -522,6 +524,20 @@ function PredictionsPage() {
   const displayGameState = selectedCartonGamesSubmitted && submittedGameState ? submittedGameState : { games, groups }
   const displayGames = displayGameState.games
   const displayGroups = displayGameState.groups
+  const currentGroupIndex = useMemo(() => {
+    const matchedIndex = displayGroups.findIndex((group) => group.groupLabel === selectedGroup)
+    return matchedIndex >= 0 ? matchedIndex : 0
+  }, [displayGroups, selectedGroup])
+
+  const setGroupByIndex = useCallback(
+    (index: number) => {
+      const nextGroup = displayGroups[index]
+      if (!nextGroup) return
+      setSelectedGroup(nextGroup.groupLabel)
+    },
+    [displayGroups],
+  )
+
   const displayWinnerPrediction = selectedCartonWinnersSubmitted ? normalizedSubmittedWinners : winnerPrediction
   const hasPartialSubmission = (selectedCartonGamesSubmitted || selectedCartonWinnersSubmitted)
     && !(selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted)
@@ -1310,14 +1326,26 @@ function PredictionsPage() {
           </div>
         </div>
 
-        {/* Group tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
-          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx > 0) setSelectedGroup(displayGroups[idx - 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) <= 0} className="shrink-0 rounded p-1 hover:bg-bg-card disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
-          <div className="flex gap-1.5 rounded-lg p-1 flex-1" style={{ background: 'var(--bg-card)' }}>
-            {displayGroups.map((group) => (<button key={group.groupLabel} onClick={() => setSelectedGroup(group.groupLabel)} className="flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-all sm:px-3 sm:text-sm" style={{ background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent', color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)', border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}` }}>{group.groupLabel}</button>))}
+        {SHOW_GROUP_STRIP && (
+          <div className="hidden p-4 md:block" style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)' }}>
+            <div className="flex w-full items-center justify-between gap-1.5 rounded-lg p-1" style={{ background: 'var(--bg-card)' }}>
+              {displayGroups.map((group) => (
+                <button
+                  key={group.groupLabel}
+                  onClick={() => setSelectedGroup(group.groupLabel)}
+                  className="shrink-0 rounded-full px-2.5 py-1 text-sm font-medium transition-all"
+                  style={{
+                    background: selectedGroup === group.groupLabel ? 'var(--accent-green)' : 'transparent',
+                    color: selectedGroup === group.groupLabel ? 'var(--bg-base)' : 'var(--text-secondary)',
+                    border: `1px solid ${selectedGroup === group.groupLabel ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
+                  }}
+                >
+                  {group.groupLabel}
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={() => { const idx = displayGroups.findIndex(g => g.groupLabel === selectedGroup); if (idx < displayGroups.length - 1) setSelectedGroup(displayGroups[idx + 1].groupLabel) }} disabled={!selectedGroup || displayGroups.findIndex(g => g.groupLabel === selectedGroup) >= displayGroups.length - 1} className="shrink-0 rounded p-1 hover:bg-bg-card disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
-        </div>
+        )}
 
         {/* Group matches */}
         <div className="p-3">
@@ -1333,14 +1361,15 @@ function PredictionsPage() {
               {gamesPanelNotice}
             </div>
           )}
-          <GroupsView
+          <PredictionGroupCarousel
             groups={displayGroups}
+            currentGroupIndex={currentGroupIndex}
             disabled={!canEditSelectedCarton || selectedCartonGamesSubmitted}
             readOnlyAppearance={selectedCartonGamesSubmitted}
             onScoreChange={updateGameScore}
-            selectedGroup={selectedGroup}
             pointsByGameId={selectedCartonGamesSubmitted ? submittedPointsByGameId : undefined}
             onOpenTeamInfo={setActiveTeamInfoId}
+            onSelectGroupIndex={setGroupByIndex}
           />
         </div>
 
