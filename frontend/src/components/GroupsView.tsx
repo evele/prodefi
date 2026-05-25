@@ -10,9 +10,10 @@ type GroupsViewProps = {
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
   selectedGroup?: string | null
   pointsByGameId?: Record<number, bigint>
+  onOpenTeamInfo: (teamId: number) => void
 }
 
-export function GroupsView({ groups, disabled, readOnlyAppearance = false, onScoreChange, selectedGroup, pointsByGameId }: GroupsViewProps) {
+export function GroupsView({ groups, disabled, readOnlyAppearance = false, onScoreChange, selectedGroup, pointsByGameId, onOpenTeamInfo }: GroupsViewProps) {
   const visible = selectedGroup ? groups.filter((g) => g.groupLabel === selectedGroup) : groups
 
   return (
@@ -26,6 +27,7 @@ export function GroupsView({ groups, disabled, readOnlyAppearance = false, onSco
           readOnlyAppearance={readOnlyAppearance}
           onScoreChange={onScoreChange}
           pointsByGameId={pointsByGameId}
+          onOpenTeamInfo={onOpenTeamInfo}
         />
       ))}
     </div>

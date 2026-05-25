@@ -2,6 +2,14 @@ import { keccak256, stringToHex } from 'viem'
 import type { Team } from './types'
 import { teams2026Config, type TeamGroupConfig } from './teams2026.config'
 
+export type TeamMeta = {
+  id: number
+  name: string
+  sigla: string
+  flag: string
+  group: string
+}
+
 export const teams: Team[] = [
   { id: 1, name: 'Argentina', group: 'A' },
   { id: 2, name: 'Brazil', group: 'A' },
@@ -38,6 +46,21 @@ export const teamsFlagById: Record<number, string> = teams2026Config.reduce((acc
   acc[team.id] = team.flag
   return acc
 }, {} as Record<number, string>)
+
+export const teamMetaById: Record<number, TeamMeta> = teams2026Config.reduce((acc, team) => {
+  acc[team.id] = {
+    id: team.id,
+    name: team.name,
+    sigla: team.sigla,
+    flag: team.flag,
+    group: team.groupLabel,
+  }
+  return acc
+}, {} as Record<number, TeamMeta>)
+
+export function getTeamMeta(teamId: number): TeamMeta | null {
+  return teamMetaById[teamId] ?? null
+}
 
 export function indexTeamsById(list: Team[]): Record<number, string> {
   return list.reduce((acc, team) => {

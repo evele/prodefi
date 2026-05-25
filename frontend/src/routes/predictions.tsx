@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ConfirmModal } from '../components/ui/modal'
+import { TeamInfoSheet } from '../components/TeamInfoSheet'
 import { TeamWinnerSelector } from '../components/TeamWinnerSelector'
 import { GroupsView } from '../components/GroupsView'
 import { ClaimSection } from '../components/ClaimSection'
@@ -181,6 +182,7 @@ function PredictionsPage() {
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isImprobableScoresModalOpen, setIsImprobableScoresModalOpen] = useState(false)
+  const [activeTeamInfoId, setActiveTeamInfoId] = useState<number | null>(null)
 
   useEffect(() => {
     if (groups.length > 0 && selectedGroup === null) {
@@ -195,6 +197,7 @@ function PredictionsPage() {
       setGameState(buildAllGroupGames())
       setSelectedGroup(null)
       setIsImprobableScoresModalOpen(false)
+      setActiveTeamInfoId(null)
     }
     if (resetWinners) {
       setWinnerPrediction(EMPTY_WINNER_PREDICTION)
@@ -1337,6 +1340,7 @@ function PredictionsPage() {
             onScoreChange={updateGameScore}
             selectedGroup={selectedGroup}
             pointsByGameId={selectedCartonGamesSubmitted ? submittedPointsByGameId : undefined}
+            onOpenTeamInfo={setActiveTeamInfoId}
           />
         </div>
 
@@ -1368,6 +1372,8 @@ function PredictionsPage() {
         variant="warning"
         onConfirm={submitPredictionAndWinners}
       />
+
+      <TeamInfoSheet teamId={activeTeamInfoId} onClose={() => setActiveTeamInfoId(null)} />
 
       {/* ─── Winner Predictions ─── */}
       <div

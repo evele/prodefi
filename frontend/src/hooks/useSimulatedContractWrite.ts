@@ -4,6 +4,16 @@ import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteCont
 import { toast } from 'sonner'
 import { extractErrorMessage } from '../lib/transaction-errors'
 
+type ConnectorWithWriteMethods = {
+  getAccounts?: () => Promise<readonly Address[]>
+  getChainId?: () => Promise<number>
+  getProvider?: (parameters?: { chainId?: number }) => Promise<{ request?: (args: { method: string }) => Promise<unknown> } | undefined>
+}
+
+type ConnectorProvider = {
+  request?: (args: { method: string }) => Promise<unknown>
+}
+
 type ContractWriteParameters = {
   address: Address
   abi: Abi
@@ -25,7 +35,7 @@ type WriteFeedbackOptions = {
 }
 
 export function useSimulatedContractWrite() {
-  const { address } = useAccount()
+  const { address, chainId, connector } = useAccount()
   const publicClient = usePublicClient()
   const { writeContract, data: hash, error: writeError, isPending } = useWriteContract()
   const [isSimulating, setIsSimulating] = useState(false)
@@ -72,15 +82,69 @@ export function useSimulatedContractWrite() {
     toast.error(message, toastId ? { id: toastId } : undefined)
   }, [hash])
 
+  const getWriteConnector = useCallback(async () => {
+    if (!connector) return undefined
+
+    const activeConnector = connector as typeof connector & ConnectorWithWriteMethods
+    const fallbackProvider = async (): Promise<ConnectorProvider | undefined> => {
+      if (!activeConnector.getProvider) return undefined
+      return (await activeConnector.getProvider(chainId !== undefined ? { chainId } : undefined)) as ConnectorProvider | undefined
+    }
+
+    if (typeof activeConnector.getAccounts === 'function' && typeof activeConnector.getChainId === 'function') {
+      return activeConnector
+    }
+
+    const patchedConnector = Object.create(activeConnector) as typeof activeConnector & Required<Pick<ConnectorWithWriteMethods, 'getAccounts' | 'getChainId'>>
+
+    patchedConnector.getAccounts =
+      typeof activeConnector.getAccounts === 'function'
+        ? activeConnector.getAccounts.bind(activeConnector)
+        : async () => {
+            if (!address) return []
+
+            const provider = await fallbackProvider()
+            const providerAccounts = await provider?.request?.({ method: 'eth_accounts' }).catch(() => undefined)
+            if (Array.isArray(providerAccounts) && providerAccounts.length > 0) {
+              return providerAccounts as Address[]
+            }
+
+            return [address]
+          }
+
+    patchedConnector.getChainId =
+      typeof activeConnector.getChainId === 'function'
+        ? activeConnector.getChainId.bind(activeConnector)
+        : async () => {
+            if (chainId !== undefined) return chainId
+
+            const provider = await fallbackProvider()
+            const providerChainId = await provider?.request?.({ method: 'eth_chainId' }).catch(() => undefined)
+            if (typeof providerChainId === 'number') return providerChainId
+            if (typeof providerChainId === 'string') return Number(providerChainId)
+
+            throw new Error('Wallet chain unavailable')
+          }
+
+    return patchedConnector
+  }, [address, chainId, connector])
+
   const sendPreparedRequest = (request: PreparedWriteRequest, options: WriteFeedbackOptions) => {
     prepareExecution(options)
 
-    try {
-      writeContract(request as never)
-    } catch (error) {
-      logError('write error', error)
-      showErrorToast(error)
-    }
+    void getWriteConnector()
+      .then((writeConnector) => {
+        return writeContract({
+          ...request,
+          ...(address ? { account: address } : {}),
+          ...(chainId !== undefined ? { chainId } : {}),
+          ...(writeConnector ? { connector: writeConnector } : {}),
+        } as never)
+      })
+      .catch((error) => {
+        logError('write error', error)
+        showErrorToast(error)
+      })
   }
 
   const simulateAndSend = async (parameters: ContractWriteParameters, options: WriteFeedbackOptions) => {

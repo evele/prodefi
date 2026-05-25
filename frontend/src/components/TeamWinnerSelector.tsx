@@ -1,10 +1,17 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Team } from "../lib/types"
-import { teamsFlagById } from "../lib/teams"
+import { teamsFlagById, teamsSiglaById } from "../lib/teams"
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 
 const POSITION_ICONS = ['🥇', '🥈', '🥉', '4°'] as const
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
 
 export function TeamWinnerSelector({
   label,
@@ -23,7 +30,6 @@ export function TeamWinnerSelector({
   readOnlyAppearance?: boolean
   onChange: (teamId: number) => void
 }) {
-  const datalistId = useId()
   const availableTeams = useMemo(
     () => teams
       .filter((team) => !selectedTeams.includes(team.id) || team.id === selectedTeams[currentPosition - 1])
@@ -34,6 +40,9 @@ export function TeamWinnerSelector({
   const selectedTeamId = selectedTeams[currentPosition - 1]
   const selectedTeam = teams.find((team) => team.id === selectedTeamId)
   const [searchValue, setSearchValue] = useState(selectedTeam?.name ?? '')
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1)
+  const suggestionItemRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   useEffect(() => {
     setSearchValue(selectedTeam?.name ?? '')
@@ -48,29 +57,66 @@ export function TeamWinnerSelector({
     () => availableTeams.map((team) => ({
       team,
       label: optionLabelById.get(team.id) ?? team.name,
-      searchText: team.name.toLowerCase(),
+      normalizedLabel: normalizeSearchText(optionLabelById.get(team.id) ?? team.name),
+      searchText: [team.name, optionLabelById.get(team.id) ?? team.name, teamsSiglaById[team.id] ?? '']
+        .map((value) => normalizeSearchText(value))
+        .join(' '),
     })),
     [availableTeams, optionLabelById],
   )
 
+  const normalizedQuery = useMemo(() => normalizeSearchText(searchValue.trim()), [searchValue])
+
   const filteredTeamEntries = useMemo(() => {
-    const query = searchValue.trim().toLowerCase()
+    const query = normalizedQuery
     if (!query) return normalizedTeamEntries
-    return normalizedTeamEntries.filter((entry) => entry.searchText.includes(query) || entry.label.toLowerCase().includes(query))
-  }, [normalizedTeamEntries, searchValue])
+    return normalizedTeamEntries.filter((entry) => entry.searchText.includes(query) || entry.normalizedLabel.includes(query))
+  }, [normalizedQuery, normalizedTeamEntries])
+
+  const visibleSuggestions = filteredTeamEntries
+
+  useEffect(() => {
+    setHighlightedIndex((currentIndex) => {
+      if (visibleSuggestions.length === 0) return -1
+      return currentIndex >= 0 && currentIndex < visibleSuggestions.length ? currentIndex : -1
+    })
+  }, [visibleSuggestions])
+
+  useEffect(() => {
+    suggestionItemRefs.current = suggestionItemRefs.current.slice(0, visibleSuggestions.length)
+  }, [visibleSuggestions])
+
+  useEffect(() => {
+    if (!isSuggestionsOpen || highlightedIndex < 0) return
+    suggestionItemRefs.current[highlightedIndex]?.scrollIntoView({ block: 'nearest' })
+  }, [highlightedIndex, isSuggestionsOpen])
+
+  const selectEntry = (entry: (typeof normalizedTeamEntries)[number]) => {
+    onChange(entry.team.id)
+    setSearchValue(entry.label)
+    setIsSuggestionsOpen(false)
+    setHighlightedIndex(-1)
+  }
 
   const commitSelection = (value: string) => {
     const trimmed = value.trim()
     if (!trimmed) {
       onChange(0)
       setSearchValue('')
+      setIsSuggestionsOpen(false)
+      setHighlightedIndex(-1)
       return
     }
 
-    const exactLabelMatch = normalizedTeamEntries.find((entry) => entry.label.toLowerCase() === trimmed.toLowerCase())
-    if (exactLabelMatch) {
-      onChange(exactLabelMatch.team.id)
-      setSearchValue(exactLabelMatch.label)
+    const normalizedValue = normalizeSearchText(trimmed)
+    const matchedEntry = normalizedTeamEntries.find((entry) => entry.normalizedLabel === normalizedValue)
+    if (matchedEntry) {
+      selectEntry(matchedEntry)
+      return
+    }
+
+    if (filteredTeamEntries.length === 1 && normalizedValue.length > 0) {
+      selectEntry(filteredTeamEntries[0])
       return
     }
 
@@ -79,20 +125,27 @@ export function TeamWinnerSelector({
     } else {
       setSearchValue('')
     }
+
+    setIsSuggestionsOpen(false)
+    setHighlightedIndex(-1)
   }
 
   const handleInputChange = (value: string) => {
     setSearchValue(value)
+    setIsSuggestionsOpen(true)
+    setHighlightedIndex(-1)
 
-    const exactLabelMatch = normalizedTeamEntries.find((entry) => entry.label.toLowerCase() === value.trim().toLowerCase())
-    if (exactLabelMatch) {
-      onChange(exactLabelMatch.team.id)
+    const matchedEntry = normalizedTeamEntries.find((entry) => entry.normalizedLabel === normalizeSearchText(value.trim()))
+    if (matchedEntry) {
+      onChange(matchedEntry.team.id)
     }
   }
 
   const clearSelection = () => {
     onChange(0)
     setSearchValue('')
+    setIsSuggestionsOpen(true)
+    setHighlightedIndex(-1)
   }
 
   if (readOnlyAppearance) {
@@ -119,7 +172,7 @@ export function TeamWinnerSelector({
         </div>
         {selectedTeam ? (
           <div
-            className="flex items-center gap-2 rounded-full px-2.5 py-1 sm:ml-auto"
+            className="flex items-center gap-4 rounded-full px-2.5 py-1 sm:ml-auto"
             style={{ background: 'rgba(0,230,118,0.08)', color: 'var(--accent-green)' }}
           >
             <span className={`fi fi-${teamsFlagById[selectedTeam.id]}`} />
@@ -147,11 +200,56 @@ export function TeamWinnerSelector({
       <div className="flex-1 space-y-2">
         <div className="flex items-center gap-2">
           <Input
-            list={datalistId}
             disabled={disabled}
             value={searchValue}
             onChange={(event) => handleInputChange(event.target.value)}
-            onBlur={() => commitSelection(searchValue)}
+            onFocus={() => {
+              setIsSuggestionsOpen(true)
+              setHighlightedIndex(-1)
+            }}
+            onBlur={() => {
+              commitSelection(searchValue)
+              setIsSuggestionsOpen(false)
+              setHighlightedIndex(-1)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setIsSuggestionsOpen(true)
+                setHighlightedIndex((currentIndex) => {
+                  if (visibleSuggestions.length === 0) return -1
+                  return currentIndex < visibleSuggestions.length - 1 ? currentIndex + 1 : 0
+                })
+                return
+              }
+
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setIsSuggestionsOpen(true)
+                setHighlightedIndex((currentIndex) => {
+                  if (visibleSuggestions.length === 0) return -1
+                  return currentIndex > 0 ? currentIndex - 1 : visibleSuggestions.length - 1
+                })
+                return
+              }
+
+              if (event.key === 'Enter') {
+                event.preventDefault()
+
+                if (isSuggestionsOpen && highlightedIndex >= 0 && visibleSuggestions[highlightedIndex]) {
+                  selectEntry(visibleSuggestions[highlightedIndex])
+                  return
+                }
+
+                commitSelection(searchValue)
+                return
+              }
+
+              if (event.key === 'Escape') {
+                setIsSuggestionsOpen(false)
+                setHighlightedIndex(-1)
+              }
+            }}
             placeholder="Buscar país…"
             className={readOnlyAppearance ? 'disabled:opacity-100' : ''}
           />
@@ -167,15 +265,44 @@ export function TeamWinnerSelector({
             ×
           </Button>
         </div>
-        <datalist id={datalistId}>
-          {filteredTeamEntries.map((entry) => (
-            <option key={entry.team.id} value={entry.label} />
-          ))}
-        </datalist>
+        {!disabled && isSuggestionsOpen && visibleSuggestions.length > 0 && (
+          <div
+            className="max-h-52 overflow-y-auto rounded-xl border"
+            style={{ background: 'var(--bg-elevated)', borderColor: 'rgba(255,255,255,0.08)' }}
+          >
+            {visibleSuggestions.map((entry, index) => (
+              <button
+                key={entry.team.id}
+                type="button"
+                ref={(element) => {
+                  suggestionItemRefs.current[index] = element
+                }}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.04]"
+                style={{
+                  color: 'var(--text-primary)',
+                  background: highlightedIndex === index ? 'rgba(255,255,255,0.05)' : undefined,
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  selectEntry(entry)
+                }}
+                onMouseEnter={() => setHighlightedIndex(index)}
+              >
+                <span className="flex min-w-0 items-center gap-4">
+                  <span className={`fi fi-${teamsFlagById[entry.team.id]}`} />
+                  <span className="truncate">{entry.label}</span>
+                </span>
+                <span className="shrink-0 text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>
+                  {teamsSiglaById[entry.team.id] ?? entry.team.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-secondary)' }}>
           <span>Escribí para filtrar países.</span>
           {selectedTeam && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-4">
               <span className={`fi fi-${teamsFlagById[selectedTeam.id]}`} />
               {selectedTeam.name}
             </span>

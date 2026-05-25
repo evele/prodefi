@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useReadContracts } from 'wagmi'
+import { TeamInfoSheet } from './TeamInfoSheet'
+import { TeamInfoTrigger } from './TeamInfoTrigger'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import {
   getFixtureKickoffDayKey,
@@ -58,6 +60,7 @@ type FixtureMatchProps = {
   isSet: boolean
   groupLabel?: string
   showKickoffDate?: boolean
+  onOpenTeamInfo: (teamId: number) => void
 }
 
 function sortGamesByKickoff(a: Game, b: Game) {
@@ -67,7 +70,7 @@ function sortGamesByKickoff(a: Game, b: Game) {
   return a.kickoffEt.localeCompare(b.kickoffEt)
 }
 
-function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate = true }: FixtureMatchProps) {
+function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate = true, onOpenTeamInfo }: FixtureMatchProps) {
   const fixtureLanguage = getFixtureLanguage()
   const team1Name = teamsById[game.team1] ?? `#${game.team1}`
   const team2Name = teamsById[game.team2] ?? `#${game.team2}`
@@ -83,13 +86,14 @@ function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate
     >
         {/* Team 1 */}
         <div
-          className="flex min-w-0 flex-1 items-center justify-end gap-3 text-right text-sm font-mono font-semibold tracking-wide md:justify-start md:text-left"
+          className="flex min-w-0 flex-1 items-center justify-end text-right text-sm font-mono font-semibold tracking-wide md:justify-start md:text-left"
           style={{ color: 'var(--text-primary)' }}
-          title={team1Name}
         >
-          <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
-          <span className="hidden truncate sm:inline">{team1Name}</span>
-          <span className="truncate sm:hidden">{team1Short}</span>
+          <TeamInfoTrigger teamId={game.team1} onOpenTeamInfo={onOpenTeamInfo} className="max-w-full justify-end gap-4">
+            <span className={`fi fi-${teamsFlagById[game.team1]}`} style={{ fontSize: '1.4rem' }} />
+            <span className="hidden truncate sm:inline">{team1Name}</span>
+            <span className="truncate sm:hidden">{team1Short}</span>
+          </TeamInfoTrigger>
         </div>
 
       {/* Score display */}
@@ -158,13 +162,14 @@ function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate
 
         {/* Team 2 */}
         <div
-          className="flex min-w-0 flex-1 items-center gap-3 text-sm font-mono font-semibold tracking-wide md:justify-end"
+          className="flex min-w-0 flex-1 items-center text-sm font-mono font-semibold tracking-wide md:justify-end"
           style={{ color: 'var(--text-primary)' }}
-          title={team2Name}
         >
-          <span className="hidden truncate sm:inline">{team2Name}</span>
-          <span className="truncate sm:hidden">{team2Short}</span>
-          <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
+          <TeamInfoTrigger teamId={game.team2} onOpenTeamInfo={onOpenTeamInfo} className="max-w-full gap-4">
+            <span className="hidden truncate sm:inline">{team2Name}</span>
+            <span className="truncate sm:hidden">{team2Short}</span>
+            <span className={`fi fi-${teamsFlagById[game.team2]}`} style={{ fontSize: '1.4rem' }} />
+          </TeamInfoTrigger>
         </div>
       </div>
   )
@@ -179,6 +184,7 @@ type FixtureViewTab = 'group' | 'date' | 'standings'
 const FIXTURE_VIEW_STORAGE_KEY = 'fixture-view-tab'
 
 export function FixturesView({ groups }: FixturesViewProps) {
+  const [activeTeamInfoId, setActiveTeamInfoId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<FixtureViewTab>(() => {
     if (typeof window === 'undefined') return 'group'
 
@@ -378,6 +384,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
                   isSet={match.isSet}
                   groupLabel={match.groupLabel}
                   showKickoffDate={false}
+                  onOpenTeamInfo={setActiveTeamInfoId}
                 />
               ))}
             </div>
@@ -418,6 +425,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
                       officialResult={official?.result}
                       isSet={official?.set ?? false}
                       showKickoffDate
+                      onOpenTeamInfo={setActiveTeamInfoId}
                     />
                   )
                 })}
@@ -444,11 +452,11 @@ export function FixturesView({ groups }: FixturesViewProps) {
                       <tr key={row.teamId} className="transition-colors hover:bg-white/[0.01]">
                         <td className="px-2 py-3.5 font-mono text-xs opacity-50 sm:px-3">{idx + 1}</td>
                         <td className="px-1 py-3.5 pr-2 sm:px-2 sm:pr-3">
-                          <div className="flex items-center gap-1.5 font-semibold sm:gap-2">
+                          <TeamInfoTrigger teamId={row.teamId} onOpenTeamInfo={setActiveTeamInfoId} className="max-w-full gap-4 font-semibold">
                             <span className={`fi fi-${teamsFlagById[row.teamId]} rounded-sm`} />
                             <span className="hidden truncate sm:inline">{teamsById[row.teamId]}</span>
                             <span className="truncate sm:hidden">{teamsSiglaById[row.teamId] ?? teamsById[row.teamId]}</span>
-                          </div>
+                          </TeamInfoTrigger>
                         </td>
                         <td className="px-2 py-3.5 text-center font-mono sm:px-3">{row.played}</td>
                         <td className="px-2 py-3.5 text-center font-mono opacity-60 sm:px-3">{row.gf}</td>
@@ -468,6 +476,8 @@ export function FixturesView({ groups }: FixturesViewProps) {
           </div>
         )
       })}
+
+      <TeamInfoSheet teamId={activeTeamInfoId} onClose={() => setActiveTeamInfoId(null)} />
     </div>
   )
 }

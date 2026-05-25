@@ -8,9 +8,10 @@ type GroupMatchesProps = {
   readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
   pointsByGameId?: Record<number, bigint>
+  onOpenTeamInfo: (teamId: number) => void
 }
 
-export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange, pointsByGameId }: GroupMatchesProps) {
+export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance = false, onScoreChange, pointsByGameId, onOpenTeamInfo }: GroupMatchesProps) {
   const scheduledGames = [...games].sort((a, b) => {
     if (!a.kickoffEt && !b.kickoffEt) return a.id - b.id
     if (!a.kickoffEt) return 1
@@ -43,6 +44,7 @@ export function GroupMatches({ groupLabel, games, disabled, readOnlyAppearance =
             readOnlyAppearance={readOnlyAppearance}
             onScoreChange={onScoreChange}
             pointsEarned={pointsByGameId?.[game.id]}
+            onOpenTeamInfo={onOpenTeamInfo}
           />
         ))}
       </div>

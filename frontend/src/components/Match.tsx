@@ -1,4 +1,5 @@
 import { Input } from './ui/input'
+import { TeamInfoTrigger } from './TeamInfoTrigger'
 import { getImprobableScoreFlags } from '../lib/improbable-scores'
 import {
   formatFixtureKickoffDate,
@@ -14,9 +15,10 @@ type MatchProps = {
   readOnlyAppearance?: boolean
   onScoreChange: (gameId: number, team: 0 | 1, score: number | null) => void
   pointsEarned?: bigint
+  onOpenTeamInfo: (teamId: number) => void
 }
 
-export function Match({ game, disabled, readOnlyAppearance = false, onScoreChange, pointsEarned }: MatchProps) {
+export function Match({ game, disabled, readOnlyAppearance = false, onScoreChange, pointsEarned, onOpenTeamInfo }: MatchProps) {
   const fixtureLanguage = getFixtureLanguage()
   const team1Score = game.result[0]
   const team2Score = game.result[1]
@@ -81,12 +83,13 @@ export function Match({ game, disabled, readOnlyAppearance = false, onScoreChang
       >
         {/* Team 1 */}
         <div
-          className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right text-[11px] font-mono font-semibold tracking-wide sm:gap-3 sm:text-sm"
+          className="flex min-w-0 flex-1 items-center justify-end text-right text-[11px] font-mono font-semibold tracking-wide sm:text-sm"
           style={{ color: 'var(--text-primary)' }}
-          title={team1Name}
         >
-          <span className={`fi fi-${teamsFlagById[game.team1]} text-lg sm:text-[1.4rem]`} />
-          <span className="truncate">{team1Label}</span>
+          <TeamInfoTrigger teamId={game.team1} onOpenTeamInfo={onOpenTeamInfo} className="max-w-full justify-end gap-4">
+            <span className={`fi fi-${teamsFlagById[game.team1]} text-lg sm:text-[1.4rem]`} />
+            <span className="truncate">{team1Label}</span>
+          </TeamInfoTrigger>
         </div>
 
         {/* Score inputs */}
@@ -126,12 +129,13 @@ export function Match({ game, disabled, readOnlyAppearance = false, onScoreChang
 
         {/* Team 2 */}
         <div
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-mono font-semibold tracking-wide sm:gap-3 sm:text-sm"
+          className="flex min-w-0 flex-1 items-center text-[11px] font-mono font-semibold tracking-wide sm:text-sm"
           style={{ color: 'var(--text-primary)' }}
-          title={team2Name}
         >
-          <span className="truncate">{team2Label}</span>
-          <span className={`fi fi-${teamsFlagById[game.team2]} text-lg sm:text-[1.4rem]`} />
+          <TeamInfoTrigger teamId={game.team2} onOpenTeamInfo={onOpenTeamInfo} className="max-w-full gap-4">
+            <span className="truncate">{team2Label}</span>
+            <span className={`fi fi-${teamsFlagById[game.team2]} text-lg sm:text-[1.4rem]`} />
+          </TeamInfoTrigger>
         </div>
       </div>
 
