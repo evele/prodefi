@@ -40,12 +40,12 @@ export function TeamInfoSheet({ teamId, onClose }: TeamInfoSheetProps) {
         onClick={onClose}
       />
 
-      <div className="absolute inset-x-0 bottom-0 sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-4">
+      <div className="absolute left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 px-4">
         <section
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className="relative rounded-t-[1.75rem] border border-white/10 px-5 pb-6 pt-5 shadow-2xl sm:rounded-[1.75rem]"
+          className="relative rounded-[1.75rem] border border-white/10 px-5 pb-6 pt-5 shadow-2xl"
           style={{ background: 'var(--bg-card)' }}
         >
           <button
