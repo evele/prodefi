@@ -10,11 +10,12 @@ import { CartonListItem } from '../components/CartonListItem'
 import { PurchaseCartonModal } from '../components/PurchaseCartonModal'
 import { useUserBalance } from '../hooks/useBalance'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
+import { useStableValue } from '../hooks/useStableValue'
 import { canUseOpenfort, hasOpenfortGasSponsorship } from '../lib/chains'
 import { createCheckoutOrder, getMercadoPagoCheckoutUrl } from '../lib/orders'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
-import { PRIZE_BANDS } from '../lib/prize-payout'
+import { PRIZE_BANDS, getBandAmount } from '../lib/prize-payout'
 import { Ticket } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
@@ -136,33 +137,228 @@ function HomePage() {
     args: [CONTRACT_ADDRESSES.USDC],
   })
 
+  const { data: usdcDistributionSet } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'prizeDistributionSet',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
+  })
+
   const { data: tournamentFinalized } = useReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'tournamentFinalized',
     args: tournamentId > 0n ? [tournamentId] : undefined,
-    query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: true },
+    query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
+  })
+
+  const { data: finalPrizeAmountsReady } = useReadContract({
+    address: CONTRACT_ADDRESSES.TREASURY,
+    abi: TREASURY_ABI,
+    functionName: 'finalPrizeAmountsReady',
+    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
+  })
+
+  const { data: nextTokenId } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'nextTokenId',
+    query: { refetchInterval: 10000, refetchOnWindowFocus: false },
+  })
+
+  const candidateTokenIds = useMemo(() => {
+    const upperBound = Number(nextTokenId ?? 1n)
+    return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
+  }, [nextTokenId])
+
+  const { data: positionsVersion } = useReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'positionsVersion',
+    query: {
+      enabled: Boolean(finalPrizeAmountsReady),
+      refetchInterval: 10000,
+      refetchOnWindowFocus: false,
+    },
+  })
+
+  const finalPrizePositionContracts = useMemo(
+    () =>
+      finalPrizeAmountsReady
+        ? candidateTokenIds.map((tokenId) => ({
+            address: CONTRACT_ADDRESSES.PREDICTIONS,
+            abi: PREDICTIONS_ABI,
+            functionName: 'tokenPositions' as const,
+            args: [tokenId] as const,
+          }))
+        : [],
+    [candidateTokenIds, finalPrizeAmountsReady],
+  )
+
+  const { data: finalPrizePositionData } = useReadContracts({
+    contracts: finalPrizePositionContracts,
+    query: {
+      enabled: finalPrizePositionContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: false,
+    },
+  })
+
+  const finalPrizePositionVersionContracts = useMemo(
+    () =>
+      finalPrizeAmountsReady
+        ? candidateTokenIds.map((tokenId) => ({
+            address: CONTRACT_ADDRESSES.PREDICTIONS,
+            abi: PREDICTIONS_ABI,
+            functionName: 'tokenPositionsVersion' as const,
+            args: [tokenId] as const,
+          }))
+        : [],
+    [candidateTokenIds, finalPrizeAmountsReady],
+  )
+
+  const { data: finalPrizePositionVersionData } = useReadContracts({
+    contracts: finalPrizePositionVersionContracts,
+    query: {
+      enabled: finalPrizePositionVersionContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: false,
+    },
+  })
+
+  const finalPrizePositionsReady = useMemo(() => {
+    if (!finalPrizeAmountsReady) return false
+    if (candidateTokenIds.length === 0) return true
+    if (positionsVersion === undefined) return false
+    if (
+      finalPrizePositionData?.length !== candidateTokenIds.length
+      || finalPrizePositionVersionData?.length !== candidateTokenIds.length
+    ) {
+      return false
+    }
+
+    return candidateTokenIds.every(
+      (_, i) =>
+        typeof finalPrizePositionData?.[i]?.result === 'bigint'
+        && typeof finalPrizePositionVersionData?.[i]?.result === 'bigint',
+    )
+  }, [candidateTokenIds, finalPrizeAmountsReady, finalPrizePositionData, finalPrizePositionVersionData, positionsVersion])
+
+  const liveFinalPrizeEntries = useMemo(() => {
+    if (!finalPrizePositionsReady) return undefined
+
+    return candidateTokenIds
+      .map((tokenId, i) => ({
+        tokenId,
+        rank: finalPrizePositionData?.[i]?.result as bigint,
+        version: finalPrizePositionVersionData?.[i]?.result as bigint,
+      }))
+      .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
+      .sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+        if (a.tokenId === b.tokenId) return 0
+        return a.tokenId < b.tokenId ? -1 : 1
+      })
+  }, [candidateTokenIds, finalPrizePositionData, finalPrizePositionVersionData, finalPrizePositionsReady, positionsVersion])
+
+  const finalPrizeEntries = useStableValue(liveFinalPrizeEntries, liveFinalPrizeEntries !== undefined) ?? []
+
+  const finalPrizeContracts = useMemo(
+    () =>
+      finalPrizeAmountsReady
+        ? finalPrizeEntries.map(({ tokenId }) => ({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'getClaimablePrizeAmount' as const,
+            args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] as const,
+          }))
+        : [],
+    [finalPrizeAmountsReady, finalPrizeEntries, tournamentId],
+  )
+
+  const { data: finalPrizeData } = useReadContracts({
+    contracts: finalPrizeContracts,
+    query: {
+      enabled: finalPrizeContracts.length > 0,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: false,
+    },
   })
 
   const prizeContracts = useMemo(() => {
-    if (tournamentId === 0n) return []
+    if (tournamentId === 0n || !usdcDistributionSet) return []
     return PRIZE_BANDS.map((band) => ({
       address: CONTRACT_ADDRESSES.TREASURY,
       abi: TREASURY_ABI,
       functionName: 'getUserPrizeAmount',
       args: [tournamentId, CONTRACT_ADDRESSES.USDC, BigInt(band.start)],
     }) as const)
-  }, [tournamentId])
+  }, [tournamentId, usdcDistributionSet])
 
   const { data: prizeAmounts } = useReadContracts({
     contracts: prizeContracts,
     query: { enabled: prizeContracts.length > 0 },
   })
 
-  const usdcBandAmounts = PRIZE_BANDS.map((_, index) => {
-    const entry = prizeAmounts?.[index]
-    return (entry?.result as bigint | undefined) ?? 0n
-  })
+  const estimatedUsdcBandAmounts = useMemo(
+    () => PRIZE_BANDS.map((band) => (usdcPrizePool !== undefined ? getBandAmount(usdcPrizePool, band.start) : 0n)),
+    [usdcPrizePool],
+  )
+
+  const hasOnchainBandAmounts = Boolean(usdcDistributionSet)
+    && PRIZE_BANDS.every((_, index) => typeof prizeAmounts?.[index]?.result === 'bigint')
+
+  const finalPrizeDataReady = useMemo(() => {
+    if (!finalPrizeAmountsReady) return false
+    if (!finalPrizePositionsReady) return false
+    if (finalPrizeContracts.length === 0) return true
+    if (finalPrizeData?.length !== finalPrizeContracts.length) return false
+
+    return finalPrizeContracts.every((_, index) => typeof finalPrizeData?.[index]?.result === 'bigint')
+  }, [finalPrizeAmountsReady, finalPrizeContracts, finalPrizeData, finalPrizePositionsReady])
+
+  const liveFinalPrizeRows = useMemo(() => {
+    if (!finalPrizeDataReady) return undefined
+
+    const payouts = finalPrizeEntries
+      .map((entry, index) => ({
+        rank: Number(entry.rank),
+        amount: finalPrizeData?.[index]?.result as bigint,
+      }))
+      .filter((entry) => entry.amount > 0n)
+
+    const rows: Array<{ label: string; amount: bigint; shared: boolean }> = []
+
+    for (let i = 0; i < payouts.length;) {
+      const current = payouts[i]
+      let count = 0
+      while (i + count < payouts.length && payouts[i + count].rank === current.rank) {
+        count += 1
+      }
+
+      rows.push({
+        label: count > 1 ? `${current.rank}° compartido` : `${current.rank}°`,
+        amount: current.amount,
+        shared: count > 1,
+      })
+
+      i += count
+    }
+
+    return rows
+  }, [finalPrizeData, finalPrizeDataReady, finalPrizeEntries])
+
+  const finalPrizeRows = useStableValue(liveFinalPrizeRows, liveFinalPrizeRows !== undefined) ?? []
+
+  const hasLoadedFinalPrizeAmounts = Boolean(finalPrizeAmountsReady) && (finalPrizeDataReady || finalPrizeRows.length > 0)
+
+  const usdcBandAmounts = hasOnchainBandAmounts
+    ? PRIZE_BANDS.map((_, index) => prizeAmounts?.[index]?.result as bigint)
+    : estimatedUsdcBandAmounts
+
+  const prizeTableTitle = finalPrizeAmountsReady || hasOnchainBandAmounts ? 'Premios' : 'Premios estimados'
 
   const formatAssetValue = (amount: bigint) => {
     if (amount === 0n) return `—`
@@ -263,7 +459,7 @@ function HomePage() {
     query: {
       enabled: Boolean(normalizedAddress) && isConnected,
       refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -283,7 +479,7 @@ function HomePage() {
     query: {
       enabled: tokenTournamentContracts.length > 0,
       refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -299,7 +495,7 @@ function HomePage() {
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'submissionDeadline',
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
+    query: { refetchInterval: 10000, refetchOnWindowFocus: false },
   })
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
@@ -350,7 +546,7 @@ function HomePage() {
     query: {
       enabled: cartonStatusContracts.length > 0,
       refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -372,7 +568,7 @@ function HomePage() {
     query: {
       enabled: claimablePrizeContracts.length > 0,
       refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -394,7 +590,7 @@ function HomePage() {
     query: {
       enabled: claimedPrizeContracts.length > 0,
       refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -725,32 +921,78 @@ function HomePage() {
                 className="px-4 py-2.5 flex justify-between text-xs font-medium"
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
-                <span className="uppercase tracking-wider">Premios</span>
-                <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
-                  {usdcPoolDisplay}
-                </span>
-              </div>
-              {PRIZE_BANDS.map((band, idx) => (
-                <div
-                  key={`usdc-${band.start}`}
-                  className="px-4 py-2.5 flex items-center justify-between text-sm"
-                  style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>{band.icon}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{band.label}</span>
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono-custom)',
-                      fontWeight: 600,
-                      color: band.start === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
-                    }}
+                 <span className="uppercase tracking-wider">{prizeTableTitle}</span>
+                 <span style={{ fontFamily: 'var(--font-mono-custom)', color: 'var(--text-primary)' }}>
+                   {usdcPoolDisplay}
+                 </span>
+               </div>
+              {finalPrizeAmountsReady ? (
+                hasLoadedFinalPrizeAmounts ? (
+                  finalPrizeRows.map((row, idx) => (
+                    <div
+                      key={`final-prize-${row.label}`}
+                      className="px-4 py-2.5 flex items-center justify-between text-sm"
+                      style={{
+                        background: 'var(--bg-card)',
+                        borderBottom: idx < finalPrizeRows.length - 1 ? '1px solid var(--border-color)' : 'none',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-primary)' }}>{row.label}</span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono-custom)',
+                          fontWeight: 600,
+                          color: row.label === '1°' ? 'var(--accent-gold)' : 'var(--text-primary)',
+                        }}
+                      >
+                        {formatAssetValue(row.amount)}{row.shared ? ' c/u' : ''}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    className="px-4 py-3 text-xs"
+                    style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}
                   >
-                    {formatAssetValue(usdcBandAmounts[idx])}
-                  </span>
+                    Cargando premios finales...
+                  </div>
+                )
+              ) : (
+                PRIZE_BANDS.map((band, idx) => (
+                  <div
+                    key={`usdc-${band.start}`}
+                    className="px-4 py-2.5 flex items-center justify-between text-sm"
+                    style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}
+                  >
+                    {/** Only medal rows need the numeric label next to the icon. */}
+                    <span className="flex items-center gap-2">
+                      <span>{band.icon}</span>
+                      {band.start <= 3 && <span style={{ color: 'var(--text-secondary)' }}>{band.label}</span>}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono-custom)',
+                        fontWeight: 600,
+                        color: band.start === 1 ? 'var(--accent-gold)' : 'var(--text-primary)',
+                      }}
+                    >
+                      {formatAssetValue(usdcBandAmounts[idx])}
+                    </span>
+                  </div>
+                ))
+              )}
+              {!finalPrizeAmountsReady && !hasOnchainBandAmounts && (
+                <div
+                  className="px-4 py-3 text-xs"
+                  style={{
+                    background: 'rgba(96,165,250,0.08)',
+                    borderTop: '1px solid var(--border-color)',
+                    color: 'rgb(125, 211, 252)',
+                  }}
+                >
+                  Cada fila muestra el premio por puesto. Mientras no se cierre el pozo, usamos valores aproximados.
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

@@ -1849,6 +1849,24 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "getOfficialWinners",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "set",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "officialWinnersSet",
     "inputs": [],
     "outputs": [

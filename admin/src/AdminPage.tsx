@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useReadContract, useReadContracts } from './lib/wallet'
-import { formatUnits, parseUnits, type Address } from 'viem'
+import { formatUnits, parseUnits, type Abi, type Address } from 'viem'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Input } from './components/ui/input'
 import { Button } from './components/ui/button'
@@ -58,6 +58,50 @@ type AdminCapability = {
   detail: string
   required: string
   allowed: boolean
+}
+
+type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'funding' | 'lifecycle'
+
+type BatchedReadResult = {
+  result: unknown
+}
+
+type BatchedReadContract = {
+  address: Address
+  abi: Abi
+  functionName: string
+  args?: readonly unknown[]
+}
+
+const ADMIN_SECTION_OPTIONS: Array<{ id: AdminSectionId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'results', label: 'Results' },
+  { id: 'winners', label: 'Winners' },
+  { id: 'positions', label: 'Positions' },
+  { id: 'roles', label: 'Roles' },
+  { id: 'funding', label: 'Funding' },
+  { id: 'lifecycle', label: 'Lifecycle' },
+]
+
+function getBatchedResult<T>(results: BatchedReadResult[] | undefined, index: number) {
+  return results?.[index]?.result as T | undefined
+}
+
+function parseOfficialWinners(value: unknown) {
+  if (!value) return { teamIds: [] as number[], isSet: false }
+
+  if (Array.isArray(value)) {
+    const teamIds = Array.isArray(value[0]) ? value[0].map((teamId) => Number(teamId)) : []
+    return { teamIds, isSet: Boolean(value[1]) }
+  }
+
+  if (typeof value === 'object') {
+    const record = value as { teams?: unknown; set?: unknown }
+    const teamIds = Array.isArray(record.teams) ? record.teams.map((teamId) => Number(teamId)) : []
+    return { teamIds, isSet: Boolean(record.set) }
+  }
+
+  return { teamIds: [] as number[], isSet: false }
 }
 
 function truncateAddress(address?: string) {
@@ -173,20 +217,44 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
       games.map((game, index) => {
         const rawStatus = gamesStatusData?.[index]?.result as [number, boolean] | { id?: number; set?: boolean } | undefined
         const rawResult = gameResultsData?.[index]?.result as [number, number] | undefined
+        const resultErrorMessage = gameResultsData?.[index]?.errorMessage as string | undefined
 
         const isSet = Array.isArray(rawStatus) ? Boolean(rawStatus[1]) : Boolean(rawStatus?.set)
-        const result = Array.isArray(rawResult) ? rawResult : [0, 0]
+        const result = Array.isArray(rawResult) ? rawResult : undefined
+        const resultReadFailed = Boolean(gameResultsData?.[index]?.error)
 
         return [
           game.id,
           {
             result,
             set: isSet,
+            resultReadFailed,
+            resultErrorMessage,
           },
         ]
       }),
     )
   }, [games, gameResultsData, gamesStatusData])
+
+  const getStoredResultErrorLabel = (errorMessage?: string) => {
+    const message = errorMessage?.toLowerCase() ?? ''
+    if (!message) return 'read error'
+    if (message.includes('fetch failed') || message.includes('failed to fetch') || message.includes('network')) return 'rpc/network error'
+    if (message.includes('429') || message.includes('too many requests') || message.includes('rate limit')) return 'rpc rate limit'
+    if (message.includes('timeout')) return 'rpc timeout'
+    if (message.includes('invalid game id')) return 'invalid game id'
+    return 'read error'
+  }
+
+  const getStoredResultLabel = (gameId: number) => {
+    const storedGame = storedGamesById.get(gameId)
+
+    if (!storedGame?.set) return 'not set'
+    if (storedGame.result) return `${storedGame.result[0]}-${storedGame.result[1]}`
+    if (storedGame.resultReadFailed) return getStoredResultErrorLabel(storedGame.resultErrorMessage)
+
+    return 'loading...'
+  }
 
   // Local state for goal inputs per game
   const [goals, setGoals] = useState<Record<number, [string, string]>>({})
@@ -219,6 +287,11 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
 
     return gameSearchEntries.filter((entry) => entry.haystack.includes(query))
   }, [gameSearch, gameSearchEntries])
+
+  const setGamesCount = useMemo(
+    () => games.reduce((count, game) => count + (storedGamesById.get(game.id)?.set ? 1 : 0), 0),
+    [games, storedGamesById],
+  )
 
   const isAnvil = chainId === 31337
 
@@ -405,7 +478,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
             ))}
           </datalist>
           <p className="text-xs text-gray-500">
-            {filteredGames.length} de {games.length} partidos visibles
+            {filteredGames.length} de {games.length} partidos visibles · {setGamesCount} / {games.length} con resultado
           </p>
           {isAnvil && (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -451,10 +524,11 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
                 placeholder="-"
               />
               <span className="w-28 truncate">{teamsById[game.team2] ?? game.team2}</span>
-              <span className="w-28 text-xs text-gray-500">
-                {storedGamesById.get(game.id)?.set
-                  ? `${storedGamesById.get(game.id)?.result[0]}-${storedGamesById.get(game.id)?.result[1]}`
-                  : 'not set'}
+              <span
+                className="w-28 text-xs text-gray-500"
+                title={storedGamesById.get(game.id)?.resultErrorMessage}
+              >
+                {getStoredResultLabel(game.id)}
               </span>
               <Button
                 size="sm"
@@ -486,19 +560,14 @@ function SetOfficialWinnersSection({ canManagePredictions }: { canManagePredicti
     [],
   )
 
-  const { data: officialWinnersData } = useReadContract({
+  const { data: officialWinnersData, refetch: refetchOfficialWinners } = useReadContract({
     address: predictions,
     abi: PREDICTIONS_ABI,
-    functionName: 'officialWinners',
-    query: { refetchInterval: 10_000 },
+    functionName: 'getOfficialWinners',
   })
 
-  const winnersAlreadySet = officialWinnersData
-    ? (officialWinnersData as unknown as [number[], boolean])[1]
-    : false
-  const currentWinners = officialWinnersData
-    ? (officialWinnersData as unknown as [number[], boolean])[0]
-    : null
+  const { teamIds: currentWinners, isSet: winnersAlreadySet } = parseOfficialWinners(officialWinnersData)
+  const hasLoadedOfficialWinners = officialWinnersData !== undefined
 
   const [selected, setSelected] = useState<[string, string, string, string]>(['', '', '', ''])
   const labels = ['1st', '2nd', '3rd', '4th']
@@ -535,6 +604,9 @@ function SetOfficialWinnersSection({ canManagePredictions }: { canManagePredicti
         successMessage: 'Official winners saved.',
         revertedMessage: 'Official winners were rejected on-chain.',
         logLabel: 'Admin set official winners',
+        onSuccess: async () => {
+          await refetchOfficialWinners()
+        },
       },
     )
   }
@@ -545,11 +617,27 @@ function SetOfficialWinnersSection({ canManagePredictions }: { canManagePredicti
         <CardTitle>Set Official Winners</CardTitle>
         <CardDescription>Declare the top 4 teams (one-time, irreversible)</CardDescription>
       </CardHeader>
-      <CardContent>
-        {winnersAlreadySet && currentWinners ? (
+      <CardContent className="space-y-4">
+        <div className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+          {!hasLoadedOfficialWinners && <div className="text-gray-500">Loading official winners...</div>}
+          {hasLoadedOfficialWinners && winnersAlreadySet && currentWinners.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-green-600 font-medium mb-2">Official winners loaded:</div>
+              {currentWinners.map((id, i) => (
+                <div key={`summary-${i}`}>
+                  <span className="font-medium">{labels[i]}:</span> {teamsById[id] ?? `Team ${id}`}
+                </div>
+              ))}
+            </div>
+          )}
+          {hasLoadedOfficialWinners && !winnersAlreadySet && (
+            <div className="text-yellow-600">Official winners are not set yet.</div>
+          )}
+        </div>
+        {winnersAlreadySet && currentWinners.length > 0 ? (
           <div className="space-y-1 text-sm">
             <div className="text-green-600 font-medium mb-2">Winners already set:</div>
-            {(currentWinners as number[]).map((id, i) => (
+            {currentWinners.map((id, i) => (
               <div key={i}>
                 {labels[i]}: {teamsById[id] ?? `Team ${id}`}
               </div>
@@ -593,36 +681,40 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
   const [csvInput, setCsvInput] = useState('')
-  const [batchProgress, setBatchProgress] = useState<{ phase: 'idle' | 'begin' | 'append' | 'finalize'; current: number; total: number } | null>(null)
 
-  const { data: activeTournamentId } = useReadContract({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'activeTournamentId',
+  const positionsBaseContracts = useMemo(
+    () => {
+      const contracts: BatchedReadContract[] = [
+        { address: carton, abi: CARTON_ABI, functionName: 'activeTournamentId' },
+        { address: carton, abi: CARTON_ABI, functionName: 'nextTokenId' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'positionsVersion' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'positionsUpdateInProgress' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'pendingTournamentId' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'pendingExpectedEntries' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'pendingProcessedEntries' },
+      ]
+
+      return contracts
+    },
+    [carton, predictions],
+  )
+
+  const { data: positionsBaseData, refetch: refetchPositionsBaseData } = useReadContracts({
+    contracts: positionsBaseContracts,
     query: { refetchInterval: 10_000 },
   })
-  const tournamentId = activeTournamentId ?? 0n
 
-  const { data: nextTokenId } = useReadContract({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'nextTokenId',
-    query: { refetchInterval: 10_000 },
-  })
+  const tournamentId = getBatchedResult<bigint>(positionsBaseData, 0) ?? 0n
+  const nextTokenId = getBatchedResult<bigint>(positionsBaseData, 1)
 
   const candidateTokenIds = useMemo(() => {
     const upperBound = Number(nextTokenId ?? 1n)
     return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
   }, [nextTokenId])
 
-  const { data: positionsVersion } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'positionsVersion',
-    query: { refetchInterval: 10_000 },
-  })
+  const positionsVersion = getBatchedResult<bigint>(positionsBaseData, 2)
 
-  const { data: positionData } = useReadContracts({
+  const { data: positionData, refetch: refetchPositionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: predictions,
       abi: PREDICTIONS_ABI,
@@ -632,7 +724,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const { data: positionVersionData } = useReadContracts({
+  const { data: positionVersionData, refetch: refetchPositionVersionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: predictions,
       abi: PREDICTIONS_ABI,
@@ -693,7 +785,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     query: { enabled: onchainPointsContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  const { data: submittedCount } = useReadContract({
+  const { data: submittedCount, refetch: refetchSubmittedCount } = useReadContract({
     address: predictions,
     abi: PREDICTIONS_ABI,
     functionName: 'submittedCountByTournament',
@@ -701,33 +793,10 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
-  const { data: positionsUpdateInProgress } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'positionsUpdateInProgress',
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: pendingTournamentId } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'pendingTournamentId',
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: pendingExpectedEntries } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'pendingExpectedEntries',
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: pendingProcessedEntries } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'pendingProcessedEntries',
-    query: { refetchInterval: 10_000 },
-  })
+  const positionsUpdateInProgress = getBatchedResult<boolean>(positionsBaseData, 3)
+  const pendingTournamentId = getBatchedResult<bigint>(positionsBaseData, 4)
+  const pendingExpectedEntries = getBatchedResult<bigint>(positionsBaseData, 5)
+  const pendingProcessedEntries = getBatchedResult<bigint>(positionsBaseData, 6)
 
   const onchainPointEntries = useMemo(
     () =>
@@ -767,87 +836,51 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     toast.success(`Loaded ${onchainPointEntries.length} cartone${onchainPointEntries.length === 1 ? '' : 's'} from on-chain points.`)
   }
 
-  const submit = () => {
+  const refreshPositionsReads = async () => {
+    await Promise.all([refetchPositionsBaseData(), refetchSubmittedCount(), refetchPositionData(), refetchPositionVersionData()])
+  }
+
+  const buildValidatedEntries = () => {
     if (tournamentId === 0n) {
       toast.error('Set an active tournament first.')
-      return
+      return null
     }
 
     const { entries, error } = parseLeaderboardCsv(csvInput)
     if (error) {
       toast.error(error)
-      return
+      return null
     }
 
     if (entries.length === 0) {
       toast.error('There are no leaderboard entries to upload.')
-      return
+      return null
     }
 
     const expectedEntries = Number(submittedCount ?? 0n)
     if (entries.length !== expectedEntries) {
       toast.error(`The CSV contains ${entries.length} entries, but tournament ${tournamentId.toString()} has ${expectedEntries} submitted cartones.`)
-      return
+      return null
     }
 
     const entryTokenIdSet = new Set(entries.map((entry) => entry.tokenId.toString()))
     const missingTournamentToken = usedTokenIds.find((tokenId) => !entryTokenIdSet.has(tokenId.toString()))
     if (missingTournamentToken) {
       toast.error(`Carton #${missingTournamentToken.toString()} from the active tournament is missing from the CSV.`)
+      return null
+    }
+
+    return entries
+  }
+
+  const openPositionsDraft = () => {
+    const entries = buildValidatedEntries()
+    if (!entries) return
+
+    if (positionsUpdateInProgress) {
+      toast.error('There is already a leaderboard draft in progress. Append it or cancel it first.')
       return
     }
-
-    const chunks = Array.from({ length: Math.ceil(entries.length / POSITION_BATCH_SIZE) }, (_, index) =>
-      entries.slice(index * POSITION_BATCH_SIZE, (index + 1) * POSITION_BATCH_SIZE),
-    )
-
-    const uploadNextChunk = (chunkIndex: number) => {
-      if (chunkIndex >= chunks.length) {
-        setBatchProgress({ phase: 'finalize', current: chunks.length, total: chunks.length })
-        void execute(
-          {
-            address: predictions,
-            abi: PREDICTIONS_ABI,
-            functionName: 'finalizePositionsUpdate',
-          },
-          {
-            toastId: 'admin-finalize-positions-batch',
-            pendingMessage: 'Finalizing leaderboard version...',
-            successMessage: 'Leaderboard positions saved.',
-            revertedMessage: 'Leaderboard finalization was rejected on-chain.',
-            logLabel: 'Admin finalize positions update',
-            onSuccess: async () => {
-              setBatchProgress({ phase: 'idle', current: chunks.length, total: chunks.length })
-            },
-          },
-        )
-        return
-      }
-
-      const chunk = chunks[chunkIndex]
-      setBatchProgress({ phase: 'append', current: chunkIndex + 1, total: chunks.length })
-
-      void execute(
-        {
-          address: predictions,
-          abi: PREDICTIONS_ABI,
-          functionName: 'appendPositionsBatch',
-          args: [chunk.map((entry) => entry.tokenId), chunk.map((entry) => entry.points)],
-        },
-        {
-          toastId: `admin-set-positions-batch-${chunkIndex}`,
-          pendingMessage: `Uploading leaderboard batch ${chunkIndex + 1}/${chunks.length}...`,
-          successMessage: `Batch ${chunkIndex + 1}/${chunks.length} saved.`,
-          revertedMessage: 'Leaderboard batch was rejected on-chain.',
-          logLabel: 'Admin append positions batch',
-          onSuccess: async () => {
-            uploadNextChunk(chunkIndex + 1)
-          },
-        },
-      )
-    }
-
-    setBatchProgress({ phase: 'begin', current: 0, total: chunks.length })
 
     void execute(
       {
@@ -862,9 +895,78 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
         successMessage: 'Leaderboard draft opened.',
         revertedMessage: 'Could not open leaderboard draft on-chain.',
         logLabel: 'Admin begin positions update',
-        onSuccess: async () => {
-          uploadNextChunk(0)
-        },
+        onSuccess: refreshPositionsReads,
+      },
+    )
+  }
+
+  const appendNextBatch = () => {
+    const entries = buildValidatedEntries()
+    if (!entries) return
+
+    if (!activePendingUpdateMatchesTournament) {
+      toast.error('Open a leaderboard draft first.')
+      return
+    }
+
+    const expectedPendingEntries = Number(pendingExpectedEntries ?? 0n)
+    const processedEntriesCount = Number(pendingProcessedEntries ?? 0n)
+    if (entries.length !== expectedPendingEntries) {
+      toast.error(`The open draft expects ${expectedPendingEntries} entries, but the CSV has ${entries.length}.`)
+      return
+    }
+
+    if (processedEntriesCount >= expectedPendingEntries) {
+      toast.error('All draft entries were already uploaded. Finalize the draft to publish the leaderboard.')
+      return
+    }
+
+    const chunk = entries.slice(processedEntriesCount, processedEntriesCount + POSITION_BATCH_SIZE)
+    const currentBatchNumber = Math.floor(processedEntriesCount / POSITION_BATCH_SIZE) + 1
+    const totalBatches = Math.ceil(expectedPendingEntries / POSITION_BATCH_SIZE)
+
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'appendPositionsBatch',
+        args: [chunk.map((entry) => entry.tokenId), chunk.map((entry) => entry.points)],
+      },
+      {
+        toastId: `admin-set-positions-batch-${currentBatchNumber}`,
+        pendingMessage: `Uploading leaderboard batch ${currentBatchNumber}/${totalBatches}...`,
+        successMessage: `Batch ${currentBatchNumber}/${totalBatches} saved.`,
+        revertedMessage: 'Leaderboard batch was rejected on-chain.',
+        logLabel: 'Admin append positions batch',
+        onSuccess: refreshPositionsReads,
+      },
+    )
+  }
+
+  const finalizePositionsDraft = () => {
+    if (!activePendingUpdateMatchesTournament) {
+      toast.error('Open a leaderboard draft first.')
+      return
+    }
+
+    if ((pendingProcessedEntries ?? 0n) !== (pendingExpectedEntries ?? 0n)) {
+      toast.error('Upload all draft entries before finalizing the leaderboard.')
+      return
+    }
+
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'finalizePositionsUpdate',
+      },
+      {
+        toastId: 'admin-finalize-positions-batch',
+        pendingMessage: 'Finalizing leaderboard version...',
+        successMessage: 'Leaderboard positions saved.',
+        revertedMessage: 'Leaderboard finalization was rejected on-chain.',
+        logLabel: 'Admin finalize positions update',
+        onSuccess: refreshPositionsReads,
       },
     )
   }
@@ -882,9 +984,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
         successMessage: 'Leaderboard draft cancelled.',
         revertedMessage: 'Could not cancel the leaderboard draft.',
         logLabel: 'Admin cancel positions update',
-        onSuccess: async () => {
-          setBatchProgress({ phase: 'idle', current: 0, total: 0 })
-        },
+        onSuccess: refreshPositionsReads,
       },
     )
   }
@@ -936,11 +1036,17 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
           onChange={(e) => setCsvInput(e.target.value)}
         />
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0 || Boolean(positionsUpdateInProgress)}>
+          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0}>
             Fill Positions
           </Button>
-          <Button onClick={submit} disabled={!canManagePredictions || isBusy || Boolean(positionsUpdateInProgress)}>
-            {isBusy ? 'Submitting...' : 'Set Positions In Batches'}
+          <Button type="button" onClick={openPositionsDraft} disabled={!canManagePredictions || isBusy || Boolean(positionsUpdateInProgress)}>
+            {isBusy ? 'Working...' : '1. Open Draft'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={appendNextBatch} disabled={!canManagePredictions || isBusy || !activePendingUpdateMatchesTournament}>
+            {isBusy ? 'Working...' : '2. Append Next Batch'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={finalizePositionsDraft} disabled={!canManagePredictions || isBusy || !activePendingUpdateMatchesTournament || (pendingProcessedEntries ?? 0n) !== (pendingExpectedEntries ?? 0n)}>
+            {isBusy ? 'Working...' : '3. Finalize Positions'}
           </Button>
           {activePendingUpdateMatchesTournament && (
             <Button type="button" variant="outline" onClick={cancelPendingUpdate} disabled={!canManagePredictions || isBusy}>
@@ -957,13 +1063,13 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
               : 'Cargando puntos onchain para autocompletar el ranking...'}
         </p>
 
-        {batchProgress && batchProgress.phase !== 'idle' && (
+        {activePendingUpdateMatchesTournament && (
           <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {batchProgress.phase === 'begin'
-              ? `Abriendo draft del leaderboard (${batchProgress.total} batch${batchProgress.total === 1 ? '' : 'es'}).`
-              : batchProgress.phase === 'append'
-                ? `Subiendo batch ${batchProgress.current}/${batchProgress.total}.`
-                : 'Finalizando versión del leaderboard...'}
+            {(pendingProcessedEntries ?? 0n) === 0n
+              ? 'Draft abierto on-chain. El siguiente paso es subir el primer batch.'
+              : (pendingProcessedEntries ?? 0n) < (pendingExpectedEntries ?? 0n)
+                ? 'Draft abierto on-chain. Sigue subiendo los batches restantes antes de finalizar.'
+                : 'Todos los entries del draft ya están cargados. Finaliza para publicar el leaderboard.'}
           </p>
         )}
 
@@ -1011,60 +1117,37 @@ function TreasuryFundingSection({
   const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
   const parsedAmount = useMemo(() => parseUsdcAmount(amountInput), [amountInput])
 
-  const { data: reserveBps } = useReadContract<bigint>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'reserveBps',
+  const fundingContracts = useMemo(() => {
+    const contracts: BatchedReadContract[] = [
+      { address: treasury, abi: TREASURY_ABI, functionName: 'reserveBps', args: [] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'salesClosed', args: [parsedTournamentId] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'tournamentFinalized', args: [parsedTournamentId] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'getPrizePool', args: [parsedTournamentId, tokenAddress] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'getGlobalReserve', args: [tokenAddress] },
+    ]
+
+    if (address) {
+      contracts.push(
+        { address: tokenAddress, abi: USDC_ABI, functionName: 'balanceOf', args: [address] },
+        { address: tokenAddress, abi: USDC_ABI, functionName: 'allowance', args: [address, treasury] },
+      )
+    }
+
+    return contracts
+  }, [address, parsedTournamentId, tokenAddress, treasury])
+
+  const { data: fundingReadData, refetch: refetchFundingReads } = useReadContracts({
+    contracts: fundingContracts,
     query: { refetchInterval: 10_000 },
   })
 
-  const { data: salesClosed } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'salesClosed',
-    args: [parsedTournamentId],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: tournamentFinalized } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'tournamentFinalized',
-    args: [parsedTournamentId],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: prizePool, refetch: refetchPrizePool } = useReadContract<bigint>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: [parsedTournamentId, tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: reservePool, refetch: refetchReservePool } = useReadContract<bigint>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'getGlobalReserve',
-    args: [tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: walletBalance, refetch: refetchWalletBalance } = useReadContract<bigint>({
-    address: tokenAddress,
-    abi: USDC_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address), refetchInterval: 10_000 },
-  })
-
-  const { data: allowance, refetch: refetchAllowance } = useReadContract<bigint>({
-    address: tokenAddress,
-    abi: USDC_ABI,
-    functionName: 'allowance',
-    args: address ? [address, treasury] : undefined,
-    query: { enabled: Boolean(address), refetchInterval: 10_000 },
-  })
+  const reserveBps = getBatchedResult<bigint>(fundingReadData, 0)
+  const salesClosed = getBatchedResult<boolean>(fundingReadData, 1)
+  const tournamentFinalized = getBatchedResult<boolean>(fundingReadData, 2)
+  const prizePool = getBatchedResult<bigint>(fundingReadData, 3)
+  const reservePool = getBatchedResult<bigint>(fundingReadData, 4)
+  const walletBalance = address ? getBatchedResult<bigint>(fundingReadData, 5) : undefined
+  const allowance = address ? getBatchedResult<bigint>(fundingReadData, 6) : undefined
 
   const reserveBpsValue = Number(reserveBps ?? 0n)
   const reserveCut = parsedAmount ? (parsedAmount * BigInt(reserveBpsValue)) / 10_000n : 0n
@@ -1074,7 +1157,7 @@ function TreasuryFundingSection({
   const hasEnoughReserve = parsedAmount !== undefined && (reservePool ?? 0n) >= parsedAmount
 
   const refreshFundingReads = async () => {
-    await Promise.all([refetchWalletBalance(), refetchAllowance(), refetchPrizePool(), refetchReservePool()])
+    await refetchFundingReads()
   }
 
   const approveUsdc = () => {
@@ -1158,17 +1241,15 @@ function TreasuryFundingSection({
         functionName: 'seedTournamentFromReserve',
         args: [parsedTournamentId, tokenAddress, parsedAmount],
       },
-      {
-        toastId: `admin-seed-reserve-${parsedTournamentId.toString()}`,
-        pendingMessage: 'Seeding tournament pool from reserve...',
-        successMessage: 'Tournament pool seeded from global reserve.',
-        revertedMessage: 'Reserve seeding was rejected on-chain.',
-        onSuccess: async () => {
-          await Promise.all([refetchPrizePool(), refetchReservePool()])
+        {
+          toastId: `admin-seed-reserve-${parsedTournamentId.toString()}`,
+          pendingMessage: 'Seeding tournament pool from reserve...',
+          successMessage: 'Tournament pool seeded from global reserve.',
+          revertedMessage: 'Reserve seeding was rejected on-chain.',
+          onSuccess: refreshFundingReads,
+          logLabel: 'Admin seed tournament from reserve',
         },
-        logLabel: 'Admin seed tournament from reserve',
-      },
-    )
+      )
   }
 
   return (
@@ -1311,24 +1392,38 @@ function CloseTournamentSection({
   const tokenAddress = CONTRACT_ADDRESSES.USDC
   const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
 
-  const { data: nextTokenId } = useReadContract({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'nextTokenId',
+  const lifecycleContracts = useMemo(
+    () => {
+      const contracts: BatchedReadContract[] = [
+        { address: carton, abi: CARTON_ABI, functionName: 'nextTokenId' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'positionsVersion' },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'salesClosed', args: [parsedTournamentId] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'tournamentFinalized', args: [parsedTournamentId] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'prizeDistributionSet', args: [parsedTournamentId, tokenAddress] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'getPrizePool', args: [parsedTournamentId, tokenAddress] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'getGlobalReserve', args: [tokenAddress] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'finalPrizeAmountsReady', args: [parsedTournamentId, tokenAddress] },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'finalPrizeAmountTotals', args: [parsedTournamentId, tokenAddress] },
+      ]
+
+      return contracts
+    },
+    [carton, parsedTournamentId, predictions, tokenAddress, treasury],
+  )
+
+  const { data: lifecycleReadData, refetch: refetchLifecycleReads } = useReadContracts({
+    contracts: lifecycleContracts,
     query: { refetchInterval: 10_000 },
   })
+
+  const nextTokenId = getBatchedResult<bigint>(lifecycleReadData, 0)
 
   const candidateTokenIds = useMemo(() => {
     const upperBound = Number(nextTokenId ?? 1n)
     return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
   }, [nextTokenId])
 
-  const { data: positionsVersion } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'positionsVersion',
-    query: { refetchInterval: 10_000 },
-  })
+  const positionsVersion = getBatchedResult<bigint>(lifecycleReadData, 1)
 
   const { data: positionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
@@ -1350,61 +1445,13 @@ function CloseTournamentSection({
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const { data: salesClosed } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'salesClosed',
-    args: [parsedTournamentId],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: tournamentFinalized } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'tournamentFinalized',
-    args: [parsedTournamentId],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: usdcDistributionSet } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'prizeDistributionSet',
-    args: [parsedTournamentId, tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: prizePool } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: [parsedTournamentId, tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: reservePool } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'getGlobalReserve',
-    args: [tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: finalAmountsReady } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'finalPrizeAmountsReady',
-    args: [parsedTournamentId, tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
-
-  const { data: finalAmountTotal } = useReadContract({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'finalPrizeAmountTotals',
-    args: [parsedTournamentId, tokenAddress],
-    query: { refetchInterval: 10_000 },
-  })
+  const salesClosed = getBatchedResult<boolean>(lifecycleReadData, 2)
+  const tournamentFinalized = getBatchedResult<boolean>(lifecycleReadData, 3)
+  const usdcDistributionSet = getBatchedResult<boolean>(lifecycleReadData, 4)
+  const prizePool = getBatchedResult<bigint>(lifecycleReadData, 5)
+  const reservePool = getBatchedResult<bigint>(lifecycleReadData, 6)
+  const finalAmountsReady = getBatchedResult<boolean>(lifecycleReadData, 7)
+  const finalAmountTotal = getBatchedResult<bigint>(lifecycleReadData, 8)
 
   const leaderboardEntries = useMemo(
     () =>
@@ -1438,7 +1485,7 @@ function CloseTournamentSection({
     return computeFinalPrizeAmounts(leaderboardEntries, prizePool, parsedDistribution)
   }, [distributionIsValid, leaderboardEntries, parsedDistribution, prizePool])
 
-  const { data: claimablePrizeData } = useReadContracts({
+  const { data: claimablePrizeData, refetch: refetchClaimablePrizes } = useReadContracts({
     contracts: leaderboardTokenIds.map((tokenId) => ({
       address: treasury,
       abi: TREASURY_ABI,
@@ -1475,6 +1522,10 @@ function CloseTournamentSection({
     }
   }, [candidateTokenIds, payoutPreview])
 
+  const refreshLifecycleReads = async () => {
+    await Promise.all([refetchLifecycleReads(), refetchClaimablePrizes()])
+  }
+
   const closeSales = () => {
     const tid = Number(tournamentId)
     if (isNaN(tid) || tid <= 0) {
@@ -1494,6 +1545,7 @@ function CloseTournamentSection({
         successMessage: 'Sales closed successfully.',
         revertedMessage: 'Sales close was rejected on-chain.',
         logLabel: 'Admin close sales',
+        onSuccess: refreshLifecycleReads,
       },
     )
   }
@@ -1523,6 +1575,7 @@ function CloseTournamentSection({
         successMessage: 'USDC prize distribution saved.',
         revertedMessage: 'Prize distribution was rejected on-chain.',
         logLabel: 'Admin set prize distribution',
+        onSuccess: refreshLifecycleReads,
       },
     )
   }
@@ -1551,6 +1604,7 @@ function CloseTournamentSection({
         successMessage: 'Final USDC prize amounts saved. Review them and seal when ready.',
         revertedMessage: 'Final USDC prize amounts were rejected on-chain.',
         logLabel: 'Admin set final prize amounts',
+        onSuccess: refreshLifecycleReads,
       },
     )
   }
@@ -1575,6 +1629,7 @@ function CloseTournamentSection({
         successMessage: 'Final USDC prize amounts sealed.',
         revertedMessage: 'Sealing final USDC prize amounts was rejected on-chain.',
         logLabel: 'Admin seal final prize amounts',
+        onSuccess: refreshLifecycleReads,
       },
     )
   }
@@ -1598,6 +1653,7 @@ function CloseTournamentSection({
         successMessage: 'Tournament finalized successfully.',
         revertedMessage: 'Tournament finalization was rejected on-chain.',
         logLabel: 'Admin finalize tournament',
+        onSuccess: refreshLifecycleReads,
       },
     )
   }
@@ -1821,7 +1877,7 @@ function MinterRoleSection({
     abi: CARTON_ABI,
     functionName: 'hasRole',
     args: permissions.cartonMinterRole && normalizedTargetAddress ? [permissions.cartonMinterRole, normalizedTargetAddress] : undefined,
-    query: { enabled: Boolean(permissions.cartonMinterRole && normalizedTargetAddress), refetchInterval: 10_000 },
+    query: { enabled: Boolean(permissions.cartonMinterRole && normalizedTargetAddress) },
   })
 
   const { data: connectedHasMinterRole = false, refetch: refetchConnectedHasMinterRole } = useReadContract<boolean>({
@@ -1829,7 +1885,7 @@ function MinterRoleSection({
     abi: CARTON_ABI,
     functionName: 'hasRole',
     args: permissions.cartonMinterRole && address ? [permissions.cartonMinterRole, address] : undefined,
-    query: { enabled: Boolean(permissions.cartonMinterRole && address), refetchInterval: 10_000 },
+    query: { enabled: Boolean(permissions.cartonMinterRole && address) },
   })
 
   const refreshRoleState = async () => {
@@ -1937,85 +1993,377 @@ function MinterRoleSection({
   )
 }
 
+function AdminOverviewSection({
+  permissions,
+  capabilities,
+  address,
+  isConnected,
+}: {
+  permissions: AdminPermissions
+  capabilities: AdminCapability[]
+  address?: Address
+  isConnected: boolean
+}) {
+  const predictions = CONTRACT_ADDRESSES.PREDICTIONS
+
+  const overviewContracts = useMemo(
+    () => {
+      const contracts: BatchedReadContract[] = [
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'teamsHash' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'teamsHashFrozen' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'totalGames' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'predictionsStarted' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'submissionDeadline' },
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'officialWinnersSet' },
+      ]
+
+      return contracts
+    },
+    [predictions],
+  )
+
+  const { data: overviewData, refetch: refetchOverviewData } = useReadContracts({
+    contracts: overviewContracts,
+  })
+
+  const onchainTeamsHash = getBatchedResult<string>(overviewData, 0)
+  const isFrozen = getBatchedResult<boolean>(overviewData, 1)
+  const onchainTotalGames = getBatchedResult<bigint>(overviewData, 2)
+  const predictionsStarted = getBatchedResult<boolean>(overviewData, 3)
+  const deadline = getBatchedResult<bigint>(overviewData, 4)
+  const officialWinnersSet = Boolean(getBatchedResult<boolean>(overviewData, 5))
+
+  const { data: overviewOfficialWinnersData } = useReadContract({
+    address: predictions,
+    abi: PREDICTIONS_ABI,
+    functionName: 'getOfficialWinners',
+    query: { enabled: officialWinnersSet },
+  })
+
+  const officialWinners = parseOfficialWinners(overviewOfficialWinnersData).teamIds
+
+  const [totalGamesLocal, setTotalGamesLocal] = useState<string>('')
+  useEffect(() => {
+    if (onchainTotalGames !== undefined) {
+      setTotalGamesLocal(String(onchainTotalGames))
+    }
+  }, [onchainTotalGames])
+
+  const [teamsHash, setTeamsHashLocal] = useState<string>('')
+  useEffect(() => {
+    const zero = '0x0000000000000000000000000000000000000000000000000000000000000000'
+    if (onchainTeamsHash && onchainTeamsHash !== zero) {
+      setTeamsHashLocal(onchainTeamsHash)
+      return
+    }
+
+    const run = async () => {
+      const local = await computeTeamsHash(teams2026Config)
+      setTeamsHashLocal(local)
+    }
+    run()
+  }, [onchainTeamsHash])
+
+  const [deadlineLocal, setDeadlineLocal] = useState<string>('')
+  useEffect(() => {
+    if (deadline && Number(deadline) > 0) {
+      const d = new Date(Number(deadline) * 1000)
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+      setDeadlineLocal(iso)
+    }
+  }, [deadline])
+
+  const { execute, isBusy } = useAdminWrite()
+
+  const refreshOverview = async () => {
+    await refetchOverviewData()
+  }
+
+  const submitTeamsHash = () => {
+    if (!teamsHash || !teamsHash.startsWith('0x') || teamsHash.length !== 66) {
+      toast.error('Provide a valid bytes32 (0x... 64 hex chars)')
+      return
+    }
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setTeamsHash',
+        args: [teamsHash as `0x${string}`],
+      },
+      {
+        toastId: 'admin-set-teams-hash',
+        pendingMessage: 'Waiting for teams hash confirmation...',
+        successMessage: 'Teams hash saved.',
+        revertedMessage: 'Teams hash update was rejected on-chain.',
+        logLabel: 'Admin set teams hash',
+        onSuccess: refreshOverview,
+      },
+    )
+  }
+
+  const freeze = () => {
+    void execute(
+      { address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamsHash' },
+      {
+        toastId: 'admin-freeze-teams-hash',
+        pendingMessage: 'Waiting for teams hash freeze confirmation...',
+        successMessage: 'Teams hash frozen.',
+        revertedMessage: 'Teams hash freeze was rejected on-chain.',
+        logLabel: 'Admin freeze teams hash',
+        onSuccess: refreshOverview,
+      },
+    )
+  }
+
+  const setDeadline = () => {
+    if (!deadlineLocal) return
+    const ts = Math.floor(new Date(deadlineLocal).getTime() / 1000)
+    if (!ts || isNaN(ts)) {
+      toast.error('Invalid date/time')
+      return
+    }
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setSubmissionDeadline',
+        args: [BigInt(ts)],
+      },
+      {
+        toastId: 'admin-set-deadline',
+        pendingMessage: 'Waiting for deadline confirmation...',
+        successMessage: 'Submission deadline saved.',
+        revertedMessage: 'Deadline update was rejected on-chain.',
+        logLabel: 'Admin set submission deadline',
+        onSuccess: refreshOverview,
+      },
+    )
+  }
+
+  const setTotalGames = () => {
+    const n = Number(totalGamesLocal)
+    if (!Number.isInteger(n) || n <= 0 || n > 255) {
+      toast.error('Enter a valid integer between 1 and 255')
+      return
+    }
+    if (predictionsStarted) {
+      toast.error('Predictions already started; cannot change total games')
+      return
+    }
+    void execute(
+      {
+        address: predictions,
+        abi: PREDICTIONS_ABI,
+        functionName: 'setTotalGames',
+        args: [n],
+      },
+      {
+        toastId: 'admin-set-total-games',
+        pendingMessage: 'Waiting for total games confirmation...',
+        successMessage: 'Total games saved.',
+        revertedMessage: 'Total games update was rejected on-chain.',
+        logLabel: 'Admin set total games',
+        onSuccess: refreshOverview,
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Admin</CardTitle>
+        <CardDescription>Permission-aware controls for Predictions and Treasury</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3 text-sm">
+          <div><span className="font-medium">Connected:</span> {isConnected ? address : 'Not connected'}</div>
+          <div><span className="font-medium">Predictions owner:</span> {permissions.predictionsOwner ?? '—'}</div>
+          <div><span className="font-medium">Predictions owner (short):</span> {truncateAddress(permissions.predictionsOwner)}</div>
+          <div><span className="font-medium">Connected (short):</span> {truncateAddress(address)}</div>
+          <div>
+            <span className="font-medium">Can manage predictions:</span>{' '}
+            <span className={permissions.isPredictionsOwner ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.isPredictionsOwner)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasCartonAdminRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryAdminRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury FUND_DEPOSITOR_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryFundDepositorRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryFundDepositorRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury TOURNAMENT_MANAGER_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryManagerRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryManagerRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Official winners set:</span>{' '}
+            <span className={officialWinnersSet ? 'text-green-600' : 'text-yellow-600'}>
+              {String(officialWinnersSet)}
+            </span>
+          </div>
+          {officialWinnersSet && officialWinners.length > 0 && (
+            <div>
+              <span className="font-medium">Official winners:</span>{' '}
+              {officialWinners.map((teamId, index) => `${index + 1}. ${teamsById[teamId] ?? `Team ${teamId}`}`).join(' · ')}
+            </div>
+          )}
+          <RoleIdDisplay label="Carton admin role id" value={permissions.cartonAdminRole} />
+          <RoleIdDisplay label="Carton minter role id" value={permissions.cartonMinterRole} />
+          <RoleIdDisplay label="Treasury admin role id" value={permissions.treasuryAdminRole} />
+          <RoleIdDisplay label="Treasury fund depositor role id" value={permissions.treasuryFundDepositorRole} />
+          <RoleIdDisplay label="Treasury manager role id" value={permissions.treasuryManagerRole} />
+          {!permissions.isPredictionsOwner && <div className="text-red-600">Predictions config, results, winners, and positions require the `Predictions.owner()` wallet.</div>}
+          {!permissions.hasCartonAdminRole && <div className="text-red-600">Mint wallet role management requires `Carton.DEFAULT_ADMIN_ROLE`.</div>}
+          {!permissions.hasTreasuryFundDepositorRole && <div className="text-red-600">External USDC deposits require `Treasury.FUND_DEPOSITOR_ROLE`.</div>}
+          {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Reserve seeding, prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
+          {!permissions.hasTreasuryManagerRole && <div className="text-red-600">Closing sales and finalizing the tournament require `Treasury.TOURNAMENT_MANAGER_ROLE`.</div>}
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <div className="text-sm font-medium">Wallet Capabilities</div>
+          <div className="grid gap-3">
+            {capabilities.map((capability) => (
+              <div
+                key={capability.label}
+                className="rounded-lg border p-3"
+                style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium">{capability.label}</div>
+                  <CapabilityBadge allowed={capability.allowed} />
+                </div>
+                <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {capability.detail}
+                </div>
+                <div className="mt-1 text-xs" style={{ color: 'var(--text-disabled)' }}>
+                  Requires {capability.required}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <div>
+            <div className="mb-2 font-medium">Teams Hash</div>
+            <div className="flex gap-2 items-center">
+              <Input value={teamsHash} onChange={(e) => setTeamsHashLocal(e.target.value)} placeholder="0x..." />
+              <Button onClick={submitTeamsHash} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>
+                {isBusy ? 'Setting...' : 'Set Hash'}
+              </Button>
+            </div>
+            <div className="text-xs text-gray-600 mt-1">Frozen: {String(Boolean(isFrozen))}</div>
+            <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>Freeze</Button>
+          </div>
+
+          <div>
+            <div className="mb-2 font-medium">Submission Deadline</div>
+            <div className="flex gap-2 items-center">
+              <Input type="datetime-local" value={deadlineLocal} onChange={(e) => setDeadlineLocal(e.target.value)} />
+              <Button onClick={setDeadline} disabled={!permissions.isPredictionsOwner || isBusy}>
+                {isBusy ? 'Saving...' : 'Save Deadline'}
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 font-medium">Total Games</div>
+            <div className="text-xs text-gray-600 mb-1">On-chain: {onchainTotalGames !== undefined ? String(onchainTotalGames) : '—'} • Started: {String(Boolean(predictionsStarted))}</div>
+            <div className="flex gap-2 items-center">
+              <Input type="number" min={1} max={255} value={totalGamesLocal} onChange={(e) => setTotalGamesLocal(e.target.value)} />
+              <Button onClick={setTotalGames} disabled={!permissions.isPredictionsOwner || Boolean(predictionsStarted) || isBusy}>
+                {isBusy ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+            <div className="text-xs text-gray-600 mt-1">Must be set before first submission. Typically derived from teams count.</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function AdminPage() {
   const carton = CONTRACT_ADDRESSES.CARTON
   const predictions = CONTRACT_ADDRESSES.PREDICTIONS
   const treasury = CONTRACT_ADDRESSES.TREASURY
   const { address, isConnected } = useAccount()
 
-  const { data: owner } = useReadContract<Address>({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'owner',
-    query: { refetchInterval: 10_000 },
+  const [activeSection, setActiveSection] = useState<AdminSectionId>('overview')
+
+  const permissionMetadataContracts = useMemo(
+    () => {
+      const contracts: BatchedReadContract[] = [
+        { address: predictions, abi: PREDICTIONS_ABI, functionName: 'owner' },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'DEFAULT_ADMIN_ROLE' },
+        { address: carton, abi: CARTON_ABI, functionName: 'DEFAULT_ADMIN_ROLE' },
+        { address: carton, abi: CARTON_ABI, functionName: 'MINTER_ROLE' },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'TOURNAMENT_MANAGER_ROLE' },
+        { address: treasury, abi: TREASURY_ABI, functionName: 'FUND_DEPOSITOR_ROLE' },
+      ]
+
+      return contracts
+    },
+    [carton, predictions, treasury],
+  )
+
+  const { data: permissionMetadataData } = useReadContracts({
+    contracts: permissionMetadataContracts,
   })
+
+  const owner = getBatchedResult<Address>(permissionMetadataData, 0)
+  const treasuryAdminRole = getBatchedResult<`0x${string}`>(permissionMetadataData, 1)
+  const cartonAdminRole = getBatchedResult<`0x${string}`>(permissionMetadataData, 2)
+  const cartonMinterRole = getBatchedResult<`0x${string}`>(permissionMetadataData, 3)
+  const treasuryManagerRole = getBatchedResult<`0x${string}`>(permissionMetadataData, 4)
+  const treasuryFundDepositorRole = getBatchedResult<`0x${string}`>(permissionMetadataData, 5)
 
   const isPredictionsOwner = useMemo(() => {
     if (!address || !owner) return false
     return address.toLowerCase() === owner.toLowerCase()
   }, [address, owner])
 
-  const { data: treasuryAdminRole } = useReadContract<`0x${string}`>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'DEFAULT_ADMIN_ROLE',
+  const permissionCheckContracts = useMemo(() => {
+    if (!address || !treasuryAdminRole || !cartonAdminRole || !treasuryManagerRole || !treasuryFundDepositorRole) {
+      return []
+    }
+
+    const contracts: BatchedReadContract[] = [
+      { address: treasury, abi: TREASURY_ABI, functionName: 'hasRole', args: [treasuryAdminRole, address] },
+      { address: carton, abi: CARTON_ABI, functionName: 'hasRole', args: [cartonAdminRole, address] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'hasRole', args: [treasuryManagerRole, address] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'hasRole', args: [treasuryFundDepositorRole, address] },
+    ]
+
+    return contracts
+  }, [address, carton, cartonAdminRole, treasury, treasuryAdminRole, treasuryFundDepositorRole, treasuryManagerRole])
+
+  const { data: permissionCheckData } = useReadContracts({
+    contracts: permissionCheckContracts,
+    query: { enabled: permissionCheckContracts.length > 0 },
   })
 
-  const { data: cartonAdminRole } = useReadContract<`0x${string}`>({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'DEFAULT_ADMIN_ROLE',
-  })
-
-  const { data: cartonMinterRole } = useReadContract<`0x${string}`>({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'MINTER_ROLE',
-  })
-
-  const { data: treasuryManagerRole } = useReadContract<`0x${string}`>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'TOURNAMENT_MANAGER_ROLE',
-  })
-
-  const { data: treasuryFundDepositorRole } = useReadContract<`0x${string}`>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'FUND_DEPOSITOR_ROLE',
-  })
-
-  const { data: hasTreasuryAdminRole = false } = useReadContract<boolean>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'hasRole',
-    args: treasuryAdminRole && address ? [treasuryAdminRole, address] : undefined,
-    query: { enabled: Boolean(treasuryAdminRole && address), refetchInterval: 10_000 },
-  })
-
-  const { data: hasCartonAdminRole = false } = useReadContract<boolean>({
-    address: carton,
-    abi: CARTON_ABI,
-    functionName: 'hasRole',
-    args: cartonAdminRole && address ? [cartonAdminRole, address] : undefined,
-    query: { enabled: Boolean(cartonAdminRole && address), refetchInterval: 10_000 },
-  })
-
-  const { data: hasTreasuryManagerRole = false } = useReadContract<boolean>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'hasRole',
-    args: treasuryManagerRole && address ? [treasuryManagerRole, address] : undefined,
-    query: { enabled: Boolean(treasuryManagerRole && address), refetchInterval: 10_000 },
-  })
-
-  const { data: hasTreasuryFundDepositorRole = false } = useReadContract<boolean>({
-    address: treasury,
-    abi: TREASURY_ABI,
-    functionName: 'hasRole',
-    args: treasuryFundDepositorRole && address ? [treasuryFundDepositorRole, address] : undefined,
-    query: { enabled: Boolean(treasuryFundDepositorRole && address), refetchInterval: 10_000 },
-  })
+  const hasTreasuryAdminRole = Boolean(getBatchedResult<boolean>(permissionCheckData, 0))
+  const hasCartonAdminRole = Boolean(getBatchedResult<boolean>(permissionCheckData, 1))
+  const hasTreasuryManagerRole = Boolean(getBatchedResult<boolean>(permissionCheckData, 2))
+  const hasTreasuryFundDepositorRole = Boolean(getBatchedResult<boolean>(permissionCheckData, 3))
 
   const permissions = useMemo<AdminPermissions>(
     () => ({
@@ -2082,281 +2430,35 @@ export function AdminPage() {
     [permissions.hasCartonAdminRole, permissions.hasTreasuryAdminRole, permissions.hasTreasuryFundDepositorRole, permissions.hasTreasuryManagerRole, permissions.isPredictionsOwner],
   )
 
-  // Teams hash state
-  const { data: onchainTeamsHash } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamsHash',
-    query: { refetchInterval: 10_000 },
-  })
-  const { data: isFrozen } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamsHashFrozen',
-    query: { refetchInterval: 10_000 },
-  })
-  // totalGames config
-  const { data: onchainTotalGames } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'totalGames',
-    query: { refetchInterval: 10_000 },
-  })
-  const { data: predictionsStarted } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'predictionsStarted',
-    query: { refetchInterval: 10_000 },
-  })
-  const [totalGamesLocal, setTotalGamesLocal] = useState<string>('')
-  useEffect(() => {
-    if (onchainTotalGames !== undefined) {
-      setTotalGamesLocal(String(onchainTotalGames))
-    }
-  }, [onchainTotalGames])
-
-  const [teamsHash, setTeamsHashLocal] = useState<string>('')
-  useEffect(() => {
-    const zero = '0x0000000000000000000000000000000000000000000000000000000000000000'
-    if (onchainTeamsHash && (onchainTeamsHash as string) !== zero) {
-      setTeamsHashLocal(onchainTeamsHash as string)
-      return
-    }
-
-    const run = async () => {
-      const local = await computeTeamsHash(teams2026Config)
-      setTeamsHashLocal(local)
-    }
-    run()
-  }, [onchainTeamsHash])
-
-  const { execute, isBusy } = useAdminWrite()
-
-  const submitTeamsHash = () => {
-    if (!teamsHash || !teamsHash.startsWith('0x') || teamsHash.length !== 66) {
-      toast.error('Provide a valid bytes32 (0x... 64 hex chars)')
-      return
-    }
-    void execute(
-      {
-        address: predictions,
-        abi: PREDICTIONS_ABI,
-        functionName: 'setTeamsHash',
-        args: [teamsHash as `0x${string}`],
-      },
-      {
-        toastId: 'admin-set-teams-hash',
-        pendingMessage: 'Waiting for teams hash confirmation...',
-        successMessage: 'Teams hash saved.',
-        revertedMessage: 'Teams hash update was rejected on-chain.',
-        logLabel: 'Admin set teams hash',
-      },
-    )
-  }
-
-  const freeze = () => {
-    void execute(
-      { address: predictions, abi: PREDICTIONS_ABI, functionName: 'freezeTeamsHash' },
-      {
-        toastId: 'admin-freeze-teams-hash',
-        pendingMessage: 'Waiting for teams hash freeze confirmation...',
-        successMessage: 'Teams hash frozen.',
-        revertedMessage: 'Teams hash freeze was rejected on-chain.',
-        logLabel: 'Admin freeze teams hash',
-      },
-    )
-  }
-
-  // Deadline
-  const { data: deadline } = useReadContract({
-    address: predictions,
-    abi: PREDICTIONS_ABI,
-    functionName: 'submissionDeadline',
-    query: { refetchInterval: 10_000 },
-  })
-  const [deadlineLocal, setDeadlineLocal] = useState<string>('')
-  useEffect(() => {
-    if (deadline && Number(deadline) > 0) {
-      const d = new Date(Number(deadline) * 1000)
-      const pad = (n: number) => n.toString().padStart(2, '0')
-      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-      setDeadlineLocal(iso)
-    }
-  }, [deadline])
-
-  const setDeadline = () => {
-    if (!deadlineLocal) return
-    const ts = Math.floor(new Date(deadlineLocal).getTime() / 1000)
-    if (!ts || isNaN(ts)) { toast.error('Invalid date/time'); return }
-    void execute(
-      {
-        address: predictions,
-        abi: PREDICTIONS_ABI,
-        functionName: 'setSubmissionDeadline',
-        args: [BigInt(ts)],
-      },
-      {
-        toastId: 'admin-set-deadline',
-        pendingMessage: 'Waiting for deadline confirmation...',
-        successMessage: 'Submission deadline saved.',
-        revertedMessage: 'Deadline update was rejected on-chain.',
-        logLabel: 'Admin set submission deadline',
-      },
-    )
-  }
-
-  const setTotalGames = () => {
-    const n = Number(totalGamesLocal)
-    if (!Number.isInteger(n) || n <= 0 || n > 255) {
-      toast.error('Enter a valid integer between 1 and 255')
-      return
-    }
-    if (predictionsStarted) {
-      toast.error('Predictions already started; cannot change total games')
-      return
-    }
-    void execute(
-      {
-        address: predictions,
-        abi: PREDICTIONS_ABI,
-        functionName: 'setTotalGames',
-        args: [n],
-      },
-      {
-        toastId: 'admin-set-total-games',
-        pendingMessage: 'Waiting for total games confirmation...',
-        successMessage: 'Total games saved.',
-        revertedMessage: 'Total games update was rejected on-chain.',
-        logLabel: 'Admin set total games',
-      },
-    )
-  }
-
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
-      {/* Existing config card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin</CardTitle>
-          <CardDescription>Permission-aware controls for Predictions and Treasury</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 text-sm">
-            <div><span className="font-medium">Connected:</span> {isConnected ? address : 'Not connected'}</div>
-            <div><span className="font-medium">Predictions owner:</span> {permissions.predictionsOwner ?? '—'}</div>
-            <div><span className="font-medium">Predictions owner (short):</span> {truncateAddress(permissions.predictionsOwner)}</div>
-            <div><span className="font-medium">Connected (short):</span> {truncateAddress(address)}</div>
-            <div>
-              <span className="font-medium">Can manage predictions:</span>{' '}
-              <span className={permissions.isPredictionsOwner ? 'text-green-600' : 'text-red-600'}>
-                {String(permissions.isPredictionsOwner)}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
-              <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
-                {String(permissions.hasCartonAdminRole)}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
-              <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
-                {String(permissions.hasTreasuryAdminRole)}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Treasury FUND_DEPOSITOR_ROLE:</span>{' '}
-              <span className={permissions.hasTreasuryFundDepositorRole ? 'text-green-600' : 'text-red-600'}>
-                {String(permissions.hasTreasuryFundDepositorRole)}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Treasury TOURNAMENT_MANAGER_ROLE:</span>{' '}
-              <span className={permissions.hasTreasuryManagerRole ? 'text-green-600' : 'text-red-600'}>
-                {String(permissions.hasTreasuryManagerRole)}
-              </span>
-            </div>
-            <RoleIdDisplay label="Carton admin role id" value={permissions.cartonAdminRole} />
-            <RoleIdDisplay label="Carton minter role id" value={permissions.cartonMinterRole} />
-            <RoleIdDisplay label="Treasury admin role id" value={permissions.treasuryAdminRole} />
-            <RoleIdDisplay label="Treasury fund depositor role id" value={permissions.treasuryFundDepositorRole} />
-            <RoleIdDisplay label="Treasury manager role id" value={permissions.treasuryManagerRole} />
-            {!permissions.isPredictionsOwner && <div className="text-red-600">Predictions config, results, winners, and positions require the `Predictions.owner()` wallet.</div>}
-            {!permissions.hasCartonAdminRole && <div className="text-red-600">Mint wallet role management requires `Carton.DEFAULT_ADMIN_ROLE`.</div>}
-            {!permissions.hasTreasuryFundDepositorRole && <div className="text-red-600">External USDC deposits require `Treasury.FUND_DEPOSITOR_ROLE`.</div>}
-            {!permissions.hasTreasuryAdminRole && <div className="text-red-600">Reserve seeding, prize distribution, final prize loading, and sealing require `Treasury.DEFAULT_ADMIN_ROLE`.</div>}
-            {!permissions.hasTreasuryManagerRole && <div className="text-red-600">Closing sales and finalizing the tournament require `Treasury.TOURNAMENT_MANAGER_ROLE`.</div>}
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        {ADMIN_SECTION_OPTIONS.map((section) => (
+          <Button
+            key={section.id}
+            type="button"
+            variant={activeSection === section.id ? 'default' : 'outline'}
+            onClick={() => setActiveSection(section.id)}
+          >
+            {section.label}
+          </Button>
+        ))}
+      </div>
 
-          <div className="mt-6 space-y-3">
-            <div className="text-sm font-medium">Wallet Capabilities</div>
-            <div className="grid gap-3">
-              {capabilities.map((capability) => (
-                <div
-                  key={capability.label}
-                  className="rounded-lg border p-3"
-                  style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium">{capability.label}</div>
-                    <CapabilityBadge allowed={capability.allowed} />
-                  </div>
-                  <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {capability.detail}
-                  </div>
-                  <div className="mt-1 text-xs" style={{ color: 'var(--text-disabled)' }}>
-                    Requires {capability.required}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-6">
-            <div>
-              <div className="mb-2 font-medium">Teams Hash</div>
-              <div className="flex gap-2 items-center">
-                <Input value={teamsHash} onChange={(e) => setTeamsHashLocal(e.target.value)} placeholder="0x..." />
-                <Button onClick={submitTeamsHash} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>
-                  {isBusy ? 'Setting...' : 'Set Hash'}
-                </Button>
-              </div>
-              <div className="text-xs text-gray-600 mt-1">Frozen: {String(isFrozen)}</div>
-              <Button className="mt-2" variant="secondary" onClick={freeze} disabled={!permissions.isPredictionsOwner || Boolean(isFrozen) || isBusy}>Freeze</Button>
-            </div>
-
-            <div>
-              <div className="mb-2 font-medium">Submission Deadline</div>
-              <div className="flex gap-2 items-center">
-                <Input type="datetime-local" value={deadlineLocal} onChange={(e) => setDeadlineLocal(e.target.value)} />
-                <Button onClick={setDeadline} disabled={!permissions.isPredictionsOwner || isBusy}>
-                  {isBusy ? 'Saving...' : 'Save Deadline'}
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 font-medium">Total Games</div>
-              <div className="text-xs text-gray-600 mb-1">On-chain: {onchainTotalGames !== undefined ? String(onchainTotalGames) : '—'} • Started: {String(Boolean(predictionsStarted))}</div>
-              <div className="flex gap-2 items-center">
-                <Input type="number" min={1} max={255} value={totalGamesLocal} onChange={(e) => setTotalGamesLocal(e.target.value)} />
-                <Button onClick={setTotalGames} disabled={!permissions.isPredictionsOwner || Boolean(predictionsStarted) || isBusy}>
-                  {isBusy ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-              <div className="text-xs text-gray-600 mt-1">Must be set before first submission. Typically derived from teams count.</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* New sections */}
-      <SetResultsSection canManagePredictions={permissions.isPredictionsOwner} />
-      <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />
-      <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />
-      <MinterRoleSection permissions={permissions} />
-      <TreasuryFundingSection permissions={permissions} />
-      <CloseTournamentSection permissions={permissions} />
+      {activeSection === 'overview' && (
+        <AdminOverviewSection
+          permissions={permissions}
+          capabilities={capabilities}
+          address={address}
+          isConnected={isConnected}
+        />
+      )}
+      {activeSection === 'results' && <SetResultsSection canManagePredictions={permissions.isPredictionsOwner} />}
+      {activeSection === 'winners' && <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />}
+      {activeSection === 'positions' && <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />}
+      {activeSection === 'roles' && <MinterRoleSection permissions={permissions} />}
+      {activeSection === 'funding' && <TreasuryFundingSection permissions={permissions} />}
+      {activeSection === 'lifecycle' && <CloseTournamentSection permissions={permissions} />}
     </div>
   )
 }

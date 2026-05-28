@@ -13,7 +13,14 @@ import { OpenfortDebugPanel } from './OpenfortDebugPanel'
 import { config } from '../lib/wagmi';
 import '@rainbow-me/rainbowkit/styles.css';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const authProviders = enableOpenfortWalletAuth

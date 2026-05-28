@@ -568,6 +568,11 @@ contract Predictions is Ownable {
         return winnersPredictions[tokenId].teams;
     }
 
+    function getOfficialWinners() external view returns (uint8[4] memory teams, bool set) {
+        OfficialWinners storage winners = officialWinners;
+        return (winners.teams, winners.set);
+    }
+
     // Function to set official winners (only for owner)
     function setOfficialWinners(uint8[4] calldata teams) external onlyOwner {
         // NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.
