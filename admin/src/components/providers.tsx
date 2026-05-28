@@ -4,7 +4,14 @@ import { Toaster } from 'sonner'
 
 import { AdminWalletProvider } from '../lib/wallet'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+    },
+  },
+})
 
 export function Providers({ children }: { children: ReactNode }) {
   return (

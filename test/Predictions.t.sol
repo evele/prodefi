@@ -1087,6 +1087,18 @@ contract PredictionsTest is Test {
         assertTrue(isSet);
     }
 
+    function testGetOfficialWinnersReturnsTeamsAndStatus() public {
+        preds.setOfficialWinners([45, 46, 47, 48]);
+
+        (uint8[4] memory teams, bool isSet) = preds.getOfficialWinners();
+
+        assertTrue(isSet);
+        assertEq(teams[0], 45);
+        assertEq(teams[1], 46);
+        assertEq(teams[2], 47);
+        assertEq(teams[3], 48);
+    }
+
     function testGetGameResults_GameIdZero() public {
         vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.getGameResults(0);

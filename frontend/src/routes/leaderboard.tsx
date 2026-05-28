@@ -4,6 +4,7 @@ import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
 import { formatUnits } from 'viem'
 import { computeSharedRanks } from '../lib/prize-payout'
+import { useStableValue } from '../hooks/useStableValue'
 
 export const Route = createFileRoute('/leaderboard')({
   component: LeaderboardPage,
@@ -67,22 +68,36 @@ function LeaderboardPage() {
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const positionsArray = useMemo(
-    () =>
-      candidateTokenIds
-        .map((tokenId, i) => ({
-          tokenId,
-          rank: (positionData?.[i]?.result as bigint | undefined) ?? 0n,
-          version: (positionVersionData?.[i]?.result as bigint | undefined) ?? 0n,
-        }))
-        .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
-        .sort((a, b) => {
-          if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
-          if (a.tokenId === b.tokenId) return 0
-          return a.tokenId < b.tokenId ? -1 : 1
-        }),
-    [candidateTokenIds, positionData, positionVersionData, positionsVersion],
-  )
+  const positionsSnapshotReady = useMemo(() => {
+    if (candidateTokenIds.length === 0) return true
+    if (positionsVersion === undefined) return false
+    if (positionData?.length !== candidateTokenIds.length || positionVersionData?.length !== candidateTokenIds.length) {
+      return false
+    }
+
+    return candidateTokenIds.every(
+      (_, i) => typeof positionData?.[i]?.result === 'bigint' && typeof positionVersionData?.[i]?.result === 'bigint',
+    )
+  }, [candidateTokenIds, positionData, positionVersionData, positionsVersion])
+
+  const livePositionsArray = useMemo(() => {
+    if (!positionsSnapshotReady) return undefined
+
+    return candidateTokenIds
+      .map((tokenId, i) => ({
+        tokenId,
+        rank: positionData?.[i]?.result as bigint,
+        version: positionVersionData?.[i]?.result as bigint,
+      }))
+      .filter((entry) => entry.rank > 0n && entry.version === (positionsVersion ?? 0n))
+      .sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+        if (a.tokenId === b.tokenId) return 0
+        return a.tokenId < b.tokenId ? -1 : 1
+      })
+  }, [candidateTokenIds, positionData, positionVersionData, positionsSnapshotReady, positionsVersion])
+
+  const positionsArray = useStableValue(livePositionsArray, livePositionsArray !== undefined) ?? []
 
   const { data: usedData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
@@ -94,10 +109,19 @@ function LeaderboardPage() {
     query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
   })
 
-  const usedTokenIds = useMemo(
-    () => candidateTokenIds.filter((_, i) => Boolean(usedData?.[i]?.result)),
-    [candidateTokenIds, usedData],
-  )
+  const usedSnapshotReady = useMemo(() => {
+    if (candidateTokenIds.length === 0) return true
+    if (usedData?.length !== candidateTokenIds.length) return false
+
+    return candidateTokenIds.every((_, i) => typeof usedData?.[i]?.result === 'boolean')
+  }, [candidateTokenIds, usedData])
+
+  const liveUsedTokenIds = useMemo(() => {
+    if (!usedSnapshotReady) return undefined
+    return candidateTokenIds.filter((_, i) => Boolean(usedData?.[i]?.result))
+  }, [candidateTokenIds, usedData, usedSnapshotReady])
+
+  const usedTokenIds = useStableValue(liveUsedTokenIds, liveUsedTokenIds !== undefined) ?? []
 
   const pointsContracts = useMemo(
     () =>
@@ -116,13 +140,24 @@ function LeaderboardPage() {
     query: { enabled: pointsContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  const pointsByTokenId = useMemo(() => {
+  const pointsSnapshotReady = useMemo(() => {
+    if (usedTokenIds.length === 0) return true
+    if (pointsData?.length !== usedTokenIds.length) return false
+
+    return usedTokenIds.every((_, i) => typeof pointsData?.[i]?.result === 'bigint')
+  }, [pointsData, usedTokenIds])
+
+  const livePointsByTokenId = useMemo(() => {
+    if (!pointsSnapshotReady) return undefined
+
     const map = new Map<string, bigint>()
     usedTokenIds.forEach((tokenId, i) => {
-      map.set(tokenId.toString(), (pointsData?.[i]?.result as bigint | undefined) ?? 0n)
+      map.set(tokenId.toString(), pointsData?.[i]?.result as bigint)
     })
     return map
-  }, [pointsData, usedTokenIds])
+  }, [pointsData, pointsSnapshotReady, usedTokenIds])
+
+  const pointsByTokenId = useStableValue(livePointsByTokenId, livePointsByTokenId !== undefined) ?? new Map<string, bigint>()
 
   const { data: userTokensRaw } = useReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -132,7 +167,7 @@ function LeaderboardPage() {
     query: {
       enabled: Boolean(normalizedAddress) && isConnected,
       refetchInterval: 10_000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
   const userTokenSet = useMemo<Set<string>>(
@@ -173,19 +208,59 @@ function LeaderboardPage() {
     query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
   })
 
-  const finalLeaderboardRows = useMemo(
+  const usdcPrizesSnapshotReady = useMemo(() => {
+    if (!tournamentFinalized || positionsArray.length === 0) return true
+    if (usdcPrizesData?.length !== positionsArray.length) return false
+
+    return positionsArray.every((_, i) => typeof usdcPrizesData?.[i]?.result === 'bigint')
+  }, [positionsArray, tournamentFinalized, usdcPrizesData])
+
+  const liveUsdcPrizesByTokenId = useMemo(() => {
+    if (!usdcPrizesSnapshotReady) return undefined
+
+    const map = new Map<string, bigint>()
+    if (!tournamentFinalized) return map
+
+    positionsArray.forEach(({ tokenId }, i) => {
+      map.set(tokenId.toString(), usdcPrizesData?.[i]?.result as bigint)
+    })
+
+    return map
+  }, [positionsArray, tournamentFinalized, usdcPrizesData, usdcPrizesSnapshotReady])
+
+  const usdcPrizesByTokenId = useStableValue(liveUsdcPrizesByTokenId, liveUsdcPrizesByTokenId !== undefined) ?? new Map<string, bigint>()
+
+  const finalRowsReady = useMemo(
     () =>
-      positionsArray.map(({ tokenId, rank }, i) => ({
-        rank: Number(rank),
-        tokenId,
-        points: pointsByTokenId.get(tokenId.toString()) ?? 0n,
-        usdcPrize: tournamentFinalized ? ((usdcPrizesData?.[i]?.result as bigint | undefined) ?? 0n) : undefined,
-        isYours: userTokenSet.has(tokenId.toString()),
-      })),
-    [pointsByTokenId, positionsArray, tournamentFinalized, usdcPrizesData, userTokenSet],
+      positionsArray.every((entry) => pointsByTokenId.has(entry.tokenId.toString()))
+      && (!tournamentFinalized || positionsArray.every((entry) => usdcPrizesByTokenId.has(entry.tokenId.toString()))),
+    [pointsByTokenId, positionsArray, tournamentFinalized, usdcPrizesByTokenId],
   )
 
-  const provisionalLeaderboardRows = useMemo(() => {
+  const liveFinalLeaderboardRows = useMemo(
+    () =>
+      finalRowsReady
+        ? positionsArray.map(({ tokenId, rank }) => ({
+            rank: Number(rank),
+            tokenId,
+            points: pointsByTokenId.get(tokenId.toString()) ?? 0n,
+            usdcPrize: tournamentFinalized ? (usdcPrizesByTokenId.get(tokenId.toString()) ?? 0n) : undefined,
+            isYours: userTokenSet.has(tokenId.toString()),
+          }))
+        : undefined,
+    [finalRowsReady, pointsByTokenId, positionsArray, tournamentFinalized, usdcPrizesByTokenId, userTokenSet],
+  )
+
+  const finalLeaderboardRows = useStableValue(liveFinalLeaderboardRows, liveFinalLeaderboardRows !== undefined) ?? []
+
+  const provisionalRowsReady = useMemo(
+    () => usedTokenIds.every((tokenId) => pointsByTokenId.has(tokenId.toString())),
+    [pointsByTokenId, usedTokenIds],
+  )
+
+  const liveProvisionalLeaderboardRows = useMemo(() => {
+    if (!provisionalRowsReady) return undefined
+
     const sortedEntries = usedTokenIds
       .map((tokenId) => ({ tokenId, points: pointsByTokenId.get(tokenId.toString()) ?? 0n }))
       .sort((a, b) => {
@@ -197,11 +272,16 @@ function LeaderboardPage() {
     return computeSharedRanks(sortedEntries).map((entry) => ({
       rank: entry.rank,
       tokenId: entry.tokenId,
-      points: entry.points,
-      usdcPrize: undefined,
-      isYours: userTokenSet.has(entry.tokenId.toString()),
-    }))
-  }, [pointsByTokenId, usedTokenIds, userTokenSet])
+        points: entry.points,
+        usdcPrize: undefined,
+        isYours: userTokenSet.has(entry.tokenId.toString()),
+      }))
+  }, [pointsByTokenId, provisionalRowsReady, usedTokenIds, userTokenSet])
+
+  const provisionalLeaderboardRows = useStableValue(
+    liveProvisionalLeaderboardRows,
+    liveProvisionalLeaderboardRows !== undefined,
+  ) ?? []
 
   const isFinalLeaderboard = positionsArray.length > 0 && !positionsUpdateInProgress
 
@@ -215,13 +295,6 @@ function LeaderboardPage() {
     if (yourRows.length === 0) return null
     return Math.min(...yourRows.map((r) => r.rank))
   }, [leaderboardRows])
-
-  const rankIcon = (rank: number) => {
-    if (rank === 1) return '🥇'
-    if (rank === 2) return '🥈'
-    if (rank === 3) return '🥉'
-    return null
-  }
 
   const formatPrize = (amount: bigint, decimals: number, symbol: string) => {
     if (amount === 0n) return '—'
@@ -306,7 +379,7 @@ function LeaderboardPage() {
       >
         {/* Table header */}
         <div
-          className="hidden md:grid grid-cols-[2.5rem_1fr_auto_auto] gap-3 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
+          className="hidden md:grid grid-cols-[4rem_1fr_auto_auto] gap-3 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}
         >
           <div>#</div>
@@ -329,12 +402,19 @@ function LeaderboardPage() {
         ) : (
           <div>
             {leaderboardRows.map((row, idx) => {
-              const icon = rankIcon(row.rank)
               const isTop3 = row.rank <= 3
+              const rankColor = row.rank === 1
+                ? 'var(--accent-gold)'
+                : row.rank === 2
+                  ? '#cbd5e1'
+                  : row.rank === 3
+                    ? '#fdba74'
+                    : 'var(--text-secondary)'
+
               return (
                 <div
                   key={row.tokenId.toString()}
-                  className="grid grid-cols-[2.5rem_1fr] md:grid-cols-[2.5rem_1fr_auto_auto] gap-3 items-center px-4 py-3 transition-colors"
+                  className="grid grid-cols-[4rem_1fr] md:grid-cols-[4rem_1fr_auto_auto] gap-3 items-center px-4 py-3 transition-colors"
                   style={{
                     background: row.isYours ? 'rgba(0,230,118,0.05)' : idx % 2 === 0 ? 'var(--bg-card)' : 'rgba(11,16,32,0.5)',
                     borderLeft: row.isYours ? '2px solid var(--accent-green)' : '2px solid transparent',
@@ -343,20 +423,16 @@ function LeaderboardPage() {
                 >
                   {/* Rank */}
                   <div className="flex items-center justify-center">
-                    {icon ? (
-                      <span className="text-xl">{icon}</span>
-                    ) : (
-                      <span
-                        className="text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center"
-                        style={{
-                          background: 'var(--bg-elevated)',
-                          color: 'var(--text-secondary)',
-                          fontFamily: 'var(--font-mono-custom)',
-                        }}
-                      >
-                        {row.rank}
-                      </span>
-                    )}
+                    <span
+                      className="text-sm font-bold rounded-full px-2 py-1"
+                      style={{
+                        background: 'var(--bg-elevated)',
+                        color: rankColor,
+                        fontFamily: 'var(--font-mono-custom)',
+                      }}
+                    >
+                      #{row.rank}
+                    </span>
                   </div>
 
                   {/* Token info */}
@@ -368,7 +444,7 @@ function LeaderboardPage() {
                         color: row.isYours ? 'var(--accent-green)' : isTop3 ? 'var(--accent-gold)' : 'var(--text-primary)',
                       }}
                     >
-                      #{row.tokenId.toString()}
+                      Cartón {row.tokenId.toString()}
                     </span>
                     {row.isYours && (
                       <span

@@ -232,6 +232,15 @@ Tomorrow's priorities:
    - duplicate email protection / normalization
    - optional Turnstile if basic protections are not enough
 
+Admin follow-up to resume:
+
+1. `Predictions.officialWinners` does not expose the 4 winner team ids through the current ABI used by the admin; the getter available to the frontend/admin only exposes the `set` flag.
+2. Because of that, `/admin/dev` currently cannot reliably render the already-set winners list by just calling `officialWinners()`.
+3. Tomorrow decide between:
+   - reading the latest `OfficialWinnersSet(uint8[4])` event from the admin without touching contracts, or
+   - adding an explicit view getter in `Predictions` that returns the 4 teams and updating the ABI after a future contract change.
+4. No smart contract changes were requested for this session; leave onchain state untouched today.
+
 Verification for the next frontend pass:
 
 - `cd frontend && npm run lint`

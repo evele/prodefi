@@ -22,6 +22,11 @@ function getRecoveryErrorMessage(error: unknown) {
 }
 
 export function RecoveryUpgradeBanner() {
+  if (!canUseOpenfort) return null
+  return <RecoveryUpgradeBannerInner />
+}
+
+function RecoveryUpgradeBannerInner() {
   const embeddedWallet = useEthereumEmbeddedWallet()
   const [password, setPassword] = useState('')
   const [isDismissed, setIsDismissed] = useState(false)
@@ -30,7 +35,6 @@ export function RecoveryUpgradeBanner() {
 
   const activeRecoveryMethod = embeddedWallet.activeWallet?.recoveryMethod
   const shouldShow =
-    canUseOpenfort &&
     !isDismissed &&
     embeddedWallet.isConnected &&
     activeRecoveryMethod === RecoveryMethod.PASSWORD
