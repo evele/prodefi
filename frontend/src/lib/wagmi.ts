@@ -6,7 +6,11 @@ import { appChain, appRpcUrl, canUseOpenfort, enableOpenfortWalletAuth, walletCo
 
 const chains = [appChain] as const
 const transports = {
-  [appChain.id]: http(appRpcUrl),
+  [appChain.id]: http(appRpcUrl, {
+    batch: {
+      batchSize: 1024,
+    },
+  }),
 }
 
 export const config = canUseOpenfort

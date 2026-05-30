@@ -1,4 +1,4 @@
-import type { Chain } from 'viem'
+import type { Address, Chain } from 'viem'
 
 function readNumberEnv(key: string, fallback: number): number {
   const value = import.meta.env[key]
@@ -9,9 +9,20 @@ function readNumberEnv(key: string, fallback: number): number {
 }
 
 const defaultRpcUrl = 'http://127.0.0.1:8545'
+export const appMulticall3Address = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address
 
 export const appChainId = readNumberEnv('VITE_CHAIN_ID', 31337)
 export const appRpcUrl = import.meta.env.VITE_RPC_URL || defaultRpcUrl
+
+function readRpcHost(rpcUrl: string): string {
+  try {
+    return new URL(rpcUrl).host
+  } catch {
+    return rpcUrl
+  }
+}
+
+export const appRpcHost = readRpcHost(appRpcUrl)
 
 export const appChain: Chain = {
   id: appChainId,
@@ -24,6 +35,11 @@ export const appChain: Chain = {
   rpcUrls: {
     default: { http: [appRpcUrl] },
     public: { http: [appRpcUrl] },
+  },
+  contracts: {
+    multicall3: {
+      address: appMulticall3Address,
+    },
   },
 }
 

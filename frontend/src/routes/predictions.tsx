@@ -246,8 +246,8 @@ function PredictionsPage() {
     contracts: ownedCartonTournamentContracts,
     query: {
       enabled: ownedCartonTournamentContracts.length > 0,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: false,
     },
   })
 
@@ -444,12 +444,11 @@ function PredictionsPage() {
       })),
     [normalizedSubmittedGames],
   )
-  const { data: submittedOfficialGamesData } = useReadContracts({
+  const { data: submittedOfficialGamesData, refetch: refetchSubmittedOfficialGamesData } = useReadContracts({
     contracts: submittedOfficialGameContracts,
     query: {
       enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedOfficialGameContracts.length > 0,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
   const submittedScoredGameEntries = useMemo(
@@ -473,25 +472,33 @@ function PredictionsPage() {
       args: [tokenId, entry.predictionIndex] as const,
     }))
   }, [cartonGroupsState, submittedScoredGameEntries, tokenId])
-  const { data: submittedGamePointsData } = useReadContracts({
+  const { data: submittedGamePointsData, refetch: refetchSubmittedGamePointsData } = useReadContracts({
     contracts: submittedGamePointsContracts,
     query: {
       enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedGamePointsContracts.length > 0,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
-  const { data: selectedCartonTotalPoints } = useReadContract({
+  const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'calculateTotalPoints',
     args: [tokenId ?? 0n],
     query: {
       enabled: tokenId !== undefined && Boolean(cartonGroupsState),
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
+  const submittedOfficialGamesKey = useMemo(
+    () => normalizedSubmittedGames.map((entry) => entry.gameId).join(','),
+    [normalizedSubmittedGames],
+  )
+
+  useEffect(() => {
+    if (!tokenId || !cartonGroupsState || !submittedOfficialGameContracts.length) return
+
+    void refetchSubmittedOfficialGamesData()
+  }, [cartonGroupsState, deadlineValue, refetchSubmittedOfficialGamesData, submittedOfficialGameContracts.length, submittedOfficialGamesKey, tokenId])
   const submittedPointsByGameId = useMemo(() => {
     const next: Record<number, bigint> = {}
 
@@ -562,6 +569,21 @@ function PredictionsPage() {
   const winnersPanelMeta = getPanelStatusMeta(winnersPanelStatus)
   const canAttemptCombinedSubmit = tokenId !== undefined && selectedCartonIsOwned && !selectedCartonGamesSubmitted && !selectedCartonWinnersSubmitted
 
+  const submittedScoredGamesKey = useMemo(
+    () => submittedScoredGameEntries.map((entry) => `${entry.gameId}:${entry.predictionIndex}`).join(','),
+    [submittedScoredGameEntries],
+  )
+
+  useEffect(() => {
+    if (!tokenId || !cartonGroupsState) return
+
+    if (submittedGamePointsContracts.length > 0) {
+      void refetchSubmittedGamePointsData()
+    }
+
+    void refetchSelectedCartonTotalPoints()
+  }, [cartonGroupsState, deadlineValue, refetchSelectedCartonTotalPoints, refetchSubmittedGamePointsData, submittedGamePointsContracts.length, submittedScoredGamesKey, tokenId])
+
   const ownedCartonStatusContracts = useMemo(() => {
     if (!activeTournamentOwnedCartons.length) return []
 
@@ -581,14 +603,24 @@ function PredictionsPage() {
     ])
   }, [activeTournamentOwnedCartons])
 
-  const { data: ownedCartonStatusResults } = useReadContracts({
+  const { data: ownedCartonStatusResults, refetch: refetchOwnedCartonStatusResults } = useReadContracts({
     contracts: ownedCartonStatusContracts,
     query: {
       enabled: ownedCartonStatusContracts.length > 0,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   })
+
+  const ownedCartonStatusKey = useMemo(
+    () => activeTournamentOwnedCartons.map((ownedTokenId) => ownedTokenId.toString()).join(','),
+    [activeTournamentOwnedCartons],
+  )
+
+  useEffect(() => {
+    if (!ownedCartonStatusContracts.length) return
+
+    void refetchOwnedCartonStatusResults()
+  }, [deadlineValue, ownedCartonStatusContracts.length, ownedCartonStatusKey, refetchOwnedCartonStatusResults])
 
   const ownedCartonEntries = useMemo(() => {
     if (!activeTournamentOwnedCartons.length) return []
