@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useAccount, useReadContract, useReadContracts } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
@@ -48,24 +48,29 @@ function LeaderboardPage() {
     query: { refetchInterval: 10_000 },
   })
 
-  const { data: positionData } = useReadContracts({
+  const candidateTokenIdsKey = useMemo(
+    () => candidateTokenIds.map((tokenId) => tokenId.toString()).join(','),
+    [candidateTokenIds],
+  )
+
+  const { data: positionData, refetch: refetchPositionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'tokenPositions' as const,
       args: [tokenId] as const,
     })),
-    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+    query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
 
-  const { data: positionVersionData } = useReadContracts({
+  const { data: positionVersionData, refetch: refetchPositionVersionData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'tokenPositionsVersion' as const,
       args: [tokenId] as const,
     })),
-    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+    query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
 
   const positionsSnapshotReady = useMemo(() => {
@@ -99,15 +104,23 @@ function LeaderboardPage() {
 
   const positionsArray = useStableValue(livePositionsArray, livePositionsArray !== undefined) ?? []
 
-  const { data: usedData } = useReadContracts({
+  const { data: usedData, refetch: refetchUsedData } = useReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'used' as const,
       args: [tokenId] as const,
     })),
-    query: { enabled: candidateTokenIds.length > 0, refetchInterval: 10_000 },
+    query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
+
+  useEffect(() => {
+    if (!candidateTokenIds.length) return
+
+    void refetchPositionData()
+    void refetchPositionVersionData()
+    void refetchUsedData()
+  }, [candidateTokenIds.length, candidateTokenIdsKey, positionsVersion, refetchPositionData, refetchPositionVersionData, refetchUsedData])
 
   const usedSnapshotReady = useMemo(() => {
     if (candidateTokenIds.length === 0) return true
@@ -135,10 +148,21 @@ function LeaderboardPage() {
     [usedTokenIds.map((tokenId) => tokenId.toString()).join(',')],
   )
 
-  const { data: pointsData } = useReadContracts({
+  const usedTokenIdsKey = useMemo(
+    () => usedTokenIds.map((tokenId) => tokenId.toString()).join(','),
+    [usedTokenIds],
+  )
+
+  const { data: pointsData, refetch: refetchPointsData } = useReadContracts({
     contracts: pointsContracts,
-    query: { enabled: pointsContracts.length > 0, refetchInterval: 10_000 },
+    query: { enabled: pointsContracts.length > 0, refetchOnWindowFocus: false },
   })
+
+  useEffect(() => {
+    if (!pointsContracts.length) return
+
+    void refetchPointsData()
+  }, [pointsContracts.length, positionsVersion, refetchPointsData, usedTokenIdsKey])
 
   const pointsSnapshotReady = useMemo(() => {
     if (usedTokenIds.length === 0) return true
@@ -203,10 +227,21 @@ function LeaderboardPage() {
     [positionsArray.map((entry) => entry.tokenId.toString()).join(','), tournamentId],
   )
 
-  const { data: usdcPrizesData } = useReadContracts({
+  const positionsArrayKey = useMemo(
+    () => positionsArray.map((entry) => entry.tokenId.toString()).join(','),
+    [positionsArray],
+  )
+
+  const { data: usdcPrizesData, refetch: refetchUsdcPrizesData } = useReadContracts({
     contracts: usdcPrizeContracts,
-    query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchInterval: 10_000 },
+    query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchOnWindowFocus: false },
   })
+
+  useEffect(() => {
+    if (!tournamentFinalized || !usdcPrizeContracts.length) return
+
+    void refetchUsdcPrizesData()
+  }, [positionsArrayKey, positionsVersion, refetchUsdcPrizesData, tournamentFinalized, usdcPrizeContracts.length])
 
   const usdcPrizesSnapshotReady = useMemo(() => {
     if (!tournamentFinalized || positionsArray.length === 0) return true

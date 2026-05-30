@@ -209,7 +209,8 @@ export function FixturesView({ groups }: FixturesViewProps) {
       args: [g.id],
     })),
     query: {
-      refetchInterval: 30000,
+      refetchInterval: 120_000,
+      refetchOnWindowFocus: false,
     }
   })
   const { data: rawOfficialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
@@ -220,7 +221,8 @@ export function FixturesView({ groups }: FixturesViewProps) {
       args: [g.id],
     })),
     query: {
-      refetchInterval: 30000,
+      refetchInterval: 120_000,
+      refetchOnWindowFocus: false,
     }
   })
 
