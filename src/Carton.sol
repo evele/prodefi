@@ -53,6 +53,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     mapping(uint256 => uint256) public tokenTournamentId;
 
     mapping(address => uint256[]) private userTokens;
+    mapping(address => mapping(uint256 => uint256)) private userTokenIndexPlusOne;
 
     ITreasury public treasury;
     uint256 public activeTournamentId;
@@ -238,18 +239,27 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function _addTokenToUser(address user, uint256 tokenId) internal {
+        if (userTokenIndexPlusOne[user][tokenId] != 0) return;
+
         userTokens[user].push(tokenId);
+        userTokenIndexPlusOne[user][tokenId] = userTokens[user].length;
     }
 
     function _removeTokenFromUser(address user, uint256 tokenId) internal {
-        uint256[] memory tokens = userTokens[user];
-        for (uint256 i = 0; i < tokens.length; i++) {
-            if (tokens[i] == tokenId) {
-                userTokens[user][i] = tokens[tokens.length - 1];
-                userTokens[user].pop();
-                break;
-            }
+        uint256 indexPlusOne = userTokenIndexPlusOne[user][tokenId];
+        if (indexPlusOne == 0) return;
+
+        uint256 index = indexPlusOne - 1;
+        uint256 lastIndex = userTokens[user].length - 1;
+
+        if (index != lastIndex) {
+            uint256 lastTokenId = userTokens[user][lastIndex];
+            userTokens[user][index] = lastTokenId;
+            userTokenIndexPlusOne[user][lastTokenId] = index + 1;
         }
+
+        userTokens[user].pop();
+        delete userTokenIndexPlusOne[user][tokenId];
     }
 
     // The following functions are overrides required by Solidity.

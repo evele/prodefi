@@ -321,6 +321,38 @@ contract CartonTest is BaseTest {
         assertEq(twoTokens.length, 2, "User should have two tokens");
     }
 
+    function testGetUserTokens_TransferKeepsListsInSync() public {
+        vm.startPrank(minter);
+        uint256 firstTokenId = carton.mint(user, 1, "");
+        uint256 secondTokenId = carton.mint(user, 1, "");
+        vm.stopPrank();
+
+        vm.prank(user);
+        carton.safeTransferFrom(user, user2, firstTokenId, 1, "");
+
+        uint256[] memory senderTokens = carton.getUserTokens(user);
+        uint256[] memory receiverTokens = carton.getUserTokens(user2);
+
+        assertEq(senderTokens.length, 1, "Sender should keep one token");
+        assertEq(senderTokens[0], secondTokenId, "Sender should keep the remaining token");
+        assertEq(receiverTokens.length, 1, "Receiver should get one token");
+        assertEq(receiverTokens[0], firstTokenId, "Receiver should get the transferred token");
+    }
+
+    function testGetUserTokens_BurnRemovesOnlyBurnedToken() public {
+        vm.startPrank(minter);
+        uint256 firstTokenId = carton.mint(user, 1, "");
+        uint256 secondTokenId = carton.mint(user, 1, "");
+        vm.stopPrank();
+
+        vm.prank(user);
+        carton.burn(user, firstTokenId, 1);
+
+        uint256[] memory remainingTokens = carton.getUserTokens(user);
+        assertEq(remainingTokens.length, 1, "User should keep one token after burn");
+        assertEq(remainingTokens[0], secondTokenId, "Remaining token should stay tracked");
+    }
+
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
 

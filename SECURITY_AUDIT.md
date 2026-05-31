@@ -8,13 +8,13 @@
 
 ## Resumen ejecutivo
 
-El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "cartones"), `Treasury` (custodia multi-asset de pools de premios), `Predictions` (motor de juego/scoring por torneo) y `PredictionsFactory` (dead code, no usado en `Deploy.s.sol`). El diseño hereda buenas piezas de OpenZeppelin (AccessControl, SafeERC20, ReentrancyGuard, ERC1155Pausable) y separa razonablemente las responsabilidades, pero presenta varias debilidades de severidad alta y media: contabilidad ERC20/ETH desacoplada de saldos reales con riesgo de DoS por tokens fee-on-transfer/rebasing y varios puntos donde el owner puede atascar el torneo (DoS por centralización). La inconsistencia grave de `userTokens` por ownership parcial fue mitigada al forzar `amount == 1` por cartón, y los ganadores oficiales ahora pueden corregirse antes de publicar el leaderboard final. No se encontró ninguna vulnerabilidad crítica explotable de robo directo de fondos por un actor no privilegiado.
+El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "cartones"), `Treasury` (custodia multi-asset de pools de premios), `Predictions` (motor de juego/scoring por torneo) y `PredictionsFactory` (dead code, no usado en `Deploy.s.sol`). El diseño hereda buenas piezas de OpenZeppelin (AccessControl, SafeERC20, ReentrancyGuard, ERC1155Pausable) y separa razonablemente las responsabilidades, pero presenta varias debilidades de severidad alta y media: contabilidad ERC20/ETH desacoplada de saldos reales con riesgo de DoS por tokens fee-on-transfer/rebasing y varios puntos donde el owner puede atascar el torneo (DoS por centralización). La inconsistencia grave de `userTokens` por ownership parcial fue mitigada al forzar `amount == 1` por cartón, el índice `userTokens` ahora usa remove O(1), y los ganadores oficiales ahora pueden corregirse antes de publicar el leaderboard final. No se encontró ninguna vulnerabilidad crítica explotable de robo directo de fondos por un actor no privilegiado.
 
 | Severidad | Cantidad |
 |-----------|----------|
 | Critical  | 0        |
 | High      | 2        |
-| Medium    | 8        |
+| Medium    | 7        |
 | Low       | 9        |
 | Informational | 8    |
 
@@ -80,6 +80,8 @@ El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "carton
 ---
 
 ### [MEDIUM] M-1 — `_update` recorre arrays sin bound en transferencias ERC1155 batch — DoS por gas
+
+- **Estado**: RESUELTO — `Carton` mantiene `userTokens` con un índice auxiliar `userTokenIndexPlusOne`, por lo que `_addTokenToUser` y `_removeTokenFromUser` pasan a ser O(1) con `swap + pop`, eliminando el patrón O(K*N) en transfers batch.
 
 - **Contrato**: `src/Carton.sol:228-237, 241-265`
 - **Impacto**: `_removeTokenFromUser` es O(N) por token movido. En una transferencia batch con K tokens donde el remitente tiene N tokens, el coste es O(K·N). Un user con muchos cartones (>500) que reciba/envíe batches grandes puede llevar la transacción por encima del block gas limit, atrapando los tokens.
