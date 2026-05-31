@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { Carton } from "./Carton.sol";
 
 interface ICompetitionEngine {
@@ -12,7 +13,7 @@ interface ICompetitionEngine {
 
 /// @title Treasury - Centralized multi-asset fund and prize management
 /// @notice Reusable contract for managing prize pools across multiple tournaments with ETH/ERC20 support
-contract Treasury is AccessControl {
+contract Treasury is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint16 public constant BPS_DENOMINATOR = 10_000;
@@ -47,6 +48,8 @@ contract Treasury is AccessControl {
     error CompetitionEngineAlreadyFrozen();
     error TokenTournamentMismatch();
     error InsufficientGlobalReserve();
+    error UnsupportedPrizeToken();
+    error ZeroTokenAddress();
 
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
@@ -55,6 +58,7 @@ contract Treasury is AccessControl {
     // address(0) = ETH, other addresses = ERC20 tokens
     mapping(uint256 => mapping(address => uint256)) public prizePools;
     mapping(address => uint256) public globalReserve;
+    mapping(address => bool) public supportedPrizeTokens;
 
     // Tracking claims per tournament, tokenId (NFT), and asset
     mapping(uint256 => mapping(uint256 => mapping(address => bool))) public claimed;
@@ -106,6 +110,7 @@ contract Treasury is AccessControl {
     event TournamentClosed(uint256 indexed tournamentId, address indexed token, uint256 closedPrizePool);
     event TournamentRegistered(uint256 indexed tournamentId, address indexed engine);
     event ReserveSeeded(uint256 indexed tournamentId, address indexed token, uint256 amount);
+    event SupportedPrizeTokenSet(address indexed token, bool supported);
 
     constructor(address defaultAdmin, address cartonAddress, uint16 reserveBps_) {
         if (reserveBps_ >= BPS_DENOMINATOR) revert InvalidReserveBps();
@@ -128,6 +133,19 @@ contract Treasury is AccessControl {
 
         competitionEngineByTournament[tournamentId] = engine;
         emit TournamentRegistered(tournamentId, engine);
+    }
+
+    /// @notice Marks an ERC20 token as supported for sales deposits and prize pools.
+    /// @dev ETH (address(0)) is always supported and must not be configured here.
+    function setSupportedPrizeToken(address token, bool supported) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (token == address(0)) revert ZeroTokenAddress();
+
+        supportedPrizeTokens[token] = supported;
+        emit SupportedPrizeTokenSet(token, supported);
+    }
+
+    function isSupportedPrizeToken(address token) public view returns (bool) {
+        return token == address(0) || supportedPrizeTokens[token];
     }
 
     /// @notice Deposits ETH from sales to tournament prize pool
@@ -154,9 +172,11 @@ contract Treasury is AccessControl {
     {
         _requireRegisteredTournament(tournamentId);
         if (token == address(0)) revert UseDepositForETH();
+        _requireSupportedPrizeToken(token);
         if (amount == 0) revert ZeroAmount();
         if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
 
+        // Only standard, non-fee-on-transfer and non-rebasing ERC20 tokens are supported.
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 reserveAmount = (amount * reserveBps) / BPS_DENOMINATOR;
@@ -177,7 +197,7 @@ contract Treasury is AccessControl {
     /// @param tournamentId Tournament ID
     /// @param tokenId Token ID to claim prize for
     /// @param token Token address (address(0) for ETH)
-    function claimPrize(uint256 tournamentId, uint256 tokenId, address token) external {
+    function claimPrize(uint256 tournamentId, uint256 tokenId, address token) external nonReentrant {
         _requireRegisteredTournament(tournamentId);
         if (!tournamentFinalized[tournamentId]) revert TournamentNotFinalized();
         if (cartonContract.balanceOf(msg.sender, tokenId) == 0) revert NotTokenOwner();
@@ -210,6 +230,7 @@ contract Treasury is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         _requireRegisteredTournament(tournamentId);
+        _requireSupportedPrizeToken(token);
         if (!salesClosed[tournamentId]) revert SalesNotClosed();
         if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
         if (finalPrizeAmountTotals[tournamentId][token] > 0 || finalPrizeAmountsReady[tournamentId][token]) {
@@ -344,6 +365,7 @@ contract Treasury is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         _requireRegisteredTournament(tournamentId);
+        _requireSupportedPrizeToken(token);
         if (amount == 0) revert ZeroAmount();
         if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
         if (globalReserve[token] < amount) revert InsufficientGlobalReserve();
@@ -393,5 +415,9 @@ contract Treasury is AccessControl {
     function _requireRegisteredTournament(uint256 tournamentId) internal view {
         if (tournamentId == 0) revert InvalidTournamentId();
         if (!tournamentRegistered[tournamentId]) revert TournamentNotRegistered();
+    }
+
+    function _requireSupportedPrizeToken(address token) internal view {
+        if (!isSupportedPrizeToken(token)) revert UnsupportedPrizeToken();
     }
 }

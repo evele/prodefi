@@ -60,7 +60,7 @@ type AdminCapability = {
   allowed: boolean
 }
 
-type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'funding' | 'lifecycle'
+type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'tokens' | 'funding' | 'lifecycle'
 
 type BatchedReadResult = {
   result: unknown
@@ -79,6 +79,7 @@ const ADMIN_SECTION_OPTIONS: Array<{ id: AdminSectionId; label: string }> = [
   { id: 'winners', label: 'Winners' },
   { id: 'positions', label: 'Positions' },
   { id: 'roles', label: 'Roles' },
+  { id: 'tokens', label: 'Tokens' },
   { id: 'funding', label: 'Funding' },
   { id: 'lifecycle', label: 'Lifecycle' },
 ]
@@ -1993,6 +1994,259 @@ function MinterRoleSection({
   )
 }
 
+function TokenSupportSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasTreasuryAdminRole' | 'hasCartonAdminRole'>
+}) {
+  const treasury = CONTRACT_ADDRESSES.TREASURY
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const { execute, isBusy } = useAdminWrite()
+  const [tokenAddressInput, setTokenAddressInput] = useState<string>(CONTRACT_ADDRESSES.USDC)
+  const [reviewConfirmed, setReviewConfirmed] = useState(false)
+
+  const normalizedTokenAddress = useMemo(() => {
+    const trimmed = tokenAddressInput.trim()
+    return isAddressLike(trimmed) ? (trimmed as Address) : undefined
+  }, [tokenAddressInput])
+
+  const tokenContracts = useMemo(() => {
+    if (!normalizedTokenAddress) return []
+
+    return [
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'name' as const },
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'symbol' as const },
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'decimals' as const },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'supportedPrizeTokens' as const, args: [normalizedTokenAddress] as const },
+      { address: carton, abi: CARTON_ABI, functionName: 'acceptedTokens' as const, args: [normalizedTokenAddress] as const },
+    ]
+  }, [carton, normalizedTokenAddress, treasury])
+
+  const { data: tokenReadData, refetch: refetchTokenReads } = useReadContracts({
+    contracts: tokenContracts,
+    query: { enabled: tokenContracts.length > 0, refetchInterval: 10_000 },
+  })
+
+  const tokenName = getBatchedResult<string>(tokenReadData, 0)
+  const tokenSymbol = getBatchedResult<string>(tokenReadData, 1)
+  const tokenDecimals = getBatchedResult<number>(tokenReadData, 2)
+  const treasurySupported = Boolean(getBatchedResult<boolean>(tokenReadData, 3))
+  const cartonAccepted = Boolean(getBatchedResult<boolean>(tokenReadData, 4))
+
+  const refreshTokenReads = async () => {
+    await refetchTokenReads()
+  }
+
+  const setTreasurySupport = (supported: boolean) => {
+    if (!normalizedTokenAddress) {
+      toast.error('Provide a valid token address.')
+      return
+    }
+
+    if (supported && !reviewConfirmed) {
+      toast.error('Confirm the standard-ERC20 checklist before supporting a token.')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'setSupportedPrizeToken',
+        args: [normalizedTokenAddress, supported],
+      },
+      {
+        toastId: `admin-supported-token-${normalizedTokenAddress}-${String(supported)}`,
+        pendingMessage: supported ? 'Adding token to Treasury allowlist...' : 'Removing token from Treasury allowlist...',
+        successMessage: supported ? 'Token added to Treasury allowlist.' : 'Token removed from Treasury allowlist.',
+        revertedMessage: supported ? 'Treasury token allowlist update was rejected on-chain.' : 'Treasury token removal was rejected on-chain.',
+        logLabel: supported ? 'Admin support treasury prize token' : 'Admin unsupport treasury prize token',
+        onSuccess: refreshTokenReads,
+      },
+    )
+  }
+
+  const setCartonAcceptance = (accepted: boolean) => {
+    if (!normalizedTokenAddress) {
+      toast.error('Provide a valid token address.')
+      return
+    }
+
+    if (accepted && !reviewConfirmed) {
+      toast.error('Confirm the standard-ERC20 checklist before accepting a token.')
+      return
+    }
+
+    if (accepted && !treasurySupported) {
+      toast.error('Support the token in Treasury before enabling it in Carton.')
+      return
+    }
+
+    void execute(
+      {
+        address: carton,
+        abi: CARTON_ABI,
+        functionName: 'setAcceptedToken',
+        args: [normalizedTokenAddress, accepted],
+      },
+      {
+        toastId: `admin-accepted-token-${normalizedTokenAddress}-${String(accepted)}`,
+        pendingMessage: accepted ? 'Enabling token in Carton...' : 'Disabling token in Carton...',
+        successMessage: accepted ? 'Token enabled in Carton.' : 'Token disabled in Carton.',
+        revertedMessage: accepted ? 'Carton token enable was rejected on-chain.' : 'Carton token disable was rejected on-chain.',
+        logLabel: accepted ? 'Admin accept carton token' : 'Admin unaccept carton token',
+        onSuccess: refreshTokenReads,
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Token Allowlist</CardTitle>
+        <CardDescription>
+          Manage which ERC20s Treasury supports for prize accounting and which of those Carton can sell.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2 text-sm">
+          <div>
+            <span className="font-medium">Configured USDC:</span>{' '}
+            <span className="font-mono break-all">{CONTRACT_ADDRESSES.USDC}</span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryAdminRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasCartonAdminRole)}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Token address</div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={tokenAddressInput}
+              onChange={(e) => setTokenAddressInput(e.target.value)}
+              placeholder="0x..."
+              className="font-mono"
+            />
+            <Button variant="outline" type="button" onClick={() => setTokenAddressInput(CONTRACT_ADDRESSES.USDC)}>
+              Use configured USDC
+            </Button>
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            This admin flow can whitelist any standard ERC20, but the public player UI still assumes USDC for prices, pool display, and claims.
+          </div>
+        </div>
+
+        <div
+          className="rounded-lg border p-3 text-sm space-y-2"
+          style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}
+        >
+          <div className="font-medium">Standard ERC20 review checklist</div>
+          <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+            <div>Automatic detection is not reliable from just a token address.</div>
+            <div>Before enabling a token, manually verify: no fee-on-transfer, no rebasing, and `transferFrom` credits the receiver with the exact requested amount.</div>
+            <div>Also verify standard `approve`, `transfer`, and `balanceOf` behavior.</div>
+          </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={reviewConfirmed}
+              onChange={(e) => setReviewConfirmed(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I manually reviewed this token and confirmed it is a standard ERC20 without fee-on-transfer or rebasing behavior.</span>
+          </label>
+        </div>
+
+        <div className="grid gap-2 text-sm md:grid-cols-2">
+          <div>
+            <span className="font-medium">Name:</span> {tokenName ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Symbol:</span> {tokenSymbol ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Decimals:</span> {tokenDecimals ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Valid address:</span>{' '}
+            <span className={normalizedTokenAddress ? 'text-green-600' : 'text-red-600'}>
+              {String(Boolean(normalizedTokenAddress))}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury supported:</span>{' '}
+            <span className={treasurySupported ? 'text-green-600' : 'text-yellow-600'}>
+              {String(treasurySupported)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Carton accepted:</span>{' '}
+            <span className={cartonAccepted ? 'text-green-600' : 'text-yellow-600'}>
+              {String(cartonAccepted)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={() => setTreasurySupport(true)}
+            disabled={!permissions.hasTreasuryAdminRole || !normalizedTokenAddress || treasurySupported || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Support In Treasury'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setCartonAcceptance(true)}
+            disabled={!permissions.hasCartonAdminRole || !normalizedTokenAddress || !treasurySupported || cartonAccepted || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Enable In Carton'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCartonAcceptance(false)}
+            disabled={!permissions.hasCartonAdminRole || !normalizedTokenAddress || !cartonAccepted || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Disable In Carton'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTreasurySupport(false)}
+            disabled={!permissions.hasTreasuryAdminRole || !normalizedTokenAddress || !treasurySupported || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Remove From Treasury'}
+          </Button>
+        </div>
+
+        <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+          <div>Recommended order: 1) Support in Treasury, 2) Enable in Carton.</div>
+          <div>Recommended removal order: 1) Disable in Carton, 2) Remove from Treasury.</div>
+        </div>
+
+        {!permissions.hasTreasuryAdminRole && (
+          <div className="text-sm text-red-600">Adding or removing supported prize tokens requires `Treasury.DEFAULT_ADMIN_ROLE`.</div>
+        )}
+        {!permissions.hasCartonAdminRole && (
+          <div className="text-sm text-red-600">Enabling or disabling accepted sale tokens requires `Carton.DEFAULT_ADMIN_ROLE`.</div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function AdminOverviewSection({
   permissions,
   capabilities,
@@ -2409,6 +2663,12 @@ export function AdminPage() {
         allowed: permissions.hasCartonAdminRole,
       },
       {
+        label: 'Token allowlist management',
+        detail: 'support ERC20s in Treasury and enable them in Carton after manual review',
+        required: 'Treasury.DEFAULT_ADMIN_ROLE; Carton.DEFAULT_ADMIN_ROLE to sell in Carton',
+        allowed: permissions.hasTreasuryAdminRole || permissions.hasCartonAdminRole,
+      },
+      {
         label: 'Treasury external funding',
         detail: 'approve USDC and deposit external funds before sales close',
         required: 'Treasury.FUND_DEPOSITOR_ROLE',
@@ -2457,6 +2717,7 @@ export function AdminPage() {
       {activeSection === 'winners' && <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />}
       {activeSection === 'positions' && <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />}
       {activeSection === 'roles' && <MinterRoleSection permissions={permissions} />}
+      {activeSection === 'tokens' && <TokenSupportSection permissions={permissions} />}
       {activeSection === 'funding' && <TreasuryFundingSection permissions={permissions} />}
       {activeSection === 'lifecycle' && <CloseTournamentSection permissions={permissions} />}
     </div>

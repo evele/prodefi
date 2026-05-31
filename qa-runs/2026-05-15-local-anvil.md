@@ -148,7 +148,7 @@ Before you start this block:
 | ID | Check | Evidence | Result | Notes |
 |---|---|---|---|---|
 | 1.1 | `forge test` passes from repo root | | PASS  |  |
-| 1.2 | `frontend/npm run build` passes | | PASS |  |
+| 1.2 | `frontend/pnpm build` passes | | PASS |  |
 | 1.3 | `admin/pnpm build` passes | | PASS |  |
 | 1.4 | `Predictions.owner()` wallet is identified | | PASS |  |
 | 1.5 | `Treasury.DEFAULT_ADMIN_ROLE` wallet is identified | | PASS  |  |

@@ -28,6 +28,7 @@ contract ERC20IntegrationTest is Test {
 
         // Setup Carton
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(usdc), true);
         carton.setActiveTournament(TOURNAMENT_ID);
         carton.setAcceptedToken(address(usdc), true);
         carton.setTokenPrice(TOURNAMENT_ID, address(usdc), 100 * 10 ** 6); // 100 USDC

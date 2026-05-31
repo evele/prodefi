@@ -17,6 +17,50 @@ contract MockCompetitionEngine {
     }
 }
 
+contract ReentrantPrizeClaimer {
+    Treasury public immutable treasury;
+    uint256 public tournamentId;
+    uint256 public tokenId;
+    bool public reentryAttempted;
+    bool public reentryBlocked;
+
+    constructor(Treasury treasury_) {
+        treasury = treasury_;
+    }
+
+    function attack(uint256 tournamentId_, uint256 tokenId_) external {
+        tournamentId = tournamentId_;
+        tokenId = tokenId_;
+        treasury.claimPrize(tournamentId_, tokenId_, address(0));
+    }
+
+    receive() external payable {
+        if (reentryAttempted) return;
+        reentryAttempted = true;
+
+        try treasury.claimPrize(tournamentId, tokenId, address(0)) { }
+        catch {
+            reentryBlocked = true;
+        }
+    }
+
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        return this.onERC1155BatchReceived.selector;
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == 0x01ffc9a7 || interfaceId == 0x4e2312e0;
+    }
+}
+
 /// @title Treasury Contract Test Suite
 /// @notice Comprehensive tests for Treasury prize pool management
 contract TreasuryTest is BaseTest {
@@ -68,6 +112,7 @@ contract TreasuryTest is BaseTest {
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(USDC), true);
         treasury.registerTournament(TOURNAMENT_ID_1, address(predictions));
         treasury.registerTournament(TOURNAMENT_ID_2, address(tournament2Engine));
         vm.stopPrank();
@@ -457,6 +502,18 @@ contract TreasuryTest is BaseTest {
         treasury.setPrizeDistribution(TOURNAMENT_ID_1, ETH_TOKEN, empty);
     }
 
+    function test_SetPrizeDistribution_RevertUnsupportedPrizeToken() public {
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+
+        _closeSalesIfOpen(TOURNAMENT_ID_1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.UnsupportedPrizeToken.selector);
+        treasury.setPrizeDistribution(TOURNAMENT_ID_1, address(unsupportedToken), percentages);
+    }
+
     // ========== CLAIM PRIZE TESTS ==========
 
     function test_ClaimPrize_Success() public {
@@ -517,6 +574,25 @@ contract TreasuryTest is BaseTest {
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
+    }
+
+    function test_ClaimPrize_BlocksEthReentrancy() public {
+        _logTestInfo("ClaimPrize Blocks ETH Reentrancy");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        ReentrantPrizeClaimer attacker = new ReentrantPrizeClaimer(treasury);
+        vm.prank(user1);
+        carton.safeTransferFrom(user1, address(attacker), TOKEN_ID_1, 1, "");
+
+        uint256 expectedPrize = (_prizeableAmount(INITIAL_DEPOSIT) * 50) / 100;
+
+        attacker.attack(TOURNAMENT_ID_1, TOKEN_ID_1);
+
+        assertTrue(attacker.reentryAttempted());
+        assertTrue(attacker.reentryBlocked());
+        assertEq(address(attacker).balance, expectedPrize);
+        assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN));
     }
 
     function test_ClaimPrize_MultipleUsersCanClaim() public {
@@ -958,6 +1034,20 @@ contract TreasuryTest is BaseTest {
 
         vm.prank(fundDepositor);
         treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), 0);
+    }
+
+    function test_DepositFromSalesERC20_RevertUnsupportedPrizeToken() public {
+        _logTestInfo("DepositFromSalesERC20 Revert Unsupported Prize Token");
+
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+        uint256 depositAmount = 1000 * 10 ** 6;
+        unsupportedToken.mint(fundDepositor, depositAmount);
+
+        vm.startPrank(fundDepositor);
+        unsupportedToken.approve(address(treasury), depositAmount);
+        vm.expectRevert(Treasury.UnsupportedPrizeToken.selector);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(unsupportedToken), depositAmount);
+        vm.stopPrank();
     }
 
     function test_DepositFromSalesERC20_OnlyFundDepositorRole() public {

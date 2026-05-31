@@ -14,6 +14,7 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 interface ITreasury {
     function depositFromSales(uint256 tournamentId) external payable;
     function depositFromSalesERC20(uint256 tournamentId, address token, uint256 amount) external;
+    function isSupportedPrizeToken(address token) external view returns (bool);
     function salesClosed(uint256 tournamentId) external view returns (bool);
     function isTournamentRegistered(uint256 tournamentId) external view returns (bool);
 }
@@ -34,8 +35,11 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     error NoTokensToWithdraw();
     error ZeroTreasuryAddress();
     error ZeroTournamentId();
+    error ZeroTokenAddress();
+    error CartonAmountMustBeOne();
     error TournamentSalesClosed();
     error TournamentNotRegistered();
+    error UnsupportedPrizeToken();
 
     bytes32 public constant URI_SETTER_ROLE = keccak256("URI_SETTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -62,6 +66,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         address indexed buyer, uint256 indexed tokenId, address indexed token, uint256 price
     );
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+    event AcceptedTokenSet(address indexed token, bool accepted);
 
     constructor(address defaultAdmin, address pauser, address minter) ERC1155("") {
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
@@ -91,6 +96,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         returns (uint256)
     {
         _validateTournamentSelection(tournamentId);
+        if (amount != 1) revert CartonAmountMustBeOne();
 
         uint256 tokenId = _nextTokenId++;
         tokenTournamentId[tokenId] = tournamentId;
@@ -115,6 +121,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
         uint256[] memory ids = new uint256[](amounts.length);
         for (uint256 i = 0; i < amounts.length; i++) {
+            if (amounts[i] != 1) revert CartonAmountMustBeOne();
             ids[i] = _nextTokenId++;
             tokenTournamentId[ids[i]] = tournamentId;
         }
@@ -142,8 +149,9 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         if (amount == 0) revert TokenPriceNotSet();
 
         ITreasury _treasury = treasury;
-        if (address(_treasury) != address(0) && _treasury.salesClosed(tournamentId)) {
-            revert TournamentSalesClosed();
+        if (address(_treasury) != address(0)) {
+            if (!_treasury.isSupportedPrizeToken(token)) revert UnsupportedPrizeToken();
+            if (_treasury.salesClosed(tournamentId)) revert TournamentSalesClosed();
         }
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
@@ -162,7 +170,15 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function setAcceptedToken(address token, bool accepted) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (token == address(0)) revert ZeroTokenAddress();
+
+        ITreasury _treasury = treasury;
+        if (accepted && address(_treasury) != address(0) && !_treasury.isSupportedPrizeToken(token)) {
+            revert UnsupportedPrizeToken();
+        }
+
         acceptedTokens[token] = accepted;
+        emit AcceptedTokenSet(token, accepted);
     }
 
     function setTokenPrice(address token, uint256 price) external onlyRole(DEFAULT_ADMIN_ROLE) {

@@ -6,13 +6,10 @@
   "packageManager": "pnpm@11.1.2",
   "scripts": {
     "dev": "vite",
+    "dev:openfort": "vite --mode openfort",
     "build": "tsc -b && vite build",
+    "build:openfort": "tsc -b && vite build --mode openfort",
     "preview": "vite preview"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.3",

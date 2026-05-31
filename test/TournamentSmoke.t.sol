@@ -35,6 +35,7 @@ contract TournamentSmokeTest is BaseTest {
         usdc = new MockERC20("USDC", "USDC", 6);
 
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(usdc), true);
         carton.setAcceptedToken(address(usdc), true);
         carton.setTokenPrice(TOURNAMENT_ID, address(usdc), CARTON_PRICE_USDC);
 

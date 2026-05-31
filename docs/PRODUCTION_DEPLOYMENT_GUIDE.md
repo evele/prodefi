@@ -257,7 +257,7 @@ VITE_OPENFORT_ETHEREUM_FEE_SPONSORSHIP_ID=pol_...   # si usás sponsorship
 
 ```bash
 cd frontend
-npm run build:openfort     # o el script que uses para prod
+pnpm build:openfort     # o el script que uses para prod
 ```
 
 Verificá que `dist/` tenga `index.html` y los chunks de Vite.

@@ -42,6 +42,7 @@ contract Predictions is Ownable {
     error DuplicateTeamId();
     error InvalidTeamId();
     error OfficialWinnersAlreadySet();
+    error OfficialWinnersLocked();
     error OfficialWinnersNotSet();
     error NoPredictionForToken();
     error NoPredictionsSubmitted();
@@ -92,6 +93,7 @@ contract Predictions is Ownable {
 
     // Event for when official winners are set
     event OfficialWinnersSet(uint8[4] teams);
+    event OfficialWinnersUpdated(uint8[4] oldTeams, uint8[4] newTeams);
 
     // Structure to store winner predictions
     struct WinnersPrediction {
@@ -575,9 +577,29 @@ contract Predictions is Ownable {
 
     // Function to set official winners (only for owner)
     function setOfficialWinners(uint8[4] calldata teams) external onlyOwner {
-        // NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.
         if (officialWinners.set) revert OfficialWinnersAlreadySet();
 
+        _validateOfficialWinners(teams);
+
+        officialWinners = OfficialWinners({ teams: teams, set: true });
+
+        emit OfficialWinnersSet(teams);
+    }
+
+    function updateOfficialWinners(uint8[4] calldata teams) external onlyOwner {
+        if (!officialWinners.set) revert OfficialWinnersNotSet();
+        _revertIfTournamentClosedForCorrections();
+        _revertIfOfficialWinnersLocked();
+
+        uint8[4] memory previousTeams = officialWinners.teams;
+        _validateOfficialWinners(teams);
+
+        officialWinners = OfficialWinners({ teams: teams, set: true });
+
+        emit OfficialWinnersUpdated(previousTeams, teams);
+    }
+
+    function _validateOfficialWinners(uint8[4] calldata teams) internal pure {
         // Validate that team IDs are valid and there are no duplicates
         for (uint256 i = 0; i < MAX_WINNERS; i++) {
             if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
@@ -585,10 +607,10 @@ contract Predictions is Ownable {
                 if (teams[i] == teams[j]) revert DuplicateTeamId();
             }
         }
+    }
 
-        officialWinners = OfficialWinners({ teams: teams, set: true });
-
-        emit OfficialWinnersSet(teams);
+    function _revertIfOfficialWinnersLocked() internal view {
+        if (positionsUpdateInProgress || positionsVersion > 0) revert OfficialWinnersLocked();
     }
 
     // Function to calculate winner points

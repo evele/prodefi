@@ -1099,6 +1099,99 @@ contract PredictionsTest is Test {
         assertEq(teams[3], 48);
     }
 
+    function testUpdateOfficialWinners_Success() public setup {
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        vm.prank(user);
+        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+
+        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63);
+
+        preds.updateOfficialWinners([1, 3, 2, 4]);
+
+        (uint8[4] memory teams, bool isSet) = preds.getOfficialWinners();
+        assertTrue(isSet);
+        assertEq(teams[0], 1);
+        assertEq(teams[1], 3);
+        assertEq(teams[2], 2);
+        assertEq(teams[3], 4);
+        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 35);
+    }
+
+    function testUpdateOfficialWinners_RevertWhenNotSet() public {
+        vm.expectRevert(Predictions.OfficialWinnersNotSet.selector);
+        preds.updateOfficialWinners([1, 2, 3, 4]);
+    }
+
+    function testUpdateOfficialWinners_RevertInvalidTeamId() public {
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        vm.expectRevert(Predictions.InvalidTeamId.selector);
+        preds.updateOfficialWinners([0, 2, 3, 4]);
+    }
+
+    function testUpdateOfficialWinners_RevertWhenPositionsAlreadyPublished() public {
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = TOKEN_ID;
+        uint256[] memory points = new uint256[](1);
+        points[0] = 100;
+        preds.setPositions(ids, points);
+
+        vm.expectRevert(Predictions.OfficialWinnersLocked.selector);
+        preds.updateOfficialWinners([1, 3, 2, 4]);
+    }
+
+    function testUpdateOfficialWinners_RevertWhenPositionsUpdateInProgress() public {
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user2, tokenId2);
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        preds.beginPositionsUpdate(2);
+
+        vm.expectRevert(Predictions.OfficialWinnersLocked.selector);
+        preds.updateOfficialWinners([1, 3, 2, 4]);
+    }
+
+    function testUpdateOfficialWinners_RevertsWhenTournamentClosed() public {
+        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(preds));
+
+        treasury.depositFromSales{ value: 1 ether }(1);
+        treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        treasury.closeSales(1);
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        treasury.setPrizeDistribution(1, address(0), percentages);
+        preds.setResults(1, 2, 1);
+        preds.setResults(2, 1, 1);
+        preds.setResults(3, 0, 2);
+        preds.setResults(4, 3, 0);
+        preds.setOfficialWinners([uint8(1), uint8(2), uint8(3), uint8(4)]);
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = TOKEN_ID;
+        uint256[] memory points = new uint256[](1);
+        points[0] = 100;
+        preds.setPositions(tokenIds, points);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = treasury.getPrizePool(1, address(0));
+        treasury.setFinalPrizeAmounts(1, address(0), tokenIds, amounts);
+        treasury.sealFinalPrizeAmounts(1, address(0));
+
+        treasury.finalizeTournament(1);
+
+        cart.setActiveTournament(2);
+
+        vm.expectRevert(Predictions.TournamentClosedForCorrections.selector);
+        preds.updateOfficialWinners([1, 3, 2, 4]);
+    }
+
     function testGetGameResults_GameIdZero() public {
         vm.expectRevert(Predictions.InvalidGameId.selector);
         preds.getGameResults(0);

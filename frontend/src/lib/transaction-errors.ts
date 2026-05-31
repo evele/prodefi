@@ -105,6 +105,10 @@ export function mapBuyCartonError(error: unknown): string {
     return 'USDC is not accepted right now.'
   }
 
+  if (includesAny(message, ['unsupportedprizetoken', 'unsupported prize token'])) {
+    return 'This token is not supported by Treasury.'
+  }
+
   if (includesAny(message, ['tournamentsalesclosed', 'salesalreadyclosed', 'sales already closed'])) {
     return 'Carton sales are already closed for this tournament.'
   }
@@ -394,6 +398,12 @@ export function mapAdminError(error: unknown): string {
   }
   if (includesAny(message, ['insufficientglobalreserve', 'insufficient global reserve'])) {
     return 'Global reserve does not have enough balance for this action.'
+  }
+  if (includesAny(message, ['unsupportedprizetoken', 'unsupported prize token'])) {
+    return 'Treasury only supports manually reviewed standard ERC20 tokens.'
+  }
+  if (includesAny(message, ['zerotokenaddress', 'zero token address'])) {
+    return 'Enter a valid non-zero token address.'
   }
 
   return 'Admin action failed. Review the inputs and try again.'

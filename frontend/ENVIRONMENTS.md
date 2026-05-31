@@ -7,12 +7,12 @@ El frontend ahora puede correrse con dos modos de Vite sin tocar el codigo:
 
 ## Scripts
 
-- `npm run dev:legacy`
-- `npm run dev:openfort`
-- `npm run build:legacy`
-- `npm run build:openfort`
+- `pnpm dev:legacy`
+- `pnpm dev:openfort`
+- `pnpm build:legacy`
+- `pnpm build:openfort`
 
-`npm run dev` y `npm run build` siguen funcionando como antes usando el modo default de Vite.
+`pnpm dev` y `pnpm build` siguen funcionando como antes usando el modo default de Vite.
 
 ## Archivos de entorno por modo
 

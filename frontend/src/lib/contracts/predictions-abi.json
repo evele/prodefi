@@ -305,6 +305,24 @@
   },
   {
     "type": "function",
+    "name": "getOfficialWinners",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "set",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPrediction",
     "inputs": [
       {
@@ -384,24 +402,6 @@
     "name": "officialWinners",
     "inputs": [],
     "outputs": [
-      {
-        "name": "set",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getOfficialWinners",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      },
       {
         "name": "set",
         "type": "bool",
@@ -966,6 +966,19 @@
   },
   {
     "type": "function",
+    "name": "updateOfficialWinners",
+    "inputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "updateResults",
     "inputs": [
       {
@@ -1044,6 +1057,25 @@
     "inputs": [
       {
         "name": "teams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OfficialWinnersUpdated",
+    "inputs": [
+      {
+        "name": "oldTeams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "newTeams",
         "type": "uint8[4]",
         "indexed": false,
         "internalType": "uint8[4]"
@@ -1439,6 +1471,11 @@
   {
     "type": "error",
     "name": "OfficialWinnersAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OfficialWinnersLocked",
     "inputs": []
   },
   {

@@ -936,6 +936,25 @@
   },
   {
     "type": "event",
+    "name": "AcceptedTokenSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "accepted",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ApprovalForAll",
     "inputs": [
       {
@@ -1251,6 +1270,11 @@
   },
   {
     "type": "error",
+    "name": "CartonAmountMustBeOne",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ERC1155InsufficientBalance",
     "inputs": [
       {
@@ -1434,7 +1458,17 @@
   },
   {
     "type": "error",
+    "name": "UnsupportedPrizeToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "WithdrawFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroTokenAddress",
     "inputs": []
   },
   {

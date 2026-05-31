@@ -24,13 +24,14 @@ contract CartonTest is BaseTest {
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(deployedTreasury));
+        deployedTreasury.setSupportedPrizeToken(address(USDC), true);
         deployedTreasury.registerTournament(tournamentId, engine);
         vm.stopPrank();
     }
 
     function testMintBatchAndSupply() public {
         uint256[] memory ids = _createUint256Array(1, 2, 0);
-        uint256[] memory amounts = _createUint256Array(3, 5, 0);
+        uint256[] memory amounts = _createUint256Array(1, 1, 0);
 
         // Resize arrays to 2 elements
         assembly {
@@ -40,8 +41,8 @@ contract CartonTest is BaseTest {
 
         _mintBatchCartons(user, ids, amounts);
 
-        assertEq(carton.totalSupply(1), 3, "ID=1 supply should be 3");
-        assertEq(carton.balanceOf(user, 2), 5, "user balance for ID=2 should be 5");
+        assertEq(carton.totalSupply(1), 1, "ID=1 supply should be 1");
+        assertEq(carton.balanceOf(user, 2), 1, "user balance for ID=2 should be 1");
     }
 
     function testPausePreventsTransfers() public {
@@ -57,12 +58,36 @@ contract CartonTest is BaseTest {
 
     function testBurn() public {
         vm.prank(minter);
-        uint256 tokenId = carton.mint(user, 2, "");
+        uint256 tokenId = carton.mint(user, 1, "");
 
         vm.prank(user);
-        carton.burn(user, tokenId, 2);
+        carton.burn(user, tokenId, 1);
 
         assertEq(carton.totalSupply(tokenId), 0, "supply after burn should be 0");
+    }
+
+    function testMint_RevertAmountNotOne() public {
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mint(user, 2, "");
+    }
+
+    function testMintBatch_RevertAmountNotOne() public {
+        uint256[] memory amounts = _createUint256Array(1, 2, 0);
+
+        assembly {
+            mstore(amounts, 2)
+        }
+
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mintBatch(user, amounts, "");
+    }
+
+    function testMintForTournament_RevertAmountNotOne() public {
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mintForTournament(user, 1, 2, "");
     }
 
     // Access Control Tests
@@ -426,6 +451,15 @@ contract CartonTest is BaseTest {
         vm.stopPrank();
     }
 
+    function testSetAcceptedToken_RevertsForUnsupportedTreasuryToken() public {
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.UnsupportedPrizeToken.selector);
+        carton.setAcceptedToken(address(unsupportedToken), true);
+    }
+
     function testBuyCartonWithoutTreasuryConfiguredStillReverts() public {
         vm.deal(user, 1 ether);
         vm.prank(user);
@@ -482,11 +516,34 @@ contract CartonTest is BaseTest {
         assertEq(treasury.globalReserve(address(USDC)), 100000);
     }
 
+    function testBuyCartonWithToken_RevalidatesSupportedTokenInTreasury() public {
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(unsupportedToken), true);
+        carton.setTokenPrice(address(unsupportedToken), 1000000);
+        treasury = new Treasury(admin, address(carton), 500);
+        carton.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(predictions));
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        carton.setActiveTournament(1);
+        vm.stopPrank();
+
+        unsupportedToken.mint(user, 1000000);
+
+        vm.startPrank(user);
+        unsupportedToken.approve(address(carton), 1000000);
+        vm.expectRevert(Carton.UnsupportedPrizeToken.selector);
+        carton.buyCartonWithToken(address(unsupportedToken));
+        vm.stopPrank();
+    }
+
     function testBuyCartonWithToken_RevertsForUnregisteredTournament() public {
         treasury = new Treasury(admin, address(carton), 500);
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(USDC), true);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(2, address(USDC), 1000000);
         vm.stopPrank();

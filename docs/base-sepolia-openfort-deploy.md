@@ -77,7 +77,7 @@ This script will:
 2. Configure treasury integration and tournament `1`
 3. Export fresh ABI artifacts to the frontend
 4. Create or update `frontend/.env.openfort.local`
-5. Create or update `admin/.env.local`
+5. Create or update `admin/.env.openfort.local`
 
 ## Frontend Environment
 
@@ -98,7 +98,7 @@ The deploy script preserves existing values for those keys if the file already e
 The deploy script now writes:
 
 ```bash
-admin/.env.local
+admin/.env.openfort.local
 ```
 
 That file is enough to run the admin panel against the same Base Sepolia deployment.
@@ -109,7 +109,7 @@ Start the frontend in Openfort mode:
 
 ```bash
 cd frontend
-npm run dev:openfort
+pnpm dev:openfort
 ```
 
 This uses `frontend/.env.openfort.local` plus the versioned Openfort environment files already in the repo.
@@ -118,10 +118,10 @@ Start the admin panel separately with:
 
 ```bash
 cd admin
-pnpm dev
+pnpm dev:openfort
 ```
 
-The admin app will read `admin/.env.local` and connect to Base Sepolia through an injected wallet.
+The admin app will read `admin/.env.openfort.local` and connect to Base Sepolia through an injected wallet.
 
 ## Fund Test Wallets
 
@@ -150,7 +150,7 @@ If you deploy with `PRIVATE_KEY` instead of `FOUNDRY_ACCOUNT`, replace the signe
 
 Recommended validation sequence:
 
-1. Start `frontend` with `npm run dev:openfort`
+1. Start `frontend` with `pnpm dev:openfort`
 2. Connect with Openfort
 3. Confirm the embedded wallet is created on Base Sepolia
 4. Send test ETH to the wallet

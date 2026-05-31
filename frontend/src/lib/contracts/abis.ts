@@ -940,6 +940,25 @@ export const CARTON_ABI = [
   },
   {
     "type": "event",
+    "name": "AcceptedTokenSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "accepted",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ApprovalForAll",
     "inputs": [
       {
@@ -1255,6 +1274,11 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
+    "name": "CartonAmountMustBeOne",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ERC1155InsufficientBalance",
     "inputs": [
       {
@@ -1438,7 +1462,17 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
+    "name": "UnsupportedPrizeToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "WithdrawFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroTokenAddress",
     "inputs": []
   },
   {
@@ -1760,6 +1794,24 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "getOfficialWinners",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "set",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPrediction",
     "inputs": [
       {
@@ -1839,24 +1891,6 @@ export const PREDICTIONS_ABI = [
     "name": "officialWinners",
     "inputs": [],
     "outputs": [
-      {
-        "name": "set",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getOfficialWinners",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      },
       {
         "name": "set",
         "type": "bool",
@@ -2421,6 +2455,19 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "updateOfficialWinners",
+    "inputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "updateResults",
     "inputs": [
       {
@@ -2499,6 +2546,25 @@ export const PREDICTIONS_ABI = [
     "inputs": [
       {
         "name": "teams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OfficialWinnersUpdated",
+    "inputs": [
+      {
+        "name": "oldTeams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "newTeams",
         "type": "uint8[4]",
         "indexed": false,
         "internalType": "uint8[4]"
@@ -2894,6 +2960,11 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "OfficialWinnersAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OfficialWinnersLocked",
     "inputs": []
   },
   {
@@ -3612,6 +3683,25 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "isSupportedPrizeToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isTournamentClosedAnyAsset",
     "inputs": [
       {
@@ -3926,6 +4016,43 @@ export const TREASURY_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSupportedPrizeToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "supported",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "supportedPrizeTokens",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -4254,6 +4381,25 @@ export const TREASURY_ABI = [
   },
   {
     "type": "event",
+    "name": "SupportedPrizeTokenSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "supported",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TournamentClosed",
     "inputs": [
       {
@@ -4432,6 +4578,11 @@ export const TREASURY_ABI = [
   },
   {
     "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -4483,12 +4634,22 @@ export const TREASURY_ABI = [
   },
   {
     "type": "error",
+    "name": "UnsupportedPrizeToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "UseDepositForETH",
     "inputs": []
   },
   {
     "type": "error",
     "name": "ZeroAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroTokenAddress",
     "inputs": []
   }
 ] as const satisfies Abi

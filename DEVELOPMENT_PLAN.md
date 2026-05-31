@@ -36,11 +36,11 @@ For project overview and stable architecture notes, see README.md.
 | Leaderboard | `/leaderboard` | Done — real on-chain data |
 | Claim prizes | `/predictions` | Done — ClaimSection per carton |
 | Official fixture schedule + grouping modes | `/fixtures` | Done |
-| Admin: set results | `/admin/dev` | Done |
-| Admin: set official winners | `/admin/dev` | Done |
-| Admin: set positions | `/admin/dev` | Done |
-| Admin: close tournament | `/admin/dev` | Done |
-| Admin: set teams hash/deadline | `/admin/dev` | Done |
+| Admin: set results | `admin/` | Done |
+| Admin: set official winners | `admin/` | Done |
+| Admin: set positions | `admin/` | Done |
+| Admin: close tournament | `admin/` | Done |
+| Admin: set teams hash/deadline | `admin/` | Done |
 
 ### Payment / Minting Flow (Canonical Product Direction)
 
@@ -235,7 +235,7 @@ Tomorrow's priorities:
 Admin follow-up to resume:
 
 1. `Predictions.officialWinners` does not expose the 4 winner team ids through the current ABI used by the admin; the getter available to the frontend/admin only exposes the `set` flag.
-2. Because of that, `/admin/dev` currently cannot reliably render the already-set winners list by just calling `officialWinners()`.
+2. Because of that, the `admin/` app currently cannot reliably render the already-set winners list by just calling `officialWinners()`.
 3. Tomorrow decide between:
    - reading the latest `OfficialWinnersSet(uint8[4])` event from the admin without touching contracts, or
    - adding an explicit view getter in `Predictions` that returns the 4 teams and updating the ABI after a future contract change.
@@ -243,8 +243,8 @@ Admin follow-up to resume:
 
 Verification for the next frontend pass:
 
-- `cd frontend && npm run lint`
-- `cd frontend && npm run build`
+- `cd frontend && pnpm lint`
+- `cd frontend && pnpm build`
 
 ---
 
@@ -267,7 +267,7 @@ The complete tournament flow is:
 #### ~~1. Fix contract bugs~~ DONE (Feb 14)
 - All array sizes, team ID validation, dead code (picks, Game struct, MAX_INT, teamGroup system, Counter) cleaned up
 - `teamsHash` consolidated to anchor id+name+groupId; frontend uses single hash verification
-- **Note**: After redeploying contracts, admin must `setTeamsHash` with the consolidated hash via `/admin/dev`
+- **Note**: After redeploying contracts, admin must `setTeamsHash` with the consolidated hash via the `admin/` app.
 
 #### ~~2. Wire winner predictions submit (Small)~~ DONE
 - ~~Connect `predictWinners(tokenId, uint8[4])` to the existing TeamWinnerSelector UI~~
