@@ -400,7 +400,9 @@ contract Predictions is Ownable {
     }
 
     function isTokenInCurrentLeaderboard(uint256 tokenId) external view returns (bool) {
-        return _hasCurrentLeaderboard() && tokenPositionsVersion[tokenId] == positionsVersion && tokenPositions[tokenId] != 0;
+        return
+            _hasCurrentLeaderboard() && tokenPositionsVersion[tokenId] == positionsVersion
+                && tokenPositions[tokenId] != 0;
     }
 
     function isReadyForFinalization() external view returns (bool) {
@@ -786,5 +788,4 @@ contract Predictions is Ownable {
 
         return gamePoints + winnerPoints;
     }
-
 }

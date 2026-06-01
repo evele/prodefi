@@ -240,9 +240,8 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
         if (treasuryAddress.code.length == 0) revert TreasuryAddressNotContract();
 
-        (bool ok, bytes memory data) = treasuryAddress.staticcall(
-            abi.encodeWithSelector(ITreasury.isTournamentRegistered.selector, 0)
-        );
+        (bool ok, bytes memory data) =
+            treasuryAddress.staticcall(abi.encodeWithSelector(ITreasury.isTournamentRegistered.selector, 0));
         if (!ok || data.length != 32) revert InvalidTreasuryContract();
 
         address previousTreasury = address(treasury);

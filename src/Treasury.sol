@@ -120,9 +120,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event ReserveSeeded(uint256 indexed tournamentId, address indexed token, uint256 amount);
     event SupportedPrizeTokenSet(address indexed token, bool supported);
     event PrizeDistributionRemoved(uint256 indexed tournamentId, address indexed token);
-    event CompetitionEngineChanged(
-        uint256 indexed tournamentId, address indexed oldEngine, address indexed newEngine
-    );
+    event CompetitionEngineChanged(uint256 indexed tournamentId, address indexed oldEngine, address indexed newEngine);
 
     constructor(address defaultAdmin, address cartonAddress, uint16 reserveBps_) {
         if (reserveBps_ >= BPS_DENOMINATOR) revert InvalidReserveBps();

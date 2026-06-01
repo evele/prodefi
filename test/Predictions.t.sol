@@ -431,7 +431,6 @@ contract PredictionsTest is Test {
 
         // Verificar que las posiciones se establecieron correctamente
         assertEq(preds.getCartonPosition(TOKEN_ID), 1);
-
     }
 
     function testMatchPointsClampAtZeroAndKeepOutcomeBonus() public {
@@ -522,7 +521,6 @@ contract PredictionsTest is Test {
         preds.setResults(4, 2, 2); // 10 puntos
 
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
-
     }
 
     function testSetPositions() public {

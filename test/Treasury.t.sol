@@ -1015,8 +1015,7 @@ contract TreasuryTest is BaseTest {
 
         assertTrue(treasury.tournamentFinalized(TOURNAMENT_ID_1));
         assertEq(
-            treasury.finalPrizeAmountsSealedRevision(TOURNAMENT_ID_1, ETH_TOKEN),
-            predictions.competitionStateRevision()
+            treasury.finalPrizeAmountsSealedRevision(TOURNAMENT_ID_1, ETH_TOKEN), predictions.competitionStateRevision()
         );
     }
 
