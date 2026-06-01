@@ -7,13 +7,27 @@ import "./mocks/MockERC20.sol";
 
 contract MockCompetitionEngine {
     bool public ready;
+    uint256 public competitionStateRevision;
+    mapping(uint256 => bool) public tokenInCurrentLeaderboard;
 
     function setReady(bool newReady) external {
         ready = newReady;
     }
 
+    function setCompetitionStateRevision(uint256 newRevision) external {
+        competitionStateRevision = newRevision;
+    }
+
+    function setTokenInCurrentLeaderboard(uint256 tokenId, bool allowed) external {
+        tokenInCurrentLeaderboard[tokenId] = allowed;
+    }
+
     function isReadyForFinalization() external view returns (bool) {
         return ready;
+    }
+
+    function isTokenInCurrentLeaderboard(uint256 tokenId) external view returns (bool) {
+        return tokenInCurrentLeaderboard[tokenId];
     }
 }
 
@@ -719,10 +733,12 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN), sharedFirstPlaceShare);
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_2, ETH_TOKEN), sharedFirstPlaceShare);
         assertEq(treasury.getClaimablePrizeAmount(TOURNAMENT_ID_1, TOKEN_ID_3, ETH_TOKEN), thirdPlacePrize);
-        assertEq(treasury.globalReserve(ETH_TOKEN), expectedReserveAfterSeal);
+        assertEq(treasury.globalReserve(ETH_TOKEN), _reserveAmount(INITIAL_DEPOSIT));
 
         vm.prank(tournamentManager);
         treasury.finalizeTournament(TOURNAMENT_ID_1);
+
+        assertEq(treasury.globalReserve(ETH_TOKEN), expectedReserveAfterSeal);
 
         uint256 user1InitialBalance = user1.balance;
         uint256 user2InitialBalance = user2.balance;
@@ -807,6 +823,8 @@ contract TreasuryTest is BaseTest {
         amounts[0] = (tournament2Pool * 80) / 100;
         amounts[1] = (tournament2Pool * 20) / 100;
 
+        tournament2Engine.setTokenInCurrentLeaderboard(tournament2Token1, true);
+        tournament2Engine.setTokenInCurrentLeaderboard(tournament2Token2, true);
         tournament2Engine.setReady(true);
 
         _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
@@ -846,6 +864,7 @@ contract TreasuryTest is BaseTest {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
 
+        tournament2Engine.setTokenInCurrentLeaderboard(tournament2TokenId, true);
         tournament2Engine.setReady(true);
         _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
@@ -869,12 +888,136 @@ contract TreasuryTest is BaseTest {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
 
+        tournament2Engine.setTokenInCurrentLeaderboard(tournament2TokenId, true);
         vm.prank(admin);
         treasury.setFinalPrizeAmounts(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
         vm.prank(admin);
         vm.expectRevert(Treasury.TournamentNotReadyForFinalization.selector);
         treasury.sealFinalPrizeAmounts(TOURNAMENT_ID_2, ETH_TOKEN);
+    }
+
+    function test_SealFinalPrizeAmounts_RevertsWhenDraftRevisionIsStale() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+
+        uint256 prizePool = treasury.getPrizePool(TOURNAMENT_ID_1, ETH_TOKEN);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = TOKEN_ID_1;
+        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[2] = TOKEN_ID_3;
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = (prizePool * 50) / 100;
+        amounts[1] = (prizePool * 30) / 100;
+        amounts[2] = (prizePool * 15) / 100;
+
+        vm.prank(admin);
+        treasury.setFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN, tokenIds, amounts);
+
+        vm.prank(admin);
+        predictions.updateResults(1, 0, 0);
+
+        uint256[] memory points = new uint256[](3);
+        points[0] = 100;
+        points[1] = 90;
+        points[2] = 80;
+        vm.prank(admin);
+        predictions.setPositions(tokenIds, points);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.CompetitionStateRevisionMismatch.selector);
+        treasury.sealFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+    }
+
+    function test_SetFinalPrizeAmounts_RevertsForTokenNotInLeaderboard() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+
+        uint256 extraTokenId = _mintTournamentToken(user4, TOURNAMENT_ID_1);
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = extraTokenId;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.TokenNotInCurrentLeaderboard.selector);
+        treasury.setFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN, tokenIds, amounts);
+    }
+
+    function test_SetFinalPrizeAmounts_RevertsWhenLeaderboardIsStale() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+
+        vm.prank(admin);
+        predictions.updateResults(1, 0, 0);
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = TOKEN_ID_1;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.TokenNotInCurrentLeaderboard.selector);
+        treasury.setFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN, tokenIds, amounts);
+    }
+
+    function test_FinalizeTournament_RevertsWhenSealedRevisionIsStale() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        vm.prank(admin);
+        predictions.updateResults(1, 0, 0);
+
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = TOKEN_ID_1;
+        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[2] = TOKEN_ID_3;
+        uint256[] memory points = new uint256[](3);
+        points[0] = 100;
+        points[1] = 90;
+        points[2] = 80;
+        vm.prank(admin);
+        predictions.setPositions(tokenIds, points);
+
+        vm.prank(tournamentManager);
+        vm.expectRevert(Treasury.CompetitionStateRevisionMismatch.selector);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
+    }
+
+    function test_ReopenFinalPrizeAmounts_AllowsResealAfterRevisionChange() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        vm.prank(admin);
+        predictions.updateResults(1, 0, 0);
+
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = TOKEN_ID_1;
+        tokenIds[1] = TOKEN_ID_2;
+        tokenIds[2] = TOKEN_ID_3;
+        uint256[] memory points = new uint256[](3);
+        points[0] = 100;
+        points[1] = 90;
+        points[2] = 80;
+        vm.prank(admin);
+        predictions.setPositions(tokenIds, points);
+
+        vm.prank(admin);
+        treasury.reopenFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+        assertFalse(treasury.finalPrizeAmountsReady(TOURNAMENT_ID_1, ETH_TOKEN));
+
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        vm.prank(tournamentManager);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
+
+        assertTrue(treasury.tournamentFinalized(TOURNAMENT_ID_1));
+        assertEq(
+            treasury.finalPrizeAmountsSealedRevision(TOURNAMENT_ID_1, ETH_TOKEN),
+            predictions.competitionStateRevision()
+        );
     }
 
     function test_ClaimPrize_RevertsForWrongTournamentToken() public {
@@ -954,15 +1097,13 @@ contract TreasuryTest is BaseTest {
         uint256[] memory points = new uint256[](1);
         points[0] = 100; // High points for 1st place
 
-        vm.prank(admin);
-        predictions.setPositions(tokenIds, points);
-
         vm.startPrank(admin);
         predictions.setResults(1, 2, 1);
         predictions.setResults(2, 1, 1);
         predictions.setResults(3, 0, 2);
         predictions.setResults(4, 3, 0);
         predictions.setOfficialWinners([TEAM_1, TEAM_2, TEAM_3, TEAM_4]);
+        predictions.setPositions(tokenIds, points);
         vm.stopPrank();
 
         uint8[] memory distribution = new uint8[](1);

@@ -1772,6 +1772,19 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "competitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "finalizePositionsUpdate",
     "inputs": [],
     "outputs": [],
@@ -1966,6 +1979,19 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
+    "name": "leaderboardCompetitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "officialWinners",
     "inputs": [],
     "outputs": [
@@ -1999,6 +2025,19 @@ export const PREDICTIONS_ABI = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingCompetitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -2588,6 +2627,25 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "event",
+    "name": "CompetitionStateRevisionUpdated",
+    "inputs": [
+      {
+        "name": "oldRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OfficialWinnersSet",
     "inputs": [
       {
@@ -2930,6 +2988,11 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "CompetitionStateChanged",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DeadlineMustBeFuture",
     "inputs": []
   },
@@ -2986,6 +3049,11 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "InvalidTournamentId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LeaderboardStale",
     "inputs": []
   },
   {
@@ -3291,24 +3359,6 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
-    "name": "closeTournament",
-    "inputs": [
-      {
-        "name": "tournamentId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "closedPrizePools",
     "inputs": [
       {
@@ -3441,6 +3491,30 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "finalPrizeAmountsDraftRevision",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "finalPrizeAmountsReady",
     "inputs": [
       {
@@ -3459,6 +3533,30 @@ export const TREASURY_ABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "finalPrizeAmountsSealedRevision",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -3956,6 +4054,24 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "reopenFinalPrizeAmounts",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "reserveBps",
     "inputs": [],
     "outputs": [
@@ -4285,6 +4401,25 @@ export const TREASURY_ABI = [
   },
   {
     "type": "event",
+    "name": "FinalPrizeAmountsReopened",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FinalPrizeAmountsSealed",
     "inputs": [
       {
@@ -4607,6 +4742,11 @@ export const TREASURY_ABI = [
   {
     "type": "error",
     "name": "CompetitionEngineAlreadyFrozen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CompetitionStateRevisionMismatch",
     "inputs": []
   },
   {

@@ -8,6 +8,10 @@ import "../src/Treasury.sol";
 contract NonTreasuryContract { }
 
 contract CartonTest is BaseTest {
+    event URIUpdated(string oldURI, string newURI);
+    event TokenPriceUpdated(uint256 indexed tournamentId, address indexed token, uint256 oldPrice, uint256 newPrice);
+    event ActiveTournamentChanged(uint256 indexed oldTournamentId, uint256 indexed newTournamentId);
+
     address user = address(0xBEEF);
 
     MockERC20 USDC;
@@ -154,6 +158,16 @@ contract CartonTest is BaseTest {
         carton.setURI(newURI);
     }
 
+    function testSetURI_EmitsURIUpdated() public {
+        string memory newURI = "https://newuri.com/{id}";
+
+        vm.expectEmit(false, false, false, true);
+        emit URIUpdated("", newURI);
+
+        vm.prank(uriSetter);
+        carton.setURI(newURI);
+    }
+
     function testAdminCanGrantRoles() public {
         address newMinter = address(0x1234);
         bytes32 minterRole = carton.MINTER_ROLE();
@@ -260,6 +274,20 @@ contract CartonTest is BaseTest {
         uint256 price = 1000000;
         carton.setTokenPrice(address(USDC), price);
         assertEq(carton.tokenPricesByTournament(1, address(USDC)), price);
+    }
+
+    function testSetCartonTokenPrice_EmitsTokenPriceUpdated() public {
+        uint256 initialPrice = 1000000;
+        uint256 updatedPrice = 2000000;
+
+        vm.prank(admin);
+        carton.setTokenPrice(address(USDC), initialPrice);
+
+        vm.expectEmit(true, true, false, true);
+        emit TokenPriceUpdated(1, address(USDC), initialPrice, updatedPrice);
+
+        vm.prank(admin);
+        carton.setTokenPrice(address(USDC), updatedPrice);
     }
 
     function testSetCartonTokenPrice_RevertWhenActiveTournamentNotSet() public {
@@ -395,12 +423,12 @@ contract CartonTest is BaseTest {
         assertEq(remainingTokens[0], secondTokenId, "Remaining token should stay tracked");
     }
 
-event PriceUpdated(uint256 oldPrice, uint256 newPrice);
-event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
-event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
-event RescueETHWithdrawn(address indexed recipient, uint256 amount);
-event RescueTokenWithdrawn(address indexed recipient, address indexed token, uint256 amount);
-event AcceptedTokenSet(address indexed token, bool accepted);
+    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+    event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+    event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
+    event RescueETHWithdrawn(address indexed recipient, uint256 amount);
+    event RescueTokenWithdrawn(address indexed recipient, address indexed token, uint256 amount);
+    event AcceptedTokenSet(address indexed token, bool accepted);
 
     // ========== TREASURY INTEGRATION TESTS ==========
 
@@ -449,6 +477,14 @@ event AcceptedTokenSet(address indexed token, bool accepted);
         carton.setActiveTournament(1);
 
         assertEq(carton.activeTournamentId(), 1);
+    }
+
+    function testSetActiveTournament_EmitsActiveTournamentChanged() public {
+        vm.expectEmit(true, true, false, true);
+        emit ActiveTournamentChanged(1, 7);
+
+        vm.prank(admin);
+        carton.setActiveTournament(7);
     }
 
     function testMintStoresTokenTournamentId() public {

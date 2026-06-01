@@ -69,7 +69,10 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     event CartonPurchasedWithToken(
         address indexed buyer, uint256 indexed tokenId, address indexed token, uint256 price
     );
+    event URIUpdated(string oldURI, string newURI);
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+    event TokenPriceUpdated(uint256 indexed tournamentId, address indexed token, uint256 oldPrice, uint256 newPrice);
+    event ActiveTournamentChanged(uint256 indexed oldTournamentId, uint256 indexed newTournamentId);
     event AcceptedTokenSet(address indexed token, bool accepted);
     event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
     event RescueETHWithdrawn(address indexed recipient, uint256 amount);
@@ -82,7 +85,9 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function setURI(string memory newuri) public onlyRole(URI_SETTER_ROLE) {
+        string memory oldURI = uri(0);
         _setURI(newuri);
+        emit URIUpdated(oldURI, newuri);
     }
 
     function pause() public onlyRole(PAUSER_ROLE) {
@@ -200,7 +205,9 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     function setTokenPrice(uint256 tournamentId, address token, uint256 price) public onlyRole(DEFAULT_ADMIN_ROLE) {
         if (tournamentId == 0) revert ZeroTournamentId();
         if (price == 0) revert PriceMustBePositive();
+        uint256 oldPrice = tokenPricesByTournament[tournamentId][token];
         tokenPricesByTournament[tournamentId][token] = price;
+        emit TokenPriceUpdated(tournamentId, token, oldPrice, price);
     }
 
     function tokenPrices(address token) external view returns (uint256) {
@@ -245,7 +252,9 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function setActiveTournament(uint256 tournamentId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (tournamentId == 0) revert ZeroTournamentId();
+        uint256 oldTournamentId = activeTournamentId;
         activeTournamentId = tournamentId;
+        emit ActiveTournamentChanged(oldTournamentId, tournamentId);
     }
 
     function _validateTournamentSelection(uint256 tournamentId) internal view {

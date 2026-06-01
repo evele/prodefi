@@ -152,24 +152,6 @@
   },
   {
     "type": "function",
-    "name": "closeTournament",
-    "inputs": [
-      {
-        "name": "tournamentId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "closedPrizePools",
     "inputs": [
       {
@@ -302,6 +284,30 @@
   },
   {
     "type": "function",
+    "name": "finalPrizeAmountsDraftRevision",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "finalPrizeAmountsReady",
     "inputs": [
       {
@@ -320,6 +326,30 @@
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "finalPrizeAmountsSealedRevision",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -817,6 +847,24 @@
   },
   {
     "type": "function",
+    "name": "reopenFinalPrizeAmounts",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "reserveBps",
     "inputs": [],
     "outputs": [
@@ -1146,6 +1194,25 @@
   },
   {
     "type": "event",
+    "name": "FinalPrizeAmountsReopened",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FinalPrizeAmountsSealed",
     "inputs": [
       {
@@ -1468,6 +1535,11 @@
   {
     "type": "error",
     "name": "CompetitionEngineAlreadyFrozen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CompetitionStateRevisionMismatch",
     "inputs": []
   },
   {

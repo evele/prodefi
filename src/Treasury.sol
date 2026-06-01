@@ -9,6 +9,8 @@ import { Carton } from "./Carton.sol";
 
 interface ICompetitionEngine {
     function isReadyForFinalization() external view returns (bool);
+    function competitionStateRevision() external view returns (uint256);
+    function isTokenInCurrentLeaderboard(uint256 tokenId) external view returns (bool);
 }
 
 /// @title Treasury - Centralized multi-asset fund and prize management
@@ -51,6 +53,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
     error UnsupportedPrizeToken();
     error ZeroTokenAddress();
     error PrizeDistributionRemovalNotAllowed();
+    error CompetitionStateRevisionMismatch();
+    error TokenNotInCurrentLeaderboard();
 
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
@@ -75,6 +79,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
     // Exact per-carton prizes, loaded before finalization.
     mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public finalPrizeAmounts;
     mapping(uint256 => mapping(address => uint256)) public finalPrizeAmountTotals;
+    mapping(uint256 => mapping(address => uint256)) public finalPrizeAmountsDraftRevision;
+    mapping(uint256 => mapping(address => uint256)) public finalPrizeAmountsSealedRevision;
     mapping(uint256 => mapping(address => bool)) public finalPrizeAmountsReady;
 
     // Flag of closed tournament
@@ -107,6 +113,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event FinalPrizeAmountsSealed(
         uint256 indexed tournamentId, address indexed token, uint256 totalAssigned, uint256 reserveAdded
     );
+    event FinalPrizeAmountsReopened(uint256 indexed tournamentId, address indexed token);
     event TournamentFinalized(uint256 indexed tournamentId);
     event TournamentClosed(uint256 indexed tournamentId, address indexed token, uint256 closedPrizePool);
     event TournamentRegistered(uint256 indexed tournamentId, address indexed engine);
@@ -298,6 +305,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
                 delete prizeDistributionSet[tournamentId][token];
                 delete prizePoolDistributions[tournamentId][token];
                 delete finalPrizeAmountTotals[tournamentId][token];
+                delete finalPrizeAmountsDraftRevision[tournamentId][token];
+                delete finalPrizeAmountsSealedRevision[tournamentId][token];
                 delete finalPrizeAmountsReady[tournamentId][token];
 
                 emit PrizeDistributionRemoved(tournamentId, token);
@@ -329,6 +338,9 @@ contract Treasury is AccessControl, ReentrancyGuard {
         uint256 tokenIdsLength = tokenIds.length;
         for (uint256 i; i < tokenIdsLength;) {
             if (cartonContract.tokenTournamentId(tokenIds[i]) != tournamentId) revert TokenTournamentMismatch();
+            if (amounts[i] != 0 && !_isTokenInCurrentLeaderboard(tournamentId, tokenIds[i])) {
+                revert TokenNotInCurrentLeaderboard();
+            }
 
             uint256 previousAmount = finalPrizeAmounts[tournamentId][tokenIds[i]][token];
             runningTotal = runningTotal - previousAmount + amounts[i];
@@ -341,6 +353,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
         if (runningTotal > prizePools[tournamentId][token]) revert FinalPrizeAmountsExceedPrizePool();
 
         finalPrizeAmountTotals[tournamentId][token] = runningTotal;
+        finalPrizeAmountsDraftRevision[tournamentId][token] = _competitionStateRevision(tournamentId);
         emit FinalPrizeAmountsUpdated(tournamentId, token, tokenIds, amounts);
     }
 
@@ -352,16 +365,33 @@ contract Treasury is AccessControl, ReentrancyGuard {
         if (finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsAlreadySealed();
         if (!_competitionEngineReady(tournamentId)) revert TournamentNotReadyForFinalization();
 
+        uint256 currentRevision = _competitionStateRevision(tournamentId);
+        if (finalPrizeAmountsDraftRevision[tournamentId][token] != currentRevision) {
+            revert CompetitionStateRevisionMismatch();
+        }
+
         uint256 assignedTotal = finalPrizeAmountTotals[tournamentId][token];
         uint256 prizeablePool = prizePools[tournamentId][token];
         if (assignedTotal > prizeablePool) revert FinalPrizeAmountsExceedPrizePool();
 
         uint256 reserveAddition = prizeablePool - assignedTotal;
-        globalReserve[token] += reserveAddition;
-        prizePools[tournamentId][token] = assignedTotal;
         finalPrizeAmountsReady[tournamentId][token] = true;
+        finalPrizeAmountsSealedRevision[tournamentId][token] = currentRevision;
 
         emit FinalPrizeAmountsSealed(tournamentId, token, assignedTotal, reserveAddition);
+    }
+
+    function reopenFinalPrizeAmounts(uint256 tournamentId, address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireRegisteredTournament(tournamentId);
+        if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+        if (!prizeDistributionSet[tournamentId][token]) revert NoPrizeDistribution();
+        if (!finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsNotSealed();
+
+        finalPrizeAmountsReady[tournamentId][token] = false;
+        finalPrizeAmountsDraftRevision[tournamentId][token] = 0;
+        finalPrizeAmountsSealedRevision[tournamentId][token] = 0;
+
+        emit FinalPrizeAmountsReopened(tournamentId, token);
     }
 
     // View functions
@@ -454,11 +484,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
                 if (pool == 0) revert NoPrizePool();
                 if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
                 if (!finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsNotSealed();
-
-                closedPrizePools[tournamentId][token] = pool;
-                isClosedTournament[tournamentId][token] = true;
                 closedAssets += 1;
-                emit TournamentClosed(tournamentId, token, pool);
             }
             unchecked {
                 ++i;
@@ -470,6 +496,29 @@ contract Treasury is AccessControl, ReentrancyGuard {
         address engine = competitionEngineByTournament[tournamentId];
         if (engine == address(0) || !ICompetitionEngine(engine).isReadyForFinalization()) {
             revert TournamentNotReadyForFinalization();
+        }
+        uint256 currentRevision = ICompetitionEngine(engine).competitionStateRevision();
+
+        for (uint256 i; i < tokensLength;) {
+            address token = tokens[i];
+            uint256 pool = prizePools[tournamentId][token];
+            uint256 assignedTotal = finalPrizeAmountTotals[tournamentId][token];
+            if (pool != 0 || assignedTotal != 0) {
+                if (finalPrizeAmountsSealedRevision[tournamentId][token] != currentRevision) {
+                    revert CompetitionStateRevisionMismatch();
+                }
+                if (assignedTotal > pool) revert FinalPrizeAmountsExceedPrizePool();
+
+                uint256 reserveAddition = pool - assignedTotal;
+                globalReserve[token] += reserveAddition;
+                prizePools[tournamentId][token] = assignedTotal;
+                closedPrizePools[tournamentId][token] = assignedTotal;
+                isClosedTournament[tournamentId][token] = true;
+                emit TournamentClosed(tournamentId, token, assignedTotal);
+            }
+            unchecked {
+                ++i;
+            }
         }
 
         tournamentFinalized[tournamentId] = true;
@@ -490,5 +539,17 @@ contract Treasury is AccessControl, ReentrancyGuard {
         address engine = competitionEngineByTournament[tournamentId];
         if (engine == address(0)) return false;
         return ICompetitionEngine(engine).isReadyForFinalization();
+    }
+
+    function _competitionStateRevision(uint256 tournamentId) internal view returns (uint256) {
+        address engine = competitionEngineByTournament[tournamentId];
+        if (engine == address(0)) revert InvalidCompetitionEngine();
+        return ICompetitionEngine(engine).competitionStateRevision();
+    }
+
+    function _isTokenInCurrentLeaderboard(uint256 tournamentId, uint256 tokenId) internal view returns (bool) {
+        address engine = competitionEngineByTournament[tournamentId];
+        if (engine == address(0)) return false;
+        return ICompetitionEngine(engine).isTokenInCurrentLeaderboard(tokenId);
     }
 }

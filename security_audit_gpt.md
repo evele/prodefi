@@ -36,6 +36,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### High H-3: resultados pueden cambiar después de publicar posiciones sin invalidar leaderboard/prizes
 
+- **Estado**: RESUELTO — `Predictions` ahora versiona el estado competitivo con `competitionStateRevision`. El leaderboard publicado queda anclado a esa revisión y deja de ser válido si cambian resultados o winners; `Treasury` además fija drafts/seals de premios a la misma revisión y bloquea la finalización si quedó stale.
+
 - Ubicación: `src/Predictions.sol:435-448`, `src/Predictions.sol:356-362`, `src/Treasury.sol:358-386`
 - `updateResults` permite modificar resultados mientras el torneo no esté finalizado, pero no invalida `positionsVersion`, `tokenPositions` ni `finalPrizeAmounts`.
 - Si admin carga posiciones/prizes, luego corrige un resultado, `isReadyForFinalization()` sigue devolviendo true porque sólo exige `allResultsSet`, `officialWinners.set` y `hasFinalPositions`.
@@ -45,6 +47,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. `updateResults` (líneas 435-448) modifica `games[gameId].result` directamente sin tocar `positionsVersion`, `tokenPositions`, ni notificar al Treasury sobre `finalPrizeAmounts`. `isReadyForFinalization()` (línea 360) solo combina tres flags binarios que no reflejan cambios posteriores. El único guard es `_revertIfTournamentClosedForCorrections` que mira `isTournamentClosedAnyAsset[tournamentId]`, flag que se setea en `Treasury.finalizeTournament` (Treasury línea 384) — o sea, la ventana de inconsistencia existe entre `setFinalPrizeAmounts` y `finalizeTournament`. Severidad alta sostenida. La propuesta del `resultsVersion` es la solución limpia; alternativamente, bloquear `updateResults` apenas se llame `setPositions`/`beginPositionsUpdate`.
 
 ### Medium M-1: `Treasury.setFinalPrizeAmounts` no verifica que los tokenIds estén en leaderboard
+
+- **Estado**: RESUELTO — `Treasury.setFinalPrizeAmounts(...)` ahora exige que todo `tokenId` con premio `> 0` pertenezca al leaderboard vigente del engine registrado mediante `isTokenInCurrentLeaderboard(tokenId)`. Si el leaderboard está stale o el token no figura en la publicación actual, revierte.
 
 - Ubicación: `src/Treasury.sol:239-266`
 - Sólo valida que `cartonContract.tokenTournamentId(tokenIds[i]) == tournamentId`.
@@ -101,13 +105,15 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### Medium M-6: accounting ERC20 asume tokens estándar sin fee/rebase
 
+- **Estado**: DESESTIMADO — El protocolo sólo soportará ERC20 estándar sin fee-on-transfer ni rebasing. Se dejó una nota explícita en `depositFromSalesERC20`; no se implementa soporte para este tipo de tokens. Se agregó allow list con chequeo para evitar habilitar tokens fuera de ese set operativo.
+
 - Ubicación: `src/Treasury.sol:151-167`, `src/Carton.sol:149-160`
 - El contrato contabiliza `amount`, no el delta real recibido.
 - Con USDC estándar está bien. Si admin acepta un token fee-on-transfer/rebasing, `prizePools` puede ser mayor al balance real.
 - Impacto: claims pueden revertir por fondos insuficientes.
 - Recomendación: medir `balanceBefore/balanceAfter` y usar `received`, o restringir explícitamente tokens aceptables.
 
-**Evaluación Claude:** CONFIRMADO. `Treasury.depositFromSalesERC20` (líneas 151-167) hace `safeTransferFrom(msg.sender, address(this), amount)` y luego incrementa `prizePools` y `globalReserve` por el `amount` solicitado, no por el delta real. `Carton._buyCartonWithToken` (línea 149) tiene el mismo patrón en su intermediación. Para USDC nativo no hay problema (no es fee-on-transfer ni rebasing). El riesgo real es operativo: si admin algún día agrega un token con fee-on-transfer (vía `setAcceptedToken`), Treasury contabilizará más de lo que tiene, y luego los últimos claims revertirán por liquidez. Severidad media adecuada. La mejor defensa es restringir a una whitelist hardcoded de tokens probados; el patrón `received = balanceAfter - balanceBefore` también funciona pero agrega complejidad y costo de gas. Sugiero documentar como invariant: "Treasury solo acepta tokens no-fee, no-rebasing".
+**Evaluación Claude:** DESESTIMADO / ACEPTADO OPERATIVAMENTE. El diagnóstico técnico original sigue siendo correcto: `Treasury.depositFromSalesERC20` contabiliza el `amount` nominal y no el delta real recibido, y `Carton._buyCartonWithToken` depende del mismo supuesto. Sin embargo, la decisión de producto es no soportar fee-on-transfer ni rebasing: el protocolo queda acotado a ERC20 estándar dentro de una allowlist operativa. En ese marco, no se implementa `balanceBefore/balanceAfter`; la mitigación aceptada es restringir el set de tokens habilitables a activos estándar auditados y documentar ese invariante explícitamente.
 
 ### Medium M-7: `claimPrize` no usa `nonReentrant`
 
@@ -143,6 +149,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. `setOfficialWinners` (líneas 577-592): `if (officialWinners.set) revert OfficialWinnersAlreadySet();`. Nótese además el comentario del propio código (línea 578) que reconoce la limitación: `// NOTE: what if theres some error? .. proably need to add some edition capability or get them from oracles.`. Junto con L-2, H-3 y la falta de versionado en el leaderboard, este hueco hace que un solo dedo equivocado del owner congele un resultado erróneo y solo se pueda corregir con redeploy. Severidad baja correcta dado el alcance limitado, pero alta prioridad operacional. Sugiero añadir `updateOfficialWinners` con la misma semántica que H-3: invalidar `positionsVersion` y `finalPrizeAmountsReady` al ejecutarse.
 
 ### Low L-3: funciones admin críticas sin eventos suficientes
+
+- **Estado**: RESUELTO — `Carton` ahora emite eventos también para `setURI(...)`, `setTokenPrice(...)` y `setActiveTournament(...)`. Los eventos de `setAcceptedToken(...)`, `setTreasuryAddress(...)` y `Predictions.setSubmissionDeadline(...)` ya habían sido agregados previamente.
 
 - Ubicación: `src/Carton.sol:164-176`, `src/Carton.sol:201-209`, `src/Predictions.sol:185-188`
 - Faltan eventos para accepted token, token price, treasury address, active tournament y deadline.

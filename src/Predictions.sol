@@ -62,6 +62,8 @@ contract Predictions is Ownable {
     error DuplicatePositionToken();
     error PositionsUpdateIncomplete();
     error GoalValueTooHigh();
+    error CompetitionStateChanged();
+    error LeaderboardStale();
 
     IERC1155 public cartones;
     uint256 public immutable tournamentId;
@@ -141,12 +143,15 @@ contract Predictions is Ownable {
 
     mapping(uint256 => bool) public used;
     mapping(uint256 => uint256) public submittedCountByTournament;
+    uint256 public competitionStateRevision;
     uint256 public positionsVersion;
+    uint256 public leaderboardCompetitionStateRevision;
     uint256 public positionsUpdateNonce;
     mapping(uint256 => uint256) public tokenPositions; // tokenId => position (1-indexed)
     mapping(uint256 => uint256) public tokenPositionsVersion; // tokenId => leaderboard version
     bool public positionsUpdateInProgress;
     uint256 public pendingTournamentId;
+    uint256 public pendingCompetitionStateRevision;
     uint256 public pendingPositionsVersion;
     uint256 public pendingExpectedEntries;
     uint256 public pendingProcessedEntries;
@@ -165,6 +170,7 @@ contract Predictions is Ownable {
     event PositionsBatchAppended(uint256 indexed tournamentId, uint256 indexed version, uint256 processedEntries);
     event PositionsUpdateFinalized(uint256 indexed tournamentId, uint256 indexed version, uint256 processedEntries);
     event PositionsUpdateCancelled(uint256 indexed tournamentId, uint256 indexed version);
+    event CompetitionStateRevisionUpdated(uint256 oldRevision, uint256 newRevision);
 
     // Call Ownable(msg.sender) to assign the owner correctly
     constructor(address _cartones, uint256 _tournamentId) Ownable(msg.sender) {
@@ -227,6 +233,7 @@ contract Predictions is Ownable {
         uint256 newVersion = positionsUpdateNonce + 1;
         positionsUpdateNonce = newVersion;
         positionsVersion = newVersion;
+        leaderboardCompetitionStateRevision = competitionStateRevision;
         uint256 maxPoints = type(uint256).max;
         uint256 currentRank = 0;
         uint256 previousPoints = type(uint256).max;
@@ -265,6 +272,7 @@ contract Predictions is Ownable {
 
         positionsUpdateInProgress = true;
         pendingTournamentId = tournamentId;
+        pendingCompetitionStateRevision = competitionStateRevision;
         pendingExpectedEntries = expectedEntries;
         pendingProcessedEntries = 0;
         pendingLastPoints = 0;
@@ -279,6 +287,7 @@ contract Predictions is Ownable {
 
     function appendPositionsBatch(uint256[] calldata tokenIds, uint256[] calldata points) external onlyOwner {
         if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
+        if (competitionStateRevision != pendingCompetitionStateRevision) revert CompetitionStateChanged();
         if (tokenIds.length == 0) revert EmptyPositionsBatch();
         if (tokenIds.length != points.length) revert ArrayLengthMismatch();
 
@@ -335,9 +344,11 @@ contract Predictions is Ownable {
 
     function finalizePositionsUpdate() external onlyOwner {
         if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
+        if (competitionStateRevision != pendingCompetitionStateRevision) revert CompetitionStateChanged();
         if (pendingProcessedEntries != pendingExpectedEntries) revert PositionsUpdateIncomplete();
 
         positionsVersion = pendingPositionsVersion;
+        leaderboardCompetitionStateRevision = pendingCompetitionStateRevision;
 
         emit PositionsUpdateFinalized(pendingTournamentId, pendingPositionsVersion, pendingProcessedEntries);
 
@@ -365,6 +376,7 @@ contract Predictions is Ownable {
     }
 
     function getCartonPosition(uint256 tokenId) public view returns (uint256) {
+        if (!_hasCurrentLeaderboard()) revert LeaderboardStale();
         if (tokenPositionsVersion[tokenId] != positionsVersion || tokenPositions[tokenId] == 0) {
             revert TokenNotInLeaderboard();
         }
@@ -384,7 +396,11 @@ contract Predictions is Ownable {
     }
 
     function hasFinalPositions() public view returns (bool) {
-        return positionsVersion > 0;
+        return _hasCurrentLeaderboard();
+    }
+
+    function isTokenInCurrentLeaderboard(uint256 tokenId) external view returns (bool) {
+        return _hasCurrentLeaderboard() && tokenPositionsVersion[tokenId] == positionsVersion && tokenPositions[tokenId] != 0;
     }
 
     function isReadyForFinalization() external view returns (bool) {
@@ -444,6 +460,7 @@ contract Predictions is Ownable {
         _revertIfSubmissionWindowStillOpen();
 
         _setResult(gameId, team1Goals, team2Goals);
+        _advanceCompetitionStateRevision();
     }
 
     function setResultsBatch(uint8[] calldata gameIds, uint8[] calldata team1Goals, uint8[] calldata team2Goals)
@@ -471,6 +488,8 @@ contract Predictions is Ownable {
                 ++i;
             }
         }
+
+        _advanceCompetitionStateRevision();
     }
 
     function updateResults(uint8 gameId, uint8 team1Goals, uint8 team2Goals) external onlyOwner {
@@ -485,6 +504,7 @@ contract Predictions is Ownable {
 
         _validateGoals(team1Goals, team2Goals);
         game.result = [team1Goals, team2Goals];
+        _advanceCompetitionStateRevision();
 
         emit ResultsUpdated(gameId, oldTeam1Goals, oldTeam2Goals, team1Goals, team2Goals);
     }
@@ -558,6 +578,7 @@ contract Predictions is Ownable {
     function _clearPendingPositionsState() internal {
         positionsUpdateInProgress = false;
         pendingTournamentId = 0;
+        pendingCompetitionStateRevision = 0;
         pendingPositionsVersion = 0;
         pendingExpectedEntries = 0;
         pendingProcessedEntries = 0;
@@ -565,6 +586,18 @@ contract Predictions is Ownable {
         pendingHasLastPoints = false;
         pendingCurrentRank = 0;
         delete pendingPositionTokenIds;
+    }
+
+    function _hasCurrentLeaderboard() internal view returns (bool) {
+        return positionsVersion > 0 && !positionsUpdateInProgress
+            && leaderboardCompetitionStateRevision == competitionStateRevision;
+    }
+
+    function _advanceCompetitionStateRevision() internal {
+        uint256 oldRevision = competitionStateRevision;
+        uint256 newRevision = oldRevision + 1;
+        competitionStateRevision = newRevision;
+        emit CompetitionStateRevisionUpdated(oldRevision, newRevision);
     }
 
     function getPrediction(uint256 tokenId) external view returns (Prediction[] memory) {
@@ -666,6 +699,7 @@ contract Predictions is Ownable {
         _validateOfficialWinners(teams);
 
         officialWinners = OfficialWinners({ teams: teams, set: true });
+        _advanceCompetitionStateRevision();
 
         emit OfficialWinnersSet(teams);
     }
@@ -679,6 +713,7 @@ contract Predictions is Ownable {
         _validateOfficialWinners(teams);
 
         officialWinners = OfficialWinners({ teams: teams, set: true });
+        _advanceCompetitionStateRevision();
 
         emit OfficialWinnersUpdated(previousTeams, teams);
     }

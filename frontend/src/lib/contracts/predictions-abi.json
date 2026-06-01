@@ -205,6 +205,19 @@
   },
   {
     "type": "function",
+    "name": "competitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "finalizePositionsUpdate",
     "inputs": [],
     "outputs": [],
@@ -399,6 +412,19 @@
   },
   {
     "type": "function",
+    "name": "leaderboardCompetitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "officialWinners",
     "inputs": [],
     "outputs": [
@@ -432,6 +458,19 @@
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingCompetitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1021,6 +1060,25 @@
   },
   {
     "type": "event",
+    "name": "CompetitionStateRevisionUpdated",
+    "inputs": [
+      {
+        "name": "oldRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OfficialWinnersSet",
     "inputs": [
       {
@@ -1363,6 +1421,11 @@
   },
   {
     "type": "error",
+    "name": "CompetitionStateChanged",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DeadlineMustBeFuture",
     "inputs": []
   },
@@ -1419,6 +1482,11 @@
   {
     "type": "error",
     "name": "InvalidTournamentId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LeaderboardStale",
     "inputs": []
   },
   {

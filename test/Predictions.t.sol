@@ -662,7 +662,7 @@ contract PredictionsTest is Test {
 
         preds.appendPositionsBatch(ids, points);
 
-        vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
+        vm.expectRevert(Predictions.LeaderboardStale.selector);
         preds.getCartonPosition(tokenId1);
 
         preds.finalizePositionsUpdate();
@@ -1187,6 +1187,67 @@ contract PredictionsTest is Test {
 
         preds.updateResults(1, 0, 0);
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 4);
+    }
+
+    function testUpdateResultsInvalidatesPublishedLeaderboard() public {
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user2, tokenId2);
+
+        _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
+        preds.setResults(1, 2, 1);
+        preds.setResults(2, 1, 1);
+        preds.setResults(3, 0, 2);
+        preds.setResults(4, 3, 0);
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = TOKEN_ID;
+        ids[1] = tokenId2;
+        uint256[] memory points = new uint256[](2);
+        points[0] = 100;
+        points[1] = 90;
+        preds.setPositions(ids, points);
+
+        assertTrue(preds.hasFinalPositions());
+        preds.updateResults(1, 0, 0);
+
+        assertFalse(preds.hasFinalPositions());
+        assertFalse(preds.isReadyForFinalization());
+        vm.expectRevert(Predictions.LeaderboardStale.selector);
+        preds.getCartonPosition(TOKEN_ID);
+    }
+
+    function testAppendPositionsBatchRevertsWhenCompetitionStateChangesMidUpdate() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 1);
+        _submitValidPrediction(user, tokenId1);
+        _submitValidPrediction(user2, tokenId2);
+
+        _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
+        preds.setResults(1, 2, 1);
+        preds.setResults(2, 1, 1);
+        preds.setResults(3, 0, 2);
+        preds.setResults(4, 3, 0);
+        preds.setOfficialWinners([1, 2, 3, 4]);
+
+        preds.beginPositionsUpdate(2);
+        preds.updateResults(1, 0, 0);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = tokenId1;
+        ids[1] = tokenId2;
+        uint256[] memory points = new uint256[](2);
+        points[0] = 100;
+        points[1] = 90;
+
+        vm.expectRevert(Predictions.CompetitionStateChanged.selector);
+        preds.appendPositionsBatch(ids, points);
+
+        vm.expectRevert(Predictions.CompetitionStateChanged.selector);
+        preds.finalizePositionsUpdate();
     }
 
     function testUpdateResultsRevertsWhenTournamentClosed() public {
