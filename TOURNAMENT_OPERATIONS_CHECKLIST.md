@@ -38,7 +38,7 @@ Manual operating checklist for running a tournament without backend automation.
 
 ## Closing Tournament
 
-- Close each prize asset with `Treasury.closeTournament(tournamentId, token)`.
+- Finalize the tournament with `Treasury.finalizeTournament(tournamentId)` once all configured prize assets are ready.
 - Treat close as final: after close, result corrections are blocked.
 - If the tournament uses multiple assets, close each one intentionally.
 

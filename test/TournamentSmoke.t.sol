@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import "forge-std/Test.sol";
 import "./BaseTest.sol";
@@ -105,6 +105,8 @@ contract TournamentSmokeTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
 
+        _movePastSubmissionDeadlineIfNeeded();
+
         vm.prank(admin);
         predictions.setResults(1, 2, 1);
 
@@ -116,6 +118,8 @@ contract TournamentSmokeTest is BaseTest {
     function testSmoke_BatchResults_AnvilOnly() public {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
+
+        _movePastSubmissionDeadlineIfNeeded();
 
         uint8[] memory gameIds = new uint8[](4);
         gameIds[0] = 1;
@@ -148,6 +152,8 @@ contract TournamentSmokeTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
 
+        _movePastSubmissionDeadlineIfNeeded();
+
         uint8[] memory gameIds = new uint8[](2);
         gameIds[0] = 1;
         gameIds[1] = 1;
@@ -178,6 +184,7 @@ contract TournamentSmokeTest is BaseTest {
         treasury.closeSales(TOURNAMENT_ID);
 
         vm.startPrank(admin);
+        _movePastSubmissionDeadlineIfNeeded();
         predictions.setResults(1, 2, 1);
         predictions.updateResults(1, 3, 2);
         vm.stopPrank();
@@ -288,6 +295,7 @@ contract TournamentSmokeTest is BaseTest {
     }
 
     function _setResultsIndividually() internal {
+        _movePastSubmissionDeadlineIfNeeded();
         vm.startPrank(admin);
         predictions.setResults(1, 2, 1);
         predictions.setResults(2, 1, 1);
@@ -297,6 +305,7 @@ contract TournamentSmokeTest is BaseTest {
     }
 
     function _setResultsBatch() internal {
+        _movePastSubmissionDeadlineIfNeeded();
         uint8[] memory gameIds = new uint8[](4);
         gameIds[0] = 1;
         gameIds[1] = 2;

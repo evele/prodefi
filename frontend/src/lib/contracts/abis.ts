@@ -1072,6 +1072,50 @@ export const CARTON_ABI = [
   },
   {
     "type": "event",
+    "name": "RescueETHWithdrawn",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RescueTokenWithdrawn",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "RoleAdminChanged",
     "inputs": [
       {
@@ -1221,6 +1265,25 @@ export const CARTON_ABI = [
   },
   {
     "type": "event",
+    "name": "TreasuryAddressChanged",
+    "inputs": [
+      {
+        "name": "oldTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "URI",
     "inputs": [
       {
@@ -1271,6 +1334,11 @@ export const CARTON_ABI = [
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "ActiveTournamentNotSet",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1401,6 +1469,11 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
+    "name": "InvalidTreasuryContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoFundsToWithdraw",
     "inputs": []
   },
@@ -1458,6 +1531,11 @@ export const CARTON_ABI = [
   {
     "type": "error",
     "name": "TournamentSalesClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TreasuryAddressNotContract",
     "inputs": []
   },
   {
@@ -2410,25 +2488,6 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
-    "name": "totalPoints",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tournamentId",
     "inputs": [],
     "outputs": [
@@ -2484,19 +2543,6 @@ export const PREDICTIONS_ABI = [
         "name": "team2Goals",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "updateTotalPoints",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -2587,25 +2633,6 @@ export const PREDICTIONS_ABI = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PointsUpdated",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "points",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -2800,6 +2827,25 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "event",
+    "name": "SubmissionDeadlineUpdated",
+    "inputs": [
+      {
+        "name": "oldDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TeamsHashFrozen",
     "inputs": [],
     "anonymous": false
@@ -2919,6 +2965,11 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
+    "name": "GoalValueTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidExpectedEntries",
     "inputs": []
   },
@@ -3032,6 +3083,16 @@ export const PREDICTIONS_ABI = [
   {
     "type": "error",
     "name": "ResultsAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionDeadlineLocked",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionWindowStillOpen",
     "inputs": []
   },
   {
@@ -3859,6 +3920,24 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "removePrizeDistributionToken",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "renounceRole",
     "inputs": [
       {
@@ -4156,6 +4235,31 @@ export const TREASURY_ABI = [
   },
   {
     "type": "event",
+    "name": "CompetitionEngineChanged",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "oldEngine",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newEngine",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DepositFromSale",
     "inputs": [
       {
@@ -4237,6 +4341,25 @@ export const TREASURY_ABI = [
         "type": "uint256[]",
         "indexed": false,
         "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PrizeDistributionRemoved",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -4574,6 +4697,11 @@ export const TREASURY_ABI = [
   {
     "type": "error",
     "name": "PrizeArrayLengthMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PrizeDistributionRemovalNotAllowed",
     "inputs": []
   },
   {

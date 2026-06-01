@@ -12,6 +12,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### High H-1: `Carton` permite tokenIds con supply > 1 aunque el sistema asume cartones únicos
 
+- **Estado**: RESUELTO — `Carton` ahora fuerza `amount == 1` en `mintForTournament(...)` y `mintBatchForTournament(...)`, cerrando el caso de ownership parcial por `tokenId`.
+
 - Ubicación: `src/Carton.sol:88-99`, `src/Carton.sol:109-123`
 - `mintForTournament(..., amount, ...)` y `mintBatchForTournament(... amounts ...)` aceptan `amount` arbitrario. Si un minter crea `amount > 1` para un mismo `tokenId`, varias wallets pueden terminar teniendo balance del mismo cartón.
 - `Predictions.used[tokenId]` y `Treasury.claimed[tournamentId][tokenId][token]` están indexados por `tokenId`, no por holder. Resultado: una sola predicción y un solo claim para múltiples dueños del mismo ID.
@@ -21,6 +23,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. Verificado en `src/Carton.sol:88-99` y `src/Carton.sol:109-123`: ambas funciones aceptan `amount` arbitrario sin validación. El flujo de venta pública `_buyCartonWithToken` sí hardcodea `_mint(msg.sender, tokenId, 1, "")` (línea 153), por lo que el riesgo se materializa únicamente vía `MINTER_ROLE`. Sin embargo, `Predictions.used[tokenId]` (línea 137) y `Treasury.claimed[tournamentId][tokenId][token]` (línea 60 de Treasury) están indexados solo por tokenId, así que basta una transferencia parcial ERC1155 (`safeTransferFrom` con value < amount total) para que el segundo holder quede sin acceso a premio/predicción. Severidad alta sostenida — la corrección es trivial (`require(amount == 1)`).
 
 ### High H-2: `setPositions` legacy permite publicar rankings con tokens no elegibles
+
+- **Estado**: RESUELTO — `setPositions(...)` ahora valida elegibilidad del `tokenId` (`used[tokenId]` + torneo correcto) y rechaza duplicados, alineándose con las protecciones básicas del flujo batched.
 
 - Ubicación: `src/Predictions.sol:207-238`
 - El flujo batched sí valida `used[tokenId]` y `_tokenTournamentId(tokenId)` en `appendPositionsBatch` (`src/Predictions.sol:279-282`), pero `setPositions` no.
@@ -52,6 +56,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### Medium M-2: `finalPrizeAmounts` puede sellarse antes de que el estado competitivo sea estable
 
+- **Estado**: RESUELTO — `sealFinalPrizeAmounts(...)` ahora exige que el engine registrado esté ready antes de sellar montos finales.
+
 - Ubicación: `src/Treasury.sol:268-285`
 - `sealFinalPrizeAmounts` no verifica que `Predictions.isReadyForFinalization()` sea true ni que el leaderboard esté atado a resultados definitivos.
 - Impacto: se pueden sellar premios prematuramente y luego cambiar resultados/posiciones antes de finalizar.
@@ -60,6 +66,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. `sealFinalPrizeAmounts` (líneas 268-285) solo exige `salesClosed`, distribución cargada, y que no esté ya sellado. No llama a `ICompetitionEngine(engine).isReadyForFinalization()` — esa verificación recién aparece en `finalizeTournament` línea 379. Además, una vez sellado, `finalPrizeAmountsReady[tournamentId][token] = true` bloquea correcciones (`FinalPrizeAmountsAlreadySealed`), así que si después se invalida el leaderboard por H-3, no hay forma de reabrir el sello sin redeploy. Severidad media sostenida. La fix simple: exigir `ICompetitionEngine(competitionEngineByTournament[tournamentId]).isReadyForFinalization()` en seal.
 
 ### Medium M-3: `setResults` puede bloquear submissions antes del deadline
+
+- **Estado**: RESUELTO — `setResults(...)` y `setResultsBatch(...)` ahora revierten si la ventana de submission sigue abierta.
 
 - Ubicación: `src/Predictions.sol:405-411`, `src/Predictions.sol:381-400`
 - `setResults` sólo exige ventas cerradas, no que `block.timestamp >= submissionDeadline`.
@@ -71,6 +79,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### Medium M-4: deadline mutable permite manipulación operativa
 
+- **Estado**: RESUELTO — `setSubmissionDeadline(...)` ahora queda bloqueado cuando ya hubo submissions, cuando la deadline vigente expiró, cuando ventas cerraron o cuando ya existe al menos un resultado cargado.
+
 - Ubicación: `src/Predictions.sol:185-188`
 - `setSubmissionDeadline` sólo exige fecha futura. No bloquea cambios después de ventas, después de submissions o después de resultados.
 - Impacto: admin puede extender/reabrir ventana o cambiar reglas temporales de forma injusta.
@@ -79,6 +89,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. `setSubmissionDeadline` (líneas 185-188) solo valida `_deadline > block.timestamp`. No tiene constraints contra `predictionsStarted`, `salesClosed`, ni que ya haya un deadline pasado. Esto crea dos vectores: (a) admin extiende el deadline después que ya pasó, reabriendo submissions; (b) admin acorta el deadline cuando ya hay predicciones en flight, censurando usuarios honestos. Severidad media adecuada. La recomendación es correcta — yo añadiría como mínimo `require(block.timestamp < submissionDeadline || submissionDeadline == 0)` para prevenir reapertura post-deadline, y bloquear cambios después de `predictionsStarted == true` salvo que el nuevo deadline sea mayor al actual (extensión benigna).
 
 ### Medium M-5: scoring puede revertir con scores extremos
+
+- **Estado**: RESUELTO — se validan goles máximos razonables y el cálculo de diferencias ya no depende del viejo patrón frágil con casts a `int8`.
 
 - Ubicación: `src/Predictions.sol:503-532`
 - Scores son `uint8` sin límite razonable. `calculateDifferencePoints` convierte a `int8`, lo que puede wrappear/revertir para valores altos.
@@ -99,6 +111,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### Medium M-7: `claimPrize` no usa `nonReentrant`
 
+- **Estado**: RESUELTO — `Treasury` ahora hereda `ReentrancyGuard` y `claimPrize(...)` usa `nonReentrant`.
+
 - Ubicación: `src/Treasury.sol:180-202`
 - El patrón CEI está bien para evitar doble claim del mismo `(tournamentId, tokenId, token)`, pero hay llamada externa ETH vía `.call`.
 - Impacto actual limitado; riesgo futuro si se agregan funciones que muevan fondos o muten accounting.
@@ -108,6 +122,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 
 ### Low L-1: `PredictionsFactory` puede dejar contratos huérfanos
 
+- **Estado**: RESUELTO / ARCHIVADO — `PredictionsFactory.sol` ya no forma parte de `src/` ni del build activo; quedó archivado fuera del set de contratos productivos.
+
 - Ubicación: `src/PredictionsFactory.sol:18-37`
 - Si `owner == address(0)`, el factory queda como owner del `Predictions` desplegado, pero no tiene funciones para administrarlo.
 - Impacto: torneo inutilizable si alguien usa factory por error.
@@ -116,6 +132,8 @@ No veo un robo directo de fondos por usuario no privilegiado en el flujo normal 
 **Evaluación Claude:** CONFIRMADO. `PredictionsFactory.createTournament` (líneas 18-37): si `owner == address(0)`, el `if (owner != address(0))` falla y nunca se llama `transferOwnership`, por lo que el `Predictions` queda con `owner = address(factory)`. El factory no tiene ningún método para hacer pass-through de calls al Predictions (no expone `setSubmissionDeadline`, `setResults`, etc.), así que el contrato es huérfano. Severidad baja correcta dado que la memoria del proyecto indica que `PredictionsFactory.sol` está marcado como dead code (no testeado, no desplegado). Recomiendo eliminar el archivo entero antes de deploy a mainnet — no agregar el guard `require(owner != address(0))` porque eso solo da una falsa sensación de utilidad a un contrato que no se usa.
 
 ### Low L-2: `setOfficialWinners` no permite corrección
+
+- **Estado**: RESUELTO — `Predictions` ahora expone `updateOfficialWinners(...)` con guards para impedir cambios una vez bloqueado el torneo o publicado el leaderboard final.
 
 - Ubicación: `src/Predictions.sol:577-592`
 - Una carga errónea queda permanente.
@@ -141,6 +159,8 @@ Adicionalmente noto que `Carton.setURI` también es silencioso. Severidad baja c
 
 ### Low L-4: `Carton.setTreasuryAddress` no valida contrato/interfaz
 
+- **Estado**: RESUELTO — `setTreasuryAddress(...)` ahora exige código en la address, prueba una interfaz mínima por `staticcall` y emite evento al cambiarla.
+
 - Ubicación: `src/Carton.sol:201-204`
 - Sólo rechaza zero address.
 - Impacto: admin puede setear EOA o contrato incompatible y romper compras.
@@ -149,6 +169,8 @@ Adicionalmente noto que `Carton.setURI` también es silencioso. Severidad baja c
 **Evaluación Claude:** CONFIRMADO. `Carton.setTreasuryAddress` (líneas 201-204) solo rechaza `address(0)`. Si admin setea una EOA, todas las compras vía `_buyCartonWithToken` revertirán en el call a `_treasury.salesClosed(tournamentId)` (línea 145) o `_treasury.depositFromSalesERC20(...)` (línea 160), porque una EOA no tiene esas funciones. Esto es un DoS recoverable — admin puede volver a setear el address correcto. Severidad baja correcta. Recomiendo el check `treasuryAddress.code.length > 0` como mínimo, y opcionalmente una llamada de prueba a `ITreasury(treasuryAddress).isTournamentRegistered(0)` dentro de `try/catch` para validar interfaz. Sin embargo, dado que el rol es `DEFAULT_ADMIN_ROLE` (probable multisig), esto es realmente higiene defensiva.
 
 ### Low L-5: `Carton.setAcceptedToken` acepta `address(0)`
+
+- **Estado**: RESUELTO — `setAcceptedToken(...)` ahora revierte para `address(0)` y además emite `AcceptedTokenSet(token, accepted)` para trazabilidad.
 
 - Ubicación: `src/Carton.sol:164-166`
 - No genera robo directo porque la compra con address zero fallaría, pero es configuración inválida.

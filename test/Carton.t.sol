@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import "./BaseTest.sol";
 import "./mocks/MockERC20.sol";
 import "../src/Treasury.sol";
+
+contract NonTreasuryContract { }
 
 contract CartonTest is BaseTest {
     address user = address(0xBEEF);
@@ -260,6 +262,20 @@ contract CartonTest is BaseTest {
         assertEq(carton.tokenPricesByTournament(1, address(USDC)), price);
     }
 
+    function testSetCartonTokenPrice_RevertWhenActiveTournamentNotSet() public {
+        Carton freshCarton = new Carton(admin, pauser, minter);
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.ActiveTournamentNotSet.selector);
+        freshCarton.setTokenPrice(address(USDC), 1000000);
+    }
+
+    function testSetCartonTokenPrice_RevertWhenExplicitTournamentIsZero() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.ZeroTournamentId.selector);
+        carton.setTokenPrice(0, address(USDC), 1000000);
+    }
+
     function testOnlyAdminCanSetPrice() public {
         vm.prank(user);
         vm.expectRevert();
@@ -283,6 +299,8 @@ contract CartonTest is BaseTest {
         vm.deal(address(carton), 0.1 ether);
 
         uint256 balanceBefore = recipient.balance;
+        vm.expectEmit(true, false, false, true);
+        emit RescueETHWithdrawn(recipient, 0.1 ether);
         vm.prank(recipient);
         carton.withdraw();
 
@@ -300,6 +318,30 @@ contract CartonTest is BaseTest {
         vm.prank(user);
         vm.expectRevert();
         carton.withdraw();
+    }
+
+    function testWithdrawToken() public {
+        address recipient = makeAddr("tokenRecipient");
+
+        vm.startPrank(admin);
+        carton.grantRole(carton.DEFAULT_ADMIN_ROLE(), recipient);
+        vm.stopPrank();
+
+        USDC.mint(address(carton), 1_000_000);
+
+        vm.expectEmit(true, true, false, true);
+        emit RescueTokenWithdrawn(recipient, address(USDC), 1_000_000);
+        vm.prank(recipient);
+        carton.withdrawToken(address(USDC));
+
+        assertEq(USDC.balanceOf(address(carton)), 0, "Carton should have no token balance after rescue");
+        assertEq(USDC.balanceOf(recipient), 1_000_000, "Recipient should receive rescued tokens");
+    }
+
+    function testWithdrawTokenNoFunds() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.NoTokensToWithdraw.selector);
+        carton.withdrawToken(address(USDC));
     }
 
     function testGetUserTokens() public {
@@ -353,13 +395,20 @@ contract CartonTest is BaseTest {
         assertEq(remainingTokens[0], secondTokenId, "Remaining token should stay tracked");
     }
 
-    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
-    event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
+event RescueETHWithdrawn(address indexed recipient, uint256 amount);
+event RescueTokenWithdrawn(address indexed recipient, address indexed token, uint256 amount);
+event AcceptedTokenSet(address indexed token, bool accepted);
 
     // ========== TREASURY INTEGRATION TESTS ==========
 
     function testSetTreasuryAddress() public {
         treasury = new Treasury(admin, address(carton), 500);
+
+        vm.expectEmit(true, true, false, true);
+        emit TreasuryAddressChanged(address(0), address(treasury));
 
         vm.prank(admin);
         carton.setTreasuryAddress(address(treasury));
@@ -379,6 +428,20 @@ contract CartonTest is BaseTest {
         vm.prank(admin);
         vm.expectRevert(Carton.ZeroTreasuryAddress.selector);
         carton.setTreasuryAddress(address(0));
+    }
+
+    function testSetTreasuryAddress_RevertEOA() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.TreasuryAddressNotContract.selector);
+        carton.setTreasuryAddress(user);
+    }
+
+    function testSetTreasuryAddress_RevertInvalidInterface() public {
+        NonTreasuryContract invalidTreasury = new NonTreasuryContract();
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.InvalidTreasuryContract.selector);
+        carton.setTreasuryAddress(address(invalidTreasury));
     }
 
     function testSetActiveTournament() public {
@@ -490,6 +553,41 @@ contract CartonTest is BaseTest {
         vm.prank(admin);
         vm.expectRevert(Carton.UnsupportedPrizeToken.selector);
         carton.setAcceptedToken(address(unsupportedToken), true);
+    }
+
+    function testSetAcceptedToken_RevertsForZeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.ZeroTokenAddress.selector);
+        carton.setAcceptedToken(address(0), true);
+    }
+
+    function testSetAcceptedToken_EmitsAcceptedTokenSet() public {
+        vm.expectEmit(true, true, false, true);
+        emit AcceptedTokenSet(address(USDC), true);
+
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+
+        assertTrue(carton.acceptedTokens(address(USDC)));
+    }
+
+    function testSetAcceptedToken_EmitsAcceptedTokenSet_Disabling() public {
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+
+        vm.expectEmit(true, true, false, true);
+        emit AcceptedTokenSet(address(USDC), false);
+
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), false);
+
+        assertFalse(carton.acceptedTokens(address(USDC)));
+    }
+
+    function testSetAcceptedToken_OnlyAdmin() public {
+        vm.prank(user);
+        vm.expectRevert();
+        carton.setAcceptedToken(address(USDC), true);
     }
 
     function testBuyCartonWithoutTreasuryConfiguredStillReverts() public {

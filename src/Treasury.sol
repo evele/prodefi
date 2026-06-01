@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -50,6 +50,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     error InsufficientGlobalReserve();
     error UnsupportedPrizeToken();
     error ZeroTokenAddress();
+    error PrizeDistributionRemovalNotAllowed();
 
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
@@ -111,6 +112,10 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event TournamentRegistered(uint256 indexed tournamentId, address indexed engine);
     event ReserveSeeded(uint256 indexed tournamentId, address indexed token, uint256 amount);
     event SupportedPrizeTokenSet(address indexed token, bool supported);
+    event PrizeDistributionRemoved(uint256 indexed tournamentId, address indexed token);
+    event CompetitionEngineChanged(
+        uint256 indexed tournamentId, address indexed oldEngine, address indexed newEngine
+    );
 
     constructor(address defaultAdmin, address cartonAddress, uint16 reserveBps_) {
         if (reserveBps_ >= BPS_DENOMINATOR) revert InvalidReserveBps();
@@ -129,10 +134,15 @@ contract Treasury is AccessControl, ReentrancyGuard {
         if (!tournamentRegistered[tournamentId]) {
             tournamentRegistered[tournamentId] = true;
             registeredTournamentIds.push(tournamentId);
+            emit TournamentRegistered(tournamentId, engine);
+        } else {
+            address oldEngine = competitionEngineByTournament[tournamentId];
+            if (oldEngine != engine) {
+                emit CompetitionEngineChanged(tournamentId, oldEngine, engine);
+            }
         }
 
         competitionEngineByTournament[tournamentId] = engine;
-        emit TournamentRegistered(tournamentId, engine);
     }
 
     /// @notice Marks an ERC20 token as supported for sales deposits and prize pools.
@@ -239,9 +249,13 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
         // Percentages may leave an explicit reserve for development, donation, or jackpot.
         uint256 sum_percentages = 0;
-        for (uint256 i = 0; i < percentages.length; i++) {
+        uint256 percentagesLength = percentages.length;
+        for (uint256 i; i < percentagesLength;) {
             if (percentages[i] > 100) revert InvalidPercentage();
             sum_percentages += percentages[i];
+            unchecked {
+                ++i;
+            }
         }
         if (sum_percentages == 0 || sum_percentages > 100) revert InvalidPercentageSum();
 
@@ -251,10 +265,50 @@ contract Treasury is AccessControl, ReentrancyGuard {
         }
 
         delete prizePoolDistributions[tournamentId][token];
-        for (uint256 i = 0; i < percentages.length; i++) {
+        for (uint256 i; i < percentagesLength;) {
             prizePoolDistributions[tournamentId][token].push(percentages[i]);
+            unchecked {
+                ++i;
+            }
         }
         emit SetPrizeDistribution(tournamentId, token, percentages);
+    }
+
+    function removePrizeDistributionToken(uint256 tournamentId, address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireRegisteredTournament(tournamentId);
+        if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+        if (!prizeDistributionSet[tournamentId][token]) revert NoPrizeDistribution();
+        if (
+            prizePools[tournamentId][token] > 0 || finalPrizeAmountTotals[tournamentId][token] > 0
+                || finalPrizeAmountsReady[tournamentId][token]
+        ) {
+            revert PrizeDistributionRemovalNotAllowed();
+        }
+
+        address[] storage tokens = prizeDistributionTokens[tournamentId];
+        uint256 tokensLength = tokens.length;
+        for (uint256 i; i < tokensLength;) {
+            if (tokens[i] == token) {
+                uint256 lastIndex = tokensLength - 1;
+                if (i != lastIndex) {
+                    tokens[i] = tokens[lastIndex];
+                }
+                tokens.pop();
+
+                delete prizeDistributionSet[tournamentId][token];
+                delete prizePoolDistributions[tournamentId][token];
+                delete finalPrizeAmountTotals[tournamentId][token];
+                delete finalPrizeAmountsReady[tournamentId][token];
+
+                emit PrizeDistributionRemoved(tournamentId, token);
+                return;
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        revert NoPrizeDistribution();
     }
 
     function setFinalPrizeAmounts(
@@ -272,12 +326,16 @@ contract Treasury is AccessControl, ReentrancyGuard {
         if (tokenIds.length != amounts.length) revert PrizeArrayLengthMismatch();
 
         uint256 runningTotal = finalPrizeAmountTotals[tournamentId][token];
-        for (uint256 i = 0; i < tokenIds.length; i++) {
+        uint256 tokenIdsLength = tokenIds.length;
+        for (uint256 i; i < tokenIdsLength;) {
             if (cartonContract.tokenTournamentId(tokenIds[i]) != tournamentId) revert TokenTournamentMismatch();
 
             uint256 previousAmount = finalPrizeAmounts[tournamentId][tokenIds[i]][token];
             runningTotal = runningTotal - previousAmount + amounts[i];
             finalPrizeAmounts[tournamentId][tokenIds[i]][token] = amounts[i];
+            unchecked {
+                ++i;
+            }
         }
 
         if (runningTotal > prizePools[tournamentId][token]) revert FinalPrizeAmountsExceedPrizePool();
@@ -387,17 +445,27 @@ contract Treasury is AccessControl, ReentrancyGuard {
         address[] storage tokens = prizeDistributionTokens[tournamentId];
         if (tokens.length == 0) revert NoPrizeDistribution();
 
-        for (uint256 i = 0; i < tokens.length; i++) {
+        uint256 closedAssets = 0;
+        uint256 tokensLength = tokens.length;
+        for (uint256 i; i < tokensLength;) {
             address token = tokens[i];
             uint256 pool = prizePools[tournamentId][token];
-            if (pool == 0) revert NoPrizePool();
-            if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
-            if (!finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsNotSealed();
+            if (pool != 0 || finalPrizeAmountTotals[tournamentId][token] != 0) {
+                if (pool == 0) revert NoPrizePool();
+                if (prizePoolDistributions[tournamentId][token].length == 0) revert NoPrizeDistribution();
+                if (!finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsNotSealed();
 
-            closedPrizePools[tournamentId][token] = pool;
-            isClosedTournament[tournamentId][token] = true;
-            emit TournamentClosed(tournamentId, token, pool);
+                closedPrizePools[tournamentId][token] = pool;
+                isClosedTournament[tournamentId][token] = true;
+                closedAssets += 1;
+                emit TournamentClosed(tournamentId, token, pool);
+            }
+            unchecked {
+                ++i;
+            }
         }
+
+        if (closedAssets == 0) revert NoPrizePool();
 
         address engine = competitionEngineByTournament[tournamentId];
         if (engine == address(0) || !ICompetitionEngine(engine).isReadyForFinalization()) {
@@ -407,11 +475,6 @@ contract Treasury is AccessControl, ReentrancyGuard {
         tournamentFinalized[tournamentId] = true;
         isTournamentClosedAnyAsset[tournamentId] = true;
         emit TournamentFinalized(tournamentId);
-    }
-
-    /// @notice Backward-compatible wrapper; prefer finalizeTournament for new code.
-    function closeTournament(uint256 tournamentId, address) external onlyRole(TOURNAMENT_MANAGER_ROLE) {
-        finalizeTournament(tournamentId);
     }
 
     function _requireRegisteredTournament(uint256 tournamentId) internal view {

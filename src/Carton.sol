@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
@@ -30,10 +30,13 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     error TokenNotAccepted();
     error TokenPriceNotSet();
     error PriceMustBePositive();
+    error ActiveTournamentNotSet();
     error NoFundsToWithdraw();
     error WithdrawFailed();
     error NoTokensToWithdraw();
     error ZeroTreasuryAddress();
+    error TreasuryAddressNotContract();
+    error InvalidTreasuryContract();
     error ZeroTournamentId();
     error ZeroTokenAddress();
     error CartonAmountMustBeOne();
@@ -68,6 +71,9 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     );
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event AcceptedTokenSet(address indexed token, bool accepted);
+    event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
+    event RescueETHWithdrawn(address indexed recipient, uint256 amount);
+    event RescueTokenWithdrawn(address indexed recipient, address indexed token, uint256 amount);
 
     constructor(address defaultAdmin, address pauser, address minter) ERC1155("") {
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
@@ -120,11 +126,15 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     {
         _validateTournamentSelection(tournamentId);
 
-        uint256[] memory ids = new uint256[](amounts.length);
-        for (uint256 i = 0; i < amounts.length; i++) {
+        uint256 amountsLength = amounts.length;
+        uint256[] memory ids = new uint256[](amountsLength);
+        for (uint256 i; i < amountsLength;) {
             if (amounts[i] != 1) revert CartonAmountMustBeOne();
             ids[i] = _nextTokenId++;
             tokenTournamentId[ids[i]] = tournamentId;
+            unchecked {
+                ++i;
+            }
         }
         _mintBatch(to, ids, amounts, data);
         return ids;
@@ -183,6 +193,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     }
 
     function setTokenPrice(address token, uint256 price) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (activeTournamentId == 0) revert ActiveTournamentNotSet();
         setTokenPrice(activeTournamentId, token, price);
     }
 
@@ -207,17 +218,29 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         if (balance == 0) revert NoFundsToWithdraw();
         (bool ok,) = payable(msg.sender).call{ value: balance }("");
         if (!ok) revert WithdrawFailed();
+        emit RescueETHWithdrawn(msg.sender, balance);
     }
 
     function withdrawToken(address token) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         uint256 balance = IERC20(token).balanceOf(address(this));
         if (balance == 0) revert NoTokensToWithdraw();
         IERC20(token).safeTransfer(msg.sender, balance);
+        emit RescueTokenWithdrawn(msg.sender, token, balance);
     }
 
     function setTreasuryAddress(address treasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (treasuryAddress == address(0)) revert ZeroTreasuryAddress();
+
+        if (treasuryAddress.code.length == 0) revert TreasuryAddressNotContract();
+
+        (bool ok, bytes memory data) = treasuryAddress.staticcall(
+            abi.encodeWithSelector(ITreasury.isTournamentRegistered.selector, 0)
+        );
+        if (!ok || data.length != 32) revert InvalidTreasuryContract();
+
+        address previousTreasury = address(treasury);
         treasury = ITreasury(treasuryAddress);
+        emit TreasuryAddressChanged(previousTreasury, treasuryAddress);
     }
 
     function setActiveTournament(uint256 tournamentId) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -269,22 +292,32 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         override(ERC1155, ERC1155Pausable, ERC1155Supply)
     {
         super._update(from, to, ids, values);
+        uint256 idsLength = ids.length;
         if (from == address(0)) {
-            for (uint256 i = 0; i < ids.length; i++) {
+            for (uint256 i; i < idsLength;) {
                 _addTokenToUser(to, ids[i]);
+                unchecked {
+                    ++i;
+                }
             }
             return;
         }
         if (to == address(0)) {
-            for (uint256 i = 0; i < ids.length; i++) {
+            for (uint256 i; i < idsLength;) {
                 _removeTokenFromUser(from, ids[i]);
+                unchecked {
+                    ++i;
+                }
             }
             return;
         }
         if (from != address(0) && to != address(0)) {
-            for (uint256 i = 0; i < ids.length; i++) {
+            for (uint256 i; i < idsLength;) {
                 _removeTokenFromUser(from, ids[i]);
                 _addTokenToUser(to, ids[i]);
+                unchecked {
+                    ++i;
+                }
             }
             return;
         }

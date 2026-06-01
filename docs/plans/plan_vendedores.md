@@ -91,7 +91,7 @@ Antes de cerrar un torneo, el admin debe haber cargado al pozo todo lo que quier
 
 Motivo:
 
-1. `Treasury.closeTournament(...)` congela el prize pool para ese torneo/asset.
+1. `Treasury.finalizeTournament(tournamentId)` congela el prize pool del torneo para todos los assets configurados.
 2. Si el torneo se cierra con menos fondos de los esperados, ese faltante ya no entra en la foto final del premio.
 
 Regla concreta:

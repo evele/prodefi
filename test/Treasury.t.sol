@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import "./BaseTest.sol";
 import "../src/Treasury.sol";
@@ -241,6 +241,7 @@ contract TreasuryTest is BaseTest {
 
     function _setOfficialResultsAndPositions() internal {
         _closeSalesIfOpen(TOURNAMENT_ID_1);
+        _movePastSubmissionDeadlineIfNeeded();
 
         vm.startPrank(admin);
         predictions.setResults(1, 2, 1);
@@ -514,6 +515,62 @@ contract TreasuryTest is BaseTest {
         treasury.setPrizeDistribution(TOURNAMENT_ID_1, address(unsupportedToken), percentages);
     }
 
+    function test_RemovePrizeDistributionToken_Success() public {
+        _logTestInfo("RemovePrizeDistributionToken Success");
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+
+        _setPrizeDistribution(TOURNAMENT_ID_1, address(USDC), percentages);
+        assertEq(treasury.getPrizeDistributionTokenCount(TOURNAMENT_ID_1), 1);
+        assertTrue(treasury.prizeDistributionSet(TOURNAMENT_ID_1, address(USDC)));
+
+        vm.expectEmit(true, true, false, true);
+        emit Treasury.PrizeDistributionRemoved(TOURNAMENT_ID_1, address(USDC));
+
+        vm.prank(admin);
+        treasury.removePrizeDistributionToken(TOURNAMENT_ID_1, address(USDC));
+
+        assertEq(treasury.getPrizeDistributionTokenCount(TOURNAMENT_ID_1), 0);
+        assertFalse(treasury.prizeDistributionSet(TOURNAMENT_ID_1, address(USDC)));
+    }
+
+    function test_RemovePrizeDistributionToken_RevertWhenPoolHasFunds() public {
+        _logTestInfo("RemovePrizeDistributionToken Revert When Pool Has Funds");
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        _setPrizeDistribution(TOURNAMENT_ID_1, address(USDC), percentages);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.PrizeDistributionRemovalNotAllowed.selector);
+        treasury.removePrizeDistributionToken(TOURNAMENT_ID_1, address(USDC));
+    }
+
+    function test_RemovePrizeDistributionToken_OnlyAdminRole() public {
+        _logTestInfo("RemovePrizeDistributionToken Only Admin Role");
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        _setPrizeDistribution(TOURNAMENT_ID_1, address(USDC), percentages);
+
+        bytes32 role = treasury.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), unauthorized, role
+            )
+        );
+
+        vm.prank(unauthorized);
+        treasury.removePrizeDistributionToken(TOURNAMENT_ID_1, address(USDC));
+    }
+
     // ========== CLAIM PRIZE TESTS ==========
 
     function test_ClaimPrize_Success() public {
@@ -755,7 +812,7 @@ contract TreasuryTest is BaseTest {
         _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_2, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_2);
 
         vm.prank(user1);
         treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
@@ -873,7 +930,7 @@ contract TreasuryTest is BaseTest {
 
         // Finalize tournament
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         uint256 initialBalance = user1.balance;
 
@@ -887,8 +944,10 @@ contract TreasuryTest is BaseTest {
         _logTestInfo("Edge Case Single Winner Takes All");
 
         _mintCarton(user1, TOKEN_ID_1);
+        _submitGamePrediction(user1, TOKEN_ID_1, _createValidGamePrediction());
         _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
         _closeSalesIfOpen(TOURNAMENT_ID_1);
+        _movePastSubmissionDeadlineIfNeeded();
 
         uint256[] memory tokenIds = new uint256[](1);
         tokenIds[0] = TOKEN_ID_1;
@@ -916,7 +975,7 @@ contract TreasuryTest is BaseTest {
 
         // Close tournament
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         uint256 initialBalance = user1.balance;
 
@@ -1277,7 +1336,7 @@ contract TreasuryTest is BaseTest {
         emit Treasury.TournamentClosed(TOURNAMENT_ID_1, ETH_TOKEN, (_prizeableAmount(INITIAL_DEPOSIT) * 95) / 100);
 
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         assertTrue(treasury.isClosedTournament(TOURNAMENT_ID_1, ETH_TOKEN));
         assertEq(treasury.closedPrizePools(TOURNAMENT_ID_1, ETH_TOKEN), (_prizeableAmount(INITIAL_DEPOSIT) * 95) / 100);
@@ -1291,7 +1350,7 @@ contract TreasuryTest is BaseTest {
         assertFalse(treasury.isTournamentClosedAnyAsset(TOURNAMENT_ID_1));
 
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         assertTrue(treasury.isTournamentClosedAnyAsset(TOURNAMENT_ID_1));
     }
@@ -1304,10 +1363,10 @@ contract TreasuryTest is BaseTest {
         _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
 
         vm.startPrank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         vm.expectRevert(Treasury.TournamentAlreadyClosed.selector);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
         vm.stopPrank();
     }
 
@@ -1319,7 +1378,7 @@ contract TreasuryTest is BaseTest {
         vm.expectRevert(Treasury.NoPrizePool.selector);
 
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
     }
 
     function test_CloseTournament_RevertNoPrizeDistribution() public {
@@ -1331,7 +1390,7 @@ contract TreasuryTest is BaseTest {
         vm.expectRevert(Treasury.NoPrizeDistribution.selector);
 
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
     }
 
     function test_CloseTournament_OnlyTournamentManagerRole() public {
@@ -1349,7 +1408,7 @@ contract TreasuryTest is BaseTest {
         );
 
         vm.prank(unauthorized);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
     }
 
     function test_CloseTournament_DepositsFailAfterClose() public {
@@ -1397,7 +1456,7 @@ contract TreasuryTest is BaseTest {
 
         // Finalize tournament
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         // Now claim should work
         vm.prank(user1);
@@ -1415,7 +1474,7 @@ contract TreasuryTest is BaseTest {
 
         // Finalize tournament with 1 ETH
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         uint256 expectedPrize = (_prizeableAmount(INITIAL_DEPOSIT) * 50) / 100; // 50% of prizeable pool
 
@@ -1450,7 +1509,7 @@ contract TreasuryTest is BaseTest {
 
         // Finalize tournament; all configured prize assets are snapshotted.
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         // ETH and USDC should be closed together because lifecycle is tournament-wide.
         assertTrue(treasury.isClosedTournament(TOURNAMENT_ID_1, ETH_TOKEN));
@@ -1473,6 +1532,88 @@ contract TreasuryTest is BaseTest {
         assertTrue(treasury.claimed(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN));
     }
 
+    function test_FinalizeTournament_IgnoresConfiguredEmptyAsset() public {
+        _logTestInfo("FinalizeTournament Ignores Configured Empty Asset");
+
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+
+        // ETH is the real funded asset for this tournament.
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        // USDC is configured by mistake but receives no deposits.
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1, address(USDC));
+
+        vm.prank(tournamentManager);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
+
+        assertTrue(treasury.tournamentFinalized(TOURNAMENT_ID_1));
+        assertTrue(treasury.isClosedTournament(TOURNAMENT_ID_1, ETH_TOKEN));
+        assertFalse(treasury.isClosedTournament(TOURNAMENT_ID_1, address(USDC)));
+        assertEq(treasury.closedPrizePools(TOURNAMENT_ID_1, address(USDC)), 0);
+    }
+
+    // ========== REGISTER TOURNAMENT TESTS ==========
+
+    function test_RegisterTournament_EmitsTournamentRegisteredOnFirstRegistration() public {
+        uint256 newId = 99;
+        MockCompetitionEngine newEngine = new MockCompetitionEngine();
+
+        vm.expectEmit(true, true, false, true);
+        emit Treasury.TournamentRegistered(newId, address(newEngine));
+
+        vm.prank(admin);
+        treasury.registerTournament(newId, address(newEngine));
+        assertTrue(treasury.tournamentRegistered(newId));
+    }
+
+    function test_RegisterTournament_EmitsCompetitionEngineChangedOnReRegistration() public {
+        Predictions newEngine = new Predictions(address(carton), TOURNAMENT_ID_1);
+
+        vm.expectEmit(true, true, true, true);
+        emit Treasury.CompetitionEngineChanged(TOURNAMENT_ID_1, address(predictions), address(newEngine));
+
+        vm.prank(admin);
+        treasury.registerTournament(TOURNAMENT_ID_1, address(newEngine));
+        assertEq(treasury.competitionEngineByTournament(TOURNAMENT_ID_1), address(newEngine));
+    }
+
+    function test_RegisterTournament_SameEngineKeepsEngine() public {
+        vm.prank(admin);
+        treasury.registerTournament(TOURNAMENT_ID_1, address(predictions));
+        assertEq(treasury.competitionEngineByTournament(TOURNAMENT_ID_1), address(predictions));
+    }
+
+    function test_RegisterTournament_RevertAfterSalesClosed() public {
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        MockCompetitionEngine newEngine = new MockCompetitionEngine();
+        vm.prank(admin);
+        vm.expectRevert(Treasury.CompetitionEngineAlreadyFrozen.selector);
+        treasury.registerTournament(TOURNAMENT_ID_1, address(newEngine));
+    }
+
+    function test_RegisterTournament_RevertZeroTournamentId() public {
+        MockCompetitionEngine newEngine = new MockCompetitionEngine();
+        vm.prank(admin);
+        vm.expectRevert(Treasury.InvalidTournamentId.selector);
+        treasury.registerTournament(0, address(newEngine));
+    }
+
+    function test_RegisterTournament_RevertZeroEngine() public {
+        vm.prank(admin);
+        vm.expectRevert(Treasury.InvalidCompetitionEngine.selector);
+        treasury.registerTournament(99, address(0));
+    }
+
+    function test_RegisterTournament_RevertOnlyAdmin() public {
+        MockCompetitionEngine newEngine = new MockCompetitionEngine();
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        treasury.registerTournament(99, address(newEngine));
+    }
+
     function test_CloseTournament_GetUserPrizeAmountUsesSnapshot() public {
         _logTestInfo("CloseTournament GetUserPrizeAmount Uses Snapshot");
 
@@ -1487,7 +1628,7 @@ contract TreasuryTest is BaseTest {
 
         // Close tournament
         vm.prank(tournamentManager);
-        treasury.closeTournament(TOURNAMENT_ID_1, ETH_TOKEN);
+        treasury.finalizeTournament(TOURNAMENT_ID_1);
 
         // After close the snapshot reflects the sealed claimable pool, which may be smaller if some paid places were left empty.
         uint256 prizeAfterClose = treasury.getUserPrizeAmount(TOURNAMENT_ID_1, ETH_TOKEN, 1);

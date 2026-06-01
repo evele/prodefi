@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import "forge-std/Test.sol";
 import "../src/Carton.sol";
@@ -7,6 +7,8 @@ import "../src/Predictions.sol";
 import "../src/Treasury.sol";
 
 contract PredictionsTest is Test {
+    event SubmissionDeadlineUpdated(uint256 oldDeadline, uint256 newDeadline);
+
     Carton cart;
     Predictions preds;
     address user = address(0xABCD);
@@ -54,6 +56,10 @@ contract PredictionsTest is Test {
         treasury.registerTournament(1, address(preds));
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         treasury.closeSales(1);
+    }
+
+    function _warpPastSubmissionDeadline() internal {
+        vm.warp(preds.submissionDeadline() + 1);
     }
 
     function testSubmitAndReadPicks() public {
@@ -115,7 +121,11 @@ contract PredictionsTest is Test {
 
         // 2) Set deadline for 1 day from now
         vm.warp(currentTime);
+        uint256 oldDeadline = preds.submissionDeadline();
         uint256 deadline = currentTime + 1 days;
+
+        vm.expectEmit(false, false, false, true);
+        emit SubmissionDeadlineUpdated(oldDeadline, deadline);
         preds.setSubmissionDeadline(deadline);
 
         // 3) Verify that deadline was set correctly
@@ -154,6 +164,7 @@ contract PredictionsTest is Test {
         closedTreasury.registerTournament(1, address(preds));
         closedTreasury.grantRole(closedTreasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         closedTreasury.closeSales(1);
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
 
         Treasury openTreasury = new Treasury(address(this), address(cart), 500);
@@ -212,7 +223,8 @@ contract PredictionsTest is Test {
         vm.expectRevert(Predictions.WrongPredictionCount.selector);
         preds.submitPrediction(TOKEN_ID, arr3);
 
-        // 2) Intentar hacer predicción después de que se establezcan resultados
+        // 2) Una vez vencida la ventana de submission, ya no se puede enviar aunque luego carguen resultados.
+        _warpPastSubmissionDeadline();
         preds.setResults(2, 2, 2);
         preds.setResults(3, 2, 1);
         preds.setResults(4, 0, 3);
@@ -223,7 +235,7 @@ contract PredictionsTest is Test {
         arr5[2] = Predictions.Prediction({ gameId: 3, result: [uint8(0), uint8(0)] });
         arr5[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
         vm.prank(user);
-        vm.expectRevert(Predictions.ResultsAlreadySet.selector);
+        vm.expectRevert(Predictions.DeadlinePassed.selector);
         preds.submitPrediction(TOKEN_ID, arr5);
     }
 
@@ -262,6 +274,23 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.DuplicateGameId.selector);
+        preds.submitPrediction(TOKEN_ID, arr);
+    }
+
+    function testCalculateDifferencePoints_HandlesSubtractionOverflowBoundary() public view {
+        assertEq(preds.calculateDifferencePoints(128, 0), 128);
+    }
+
+    function testCalculateDifferencePoints_HandlesAbsInt8MinBoundary() public view {
+        assertEq(preds.calculateDifferencePoints(72, 200), 128);
+    }
+
+    function testSubmitPredictionRevertsOnUnreasonableGoalValue() public {
+        Predictions.Prediction[] memory arr = _buildValidPredictions();
+        arr[0] = Predictions.Prediction({ gameId: 1, result: [uint8(128), uint8(0)] });
+
+        vm.prank(user);
+        vm.expectRevert(Predictions.GoalValueTooHigh.selector);
         preds.submitPrediction(TOKEN_ID, arr);
     }
 
@@ -364,7 +393,12 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
+        // Winner picks must also be submitted before the deadline.
+        vm.prank(user);
+        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+
         // Establecer resultados de los partidos (1-based gameIds)
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1); // Exacto: 7 + 3 = 10 puntos
         preds.setResults(2, 1, 1); // Empate: 7 + 3 = 10 puntos
         preds.setResults(3, 0, 3); // Acertar visitante: 6 + 3 = 9 puntos
@@ -382,10 +416,6 @@ contract PredictionsTest is Test {
         // Establecer ganadores oficiales
         preds.setOfficialWinners([1, 2, 3, 4]);
 
-        // Hacer predicción de ganadores
-        vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
-
         // Verificar puntos de ganadores
         assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63); // 25 + 18 + 10 + 10
 
@@ -402,10 +432,6 @@ contract PredictionsTest is Test {
         // Verificar que las posiciones se establecieron correctamente
         assertEq(preds.getCartonPosition(TOKEN_ID), 1);
 
-        // Actualizar puntos totales
-        vm.prank(user);
-        preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 102);
     }
 
     function testMatchPointsClampAtZeroAndKeepOutcomeBonus() public {
@@ -418,6 +444,7 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 5, 5); // Exacto -> 10
         preds.setResults(2, 5, 5); // Miss corto con signo incorrecto -> 6
         preds.setResults(3, 5, 5); // diffTotal 9 -> base 0, sin bonus -> 0
@@ -462,6 +489,7 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
         preds.setResults(2, 1, 1);
         preds.setResults(3, 0, 3);
@@ -481,14 +509,11 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1); // 10 puntos
         preds.setResults(2, 1, 1); // 10 puntos
 
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 20);
-
-        vm.prank(user);
-        preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 20);
 
         vm.expectRevert(Predictions.ResultNotSet.selector);
         preds.calculatePoints(TOKEN_ID, 2);
@@ -498,12 +523,13 @@ contract PredictionsTest is Test {
 
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
 
-        vm.prank(user);
-        preds.updateTotalPoints(TOKEN_ID);
-        assertEq(preds.totalPoints(TOKEN_ID), 39);
     }
 
     function testSetPositions() public {
+        uint256 tokenId2 = cart.mint(user, 1, "");
+        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId2);
+
         // 1) Intentar establecer posiciones con arrays de diferente longitud
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](2);
@@ -517,7 +543,7 @@ contract PredictionsTest is Test {
         ids = new uint256[](2);
         points = new uint256[](2);
         ids[0] = TOKEN_ID;
-        ids[1] = TOKEN_ID + 1;
+        ids[1] = tokenId2;
         points[0] = 80;
         points[1] = 90;
         vm.expectRevert(Predictions.PointsNotOrdered.selector);
@@ -528,16 +554,16 @@ contract PredictionsTest is Test {
         points[1] = 80;
         preds.setPositions(ids, points);
         assertEq(preds.getCartonPosition(TOKEN_ID), 1);
-        assertEq(preds.getCartonPosition(TOKEN_ID + 1), 2);
+        assertEq(preds.getCartonPosition(tokenId2), 2);
 
         // 4) Reemplazar el leaderboard con una sola entrada invalida posiciones viejas
         uint256[] memory updatedIds = new uint256[](1);
         uint256[] memory updatedPoints = new uint256[](1);
-        updatedIds[0] = TOKEN_ID + 1;
+        updatedIds[0] = tokenId2;
         updatedPoints[0] = 95;
         preds.setPositions(updatedIds, updatedPoints);
 
-        assertEq(preds.getCartonPosition(TOKEN_ID + 1), 1);
+        assertEq(preds.getCartonPosition(tokenId2), 1);
         vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
         preds.getCartonPosition(TOKEN_ID);
     }
@@ -546,6 +572,11 @@ contract PredictionsTest is Test {
         uint256 tokenId2 = cart.mint(user, 1, "");
         uint256 tokenId3 = cart.mint(user, 1, "");
         uint256 tokenId4 = cart.mint(user, 1, "");
+
+        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId2);
+        _submitValidPrediction(user, tokenId3);
+        _submitValidPrediction(user, tokenId4);
 
         uint256[] memory ids = new uint256[](4);
         uint256[] memory points = new uint256[](4);
@@ -718,6 +749,49 @@ contract PredictionsTest is Test {
         preds.appendPositionsBatch(ids, points);
     }
 
+    function testSetPositionsRevertsForWrongTournamentToken() public {
+        uint256 tokenId1 = _mintTournamentToken(user, 1);
+        uint256 tokenId2 = _mintTournamentToken(user2, 2);
+        _submitValidPrediction(user, tokenId1);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId2;
+        points[0] = 100;
+
+        vm.expectRevert(Predictions.TokenNotEligibleForTournament.selector);
+        preds.setPositions(ids, points);
+    }
+
+    function testSetPositionsRevertsForUnsubmittedToken() public {
+        uint256 submittedTokenId = _mintTournamentToken(user2, 1);
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user2, submittedTokenId);
+
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory points = new uint256[](1);
+        ids[0] = tokenId;
+        points[0] = 100;
+
+        vm.expectRevert(Predictions.TokenNotEligibleForTournament.selector);
+        preds.setPositions(ids, points);
+    }
+
+    function testSetPositionsRevertsForDuplicateToken() public {
+        uint256 tokenId = _mintTournamentToken(user, 1);
+        _submitValidPrediction(user, tokenId);
+
+        uint256[] memory ids = new uint256[](2);
+        uint256[] memory points = new uint256[](2);
+        ids[0] = tokenId;
+        ids[1] = tokenId;
+        points[0] = 100;
+        points[1] = 90;
+
+        vm.expectRevert(Predictions.DuplicatePositionToken.selector);
+        preds.setPositions(ids, points);
+    }
+
     function testAppendPositionsBatchRevertsForInvalidOrderingWithinBatch() public {
         uint256 tokenId1 = _mintTournamentToken(user, 1);
         uint256 tokenId2 = _mintTournamentToken(user2, 1);
@@ -875,6 +949,7 @@ contract PredictionsTest is Test {
         // close tournament sales, now can set results
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         treasury.closeSales(1);
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
 
         // Establecer resultados dos veces debe revertir
@@ -888,8 +963,24 @@ contract PredictionsTest is Test {
         assertEq(result[1], 1, "Team2 goals should be 1");
     }
 
+    function testSetResultsRevertsBeforeDeadlineEvenWhenSalesClosed() public {
+        _setupTreasuryAndCloseSales();
+
+        vm.expectRevert(Predictions.SubmissionWindowStillOpen.selector);
+        preds.setResults(1, 2, 1);
+    }
+
+    function testSetResultsRevertsOnUnreasonableGoalValue() public {
+        _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
+
+        vm.expectRevert(Predictions.GoalValueTooHigh.selector);
+        preds.setResults(1, 128, 1);
+    }
+
     function testSetResultsBatch() public {
         _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
 
         uint8[] memory gameIds = new uint8[](4);
         gameIds[0] = 1;
@@ -917,6 +1008,35 @@ contract PredictionsTest is Test {
         assertEq(result1[1], 1);
         assertEq(result4[0], 3);
         assertEq(result4[1], 0);
+    }
+
+    function testSetResultsBatchRevertsBeforeDeadlineEvenWhenSalesClosed() public {
+        _setupTreasuryAndCloseSales();
+
+        uint8[] memory gameIds = new uint8[](1);
+        gameIds[0] = 1;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 2;
+        uint8[] memory team2Goals = new uint8[](1);
+        team2Goals[0] = 1;
+
+        vm.expectRevert(Predictions.SubmissionWindowStillOpen.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
+    }
+
+    function testSetResultsBatchRevertsOnUnreasonableGoalValue() public {
+        _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
+
+        uint8[] memory gameIds = new uint8[](1);
+        gameIds[0] = 1;
+        uint8[] memory team1Goals = new uint8[](1);
+        team1Goals[0] = 128;
+        uint8[] memory team2Goals = new uint8[](1);
+        team2Goals[0] = 1;
+
+        vm.expectRevert(Predictions.GoalValueTooHigh.selector);
+        preds.setResultsBatch(gameIds, team1Goals, team2Goals);
     }
 
     function testSetResultsBatchRevertsWhenSalesOpen() public {
@@ -953,6 +1073,7 @@ contract PredictionsTest is Test {
 
     function testSetResultsBatchRevertsOnInvalidGameId() public {
         _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
 
         uint8[] memory gameIds = new uint8[](1);
         gameIds[0] = 0;
@@ -967,6 +1088,7 @@ contract PredictionsTest is Test {
 
     function testSetResultsBatchRevertsOnDuplicateGameId() public {
         _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
 
         uint8[] memory gameIds = new uint8[](2);
         gameIds[0] = 1;
@@ -984,6 +1106,7 @@ contract PredictionsTest is Test {
 
     function testSetResultsBatchRevertsWhenResultAlreadySet() public {
         _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
 
         preds.setResults(1, 2, 1);
 
@@ -1029,12 +1152,23 @@ contract PredictionsTest is Test {
         vm.expectRevert(Predictions.ResultNotSet.selector);
         preds.updateResults(1, 2, 1);
 
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
         preds.updateResults(1, 3, 2);
 
         uint8[2] memory result = preds.getGameResults(1);
         assertEq(result[0], 3, "Team1 goals should be updated to 3");
         assertEq(result[1], 2, "Team2 goals should be updated to 2");
+    }
+
+    function testUpdateResultsRevertsOnUnreasonableGoalValue() public {
+        _setupTreasuryAndCloseSales();
+        _warpPastSubmissionDeadline();
+
+        preds.setResults(1, 2, 1);
+
+        vm.expectRevert(Predictions.GoalValueTooHigh.selector);
+        preds.updateResults(1, 128, 1);
     }
 
     function testResultCorrectionChangesRecalculatedTotal() public {
@@ -1047,6 +1181,7 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.submitPrediction(TOKEN_ID, gamePreds);
 
+        _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
         assertEq(preds.calculateTotalPoints(TOKEN_ID), 10);
 
@@ -1058,10 +1193,12 @@ contract PredictionsTest is Test {
         Treasury treasury = new Treasury(address(this), address(cart), 500);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
+        _submitValidPrediction(user, TOKEN_ID);
 
         treasury.depositFromSales{ value: 1 ether }(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         treasury.closeSales(1);
+        _warpPastSubmissionDeadline();
 
         uint8[] memory percentages = new uint8[](1);
         percentages[0] = 100;
@@ -1167,6 +1304,7 @@ contract PredictionsTest is Test {
 
     function testUpdateOfficialWinners_RevertWhenPositionsAlreadyPublished() public {
         preds.setOfficialWinners([1, 2, 3, 4]);
+        _submitValidPrediction(user, TOKEN_ID);
 
         uint256[] memory ids = new uint256[](1);
         ids[0] = TOKEN_ID;
@@ -1194,10 +1332,12 @@ contract PredictionsTest is Test {
         Treasury treasury = new Treasury(address(this), address(cart), 500);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
+        _submitValidPrediction(user, TOKEN_ID);
 
         treasury.depositFromSales{ value: 1 ether }(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
         treasury.closeSales(1);
+        _warpPastSubmissionDeadline();
 
         uint8[] memory percentages = new uint8[](1);
         percentages[0] = 100;

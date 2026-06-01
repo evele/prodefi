@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import { IERC1155 } from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -49,6 +49,7 @@ contract Predictions is Ownable {
     error NoPredictionsSubmitted();
     error TournamentClosedForCorrections();
     error TournamentSalesStillOpen();
+    error SubmissionWindowStillOpen();
     error BatchResultsOnlyOnAnvil();
     error InvalidTournamentId();
     error InvalidExpectedEntries();
@@ -60,6 +61,7 @@ contract Predictions is Ownable {
     error TokenNotEligibleForTournament();
     error DuplicatePositionToken();
     error PositionsUpdateIncomplete();
+    error GoalValueTooHigh();
 
     IERC1155 public cartones;
     uint256 public immutable tournamentId;
@@ -70,6 +72,7 @@ contract Predictions is Ownable {
 
     event TeamsHashUpdated(bytes32 oldHash, bytes32 newHash);
     event TeamsHashFrozen();
+    event SubmissionDeadlineUpdated(uint256 oldDeadline, uint256 newDeadline);
 
     // Number of games required in a prediction (configurable by owner before submissions start)
     uint8 public totalGames = 72;
@@ -77,6 +80,7 @@ contract Predictions is Ownable {
     uint8 constant EMPATE = 1;
     uint8 constant VISITANTE = 2;
     uint8 constant MAX_TEAM_ID = 48; // Maximum allowed team ID
+    uint8 constant MAX_GOALS = 99; // Sanity cap for realistic football scores
     uint8 constant MAX_WINNERS = 4; // Maximum number of winner teams to predict
     uint8 constant MATCH_BASE_POINTS = 7; // Base points before score-difference penalties
     uint8 constant MATCH_OUTCOME_BONUS = 3; // Bonus for guessing local/draw/visitor correctly
@@ -103,13 +107,11 @@ contract Predictions is Ownable {
     }
 
     mapping(uint256 => WinnersPrediction) public winnersPredictions;
-    mapping(uint256 => uint256) public totalPoints; // tokenID -> total points
 
     uint256 public submissionDeadline; // Deadline for submitting predictions
 
     // Events for winner predictions
     event WinnersPredicted(address indexed user, uint256 indexed tokenId, uint8[4] teams);
-    event PointsUpdated(uint256 indexed tokenId, uint256 points);
 
     event PredictionsSubmitted(address indexed user, uint256 indexed tokenId);
     event ResultsSet(uint8 indexed gameId, uint8 team1Goals, uint8 team2Goals);
@@ -188,7 +190,10 @@ contract Predictions is Ownable {
     function setSubmissionDeadline(uint256 _deadline) external onlyOwner {
         if (_deadline <= block.timestamp) revert DeadlineMustBeFuture();
         if (_isSubmissionDeadlineLocked()) revert SubmissionDeadlineLocked();
+
+        uint256 oldDeadline = submissionDeadline;
         submissionDeadline = _deadline;
+        emit SubmissionDeadlineUpdated(oldDeadline, _deadline);
     }
     // Guard to prevent changing game count after any prediction was submitted
 
@@ -226,17 +231,27 @@ contract Predictions is Ownable {
         uint256 currentRank = 0;
         uint256 previousPoints = type(uint256).max;
 
-        for (uint256 i = 0; i < _predictionPoints.length; i++) {
+        uint256 predictionPointsLength = _predictionPoints.length;
+        for (uint256 i; i < predictionPointsLength;) {
+            uint256 tokenId = _predictionIds[i];
             if (maxPoints < _predictionPoints[i]) revert PointsNotOrdered();
+            if (tokenPendingVersion[tokenId] == newVersion) revert DuplicatePositionToken();
+            if (!used[tokenId] || _tokenTournamentId(tokenId) != tournamentId) {
+                revert TokenNotEligibleForTournament();
+            }
 
             if (i == 0 || _predictionPoints[i] < previousPoints) {
                 currentRank = i + 1;
                 previousPoints = _predictionPoints[i];
             }
 
-            tokenPositions[_predictionIds[i]] = currentRank;
-            tokenPositionsVersion[_predictionIds[i]] = newVersion;
+            tokenPendingVersion[tokenId] = newVersion;
+            tokenPositions[tokenId] = currentRank;
+            tokenPositionsVersion[tokenId] = newVersion;
             maxPoints = _predictionPoints[i];
+            unchecked {
+                ++i;
+            }
         }
 
         emit PositionsUpdated(_predictionIds);
@@ -274,7 +289,8 @@ contract Predictions is Ownable {
         bool hasLastPoints = pendingHasLastPoints;
         uint256 currentRank = pendingCurrentRank;
 
-        for (uint256 i = 0; i < tokenIds.length; i++) {
+        uint256 tokenIdsLength = tokenIds.length;
+        for (uint256 i; i < tokenIdsLength;) {
             uint256 tokenId = tokenIds[i];
             uint256 pointValue = points[i];
 
@@ -304,6 +320,9 @@ contract Predictions is Ownable {
             tokenPositions[tokenId] = currentRank;
             tokenPositionsVersion[tokenId] = pendingPositionsVersion;
             lastPoints = pointValue;
+            unchecked {
+                ++i;
+            }
         }
 
         pendingProcessedEntries = processedEntries + tokenIds.length;
@@ -328,12 +347,16 @@ contract Predictions is Ownable {
     function cancelPositionsUpdate() external onlyOwner {
         if (!positionsUpdateInProgress) revert PositionsUpdateNotInProgress();
 
-        for (uint256 i = 0; i < pendingPositionTokenIds.length; i++) {
+        uint256 pendingTokenIdsLength = pendingPositionTokenIds.length;
+        for (uint256 i; i < pendingTokenIdsLength;) {
             uint256 tokenId = pendingPositionTokenIds[i];
-            if (tokenPositionBackupVersion[tokenId] != pendingPositionsVersion) continue;
-
-            tokenPositions[tokenId] = tokenPositionBackup[tokenId];
-            tokenPositionsVersion[tokenId] = tokenPositionVersionBackup[tokenId];
+            if (tokenPositionBackupVersion[tokenId] == pendingPositionsVersion) {
+                tokenPositions[tokenId] = tokenPositionBackup[tokenId];
+                tokenPositionsVersion[tokenId] = tokenPositionVersionBackup[tokenId];
+            }
+            unchecked {
+                ++i;
+            }
         }
 
         emit PositionsUpdateCancelled(pendingTournamentId, pendingPositionsVersion);
@@ -349,10 +372,11 @@ contract Predictions is Ownable {
     }
 
     function allResultsSet() public view returns (bool) {
-        for (uint8 i = 1; i <= totalGames; i++) {
+        uint8 totalGamesCount = totalGames;
+        for (uint8 i = 1; i <= totalGamesCount; ++i) {
             if (!games[i].set) return false;
         }
-        return totalGames > 0;
+        return totalGamesCount > 0;
     }
 
     function officialWinnersSet() external view returns (bool) {
@@ -396,13 +420,18 @@ contract Predictions is Ownable {
         submittedCountByTournament[tournamentId] += 1;
         if (!predictionsStarted) predictionsStarted = true;
 
-        for (uint256 i = 0; i < _prediction.length; i++) {
+        uint256 predictionLength = _prediction.length;
+        for (uint256 i; i < predictionLength;) {
             uint8 gameId = _prediction[i].gameId;
             if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
             if (usedGameId[gameId]) revert DuplicateGameId();
             if (games[gameId].set) revert ResultsAlreadySet();
+            _validateGoals(_prediction[i].result[0], _prediction[i].result[1]);
             usedGameId[gameId] = true;
             predictions[tokenId].push(Prediction({ gameId: gameId, result: _prediction[i].result }));
+            unchecked {
+                ++i;
+            }
         }
 
         emit PredictionsSubmitted(sender, tokenId);
@@ -412,6 +441,7 @@ contract Predictions is Ownable {
         if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
         if (games[gameId].set) revert ResultsAlreadySet();
         _revertIfTournamentSalesOpen();
+        _revertIfSubmissionWindowStillOpen();
 
         _setResult(gameId, team1Goals, team2Goals);
     }
@@ -424,10 +454,12 @@ contract Predictions is Ownable {
         if (gameIds.length != team1Goals.length || gameIds.length != team2Goals.length) revert ArrayLengthMismatch();
 
         _revertIfTournamentSalesOpen();
+        _revertIfSubmissionWindowStillOpen();
 
         bool[] memory usedGameId = new bool[](totalGames + 1);
 
-        for (uint256 i = 0; i < gameIds.length; i++) {
+        uint256 gameIdsLength = gameIds.length;
+        for (uint256 i; i < gameIdsLength;) {
             uint8 gameId = gameIds[i];
             if (gameId == 0 || gameId > totalGames) revert InvalidGameId();
             if (usedGameId[gameId]) revert DuplicateGameId();
@@ -435,6 +467,9 @@ contract Predictions is Ownable {
 
             usedGameId[gameId] = true;
             _setResult(gameId, team1Goals[i], team2Goals[i]);
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -448,6 +483,7 @@ contract Predictions is Ownable {
         uint8 oldTeam1Goals = game.result[0];
         uint8 oldTeam2Goals = game.result[1];
 
+        _validateGoals(team1Goals, team2Goals);
         game.result = [team1Goals, team2Goals];
 
         emit ResultsUpdated(gameId, oldTeam1Goals, oldTeam2Goals, team1Goals, team2Goals);
@@ -458,6 +494,12 @@ contract Predictions is Ownable {
         if (submissionDeadline != 0 && block.timestamp >= submissionDeadline) return true;
         if (_tournamentSalesClosed()) return true;
         return _hasAnyResultSet();
+    }
+
+    function _revertIfSubmissionWindowStillOpen() internal view {
+        if (submissionDeadline != 0 && block.timestamp < submissionDeadline) {
+            revert SubmissionWindowStillOpen();
+        }
     }
 
     function _treasuryAddress() internal view returns (address) {
@@ -472,7 +514,8 @@ contract Predictions is Ownable {
     }
 
     function _hasAnyResultSet() internal view returns (bool) {
-        for (uint8 i = 1; i <= totalGames; i++) {
+        uint8 totalGamesCount = totalGames;
+        for (uint8 i = 1; i <= totalGamesCount; ++i) {
             if (games[i].set) return true;
         }
         return false;
@@ -488,10 +531,15 @@ contract Predictions is Ownable {
     }
 
     function _setResult(uint8 gameId, uint8 team1Goals, uint8 team2Goals) internal {
+        _validateGoals(team1Goals, team2Goals);
         games[gameId].result = [team1Goals, team2Goals];
         games[gameId].set = true;
 
         emit ResultsSet(gameId, team1Goals, team2Goals);
+    }
+
+    function _validateGoals(uint8 team1Goals, uint8 team2Goals) internal pure {
+        if (team1Goals > MAX_GOALS || team2Goals > MAX_GOALS) revert GoalValueTooHigh();
     }
 
     function _revertIfTournamentClosedForCorrections() internal view {
@@ -549,7 +597,7 @@ contract Predictions is Ownable {
     }
 
     function calculateDifferencePoints(uint8 goalsP, uint8 goalsR) public pure returns (uint8) {
-        return abs(int8(goalsR) - int8(goalsP));
+        return goalsR >= goalsP ? goalsR - goalsP : goalsP - goalsR;
     }
 
     function getLocalEmpateVisitante(uint8 goalsL, uint8 goalsV) public pure returns (uint8) {
@@ -557,7 +605,7 @@ contract Predictions is Ownable {
     }
 
     function abs(int8 x) public pure returns (uint8) {
-        return uint8(x >= 0 ? x : -x);
+        return x >= 0 ? uint8(uint16(uint8(x))) : uint8(uint16(-int16(x)));
     }
 
     // Functions for winner predictions
@@ -573,8 +621,11 @@ contract Predictions is Ownable {
         if (!all_different(teams)) revert DuplicateTeamId();
 
         // Validate that team IDs are valid
-        for (uint256 i = 0; i < MAX_WINNERS; i++) {
+        for (uint256 i; i < MAX_WINNERS;) {
             if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
+            unchecked {
+                ++i;
+            }
         }
 
         winnersPredictions[tokenId] = WinnersPrediction({ teams: teams, set: true });
@@ -583,11 +634,17 @@ contract Predictions is Ownable {
     }
 
     function all_different(uint8[4] calldata teams) public pure returns (bool) {
-        for (uint256 i = 0; i < MAX_WINNERS; i++) {
-            for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
+        for (uint256 i; i < MAX_WINNERS;) {
+            for (uint256 j = i + 1; j < MAX_WINNERS;) {
                 if (teams[i] == teams[j]) {
                     return false;
                 }
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
             }
         }
         return true;
@@ -628,10 +685,16 @@ contract Predictions is Ownable {
 
     function _validateOfficialWinners(uint8[4] calldata teams) internal pure {
         // Validate that team IDs are valid and there are no duplicates
-        for (uint256 i = 0; i < MAX_WINNERS; i++) {
+        for (uint256 i; i < MAX_WINNERS;) {
             if (teams[i] == 0 || teams[i] > MAX_TEAM_ID) revert InvalidTeamId();
-            for (uint256 j = i + 1; j < MAX_WINNERS; j++) {
+            for (uint256 j = i + 1; j < MAX_WINNERS;) {
                 if (teams[i] == teams[j]) revert DuplicateTeamId();
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
             }
         }
     }
@@ -667,10 +730,18 @@ contract Predictions is Ownable {
         uint256 gamePoints = 0;
         uint256 winnerPoints = 0;
 
-        // Calcular puntos de los partidos
-        for (uint8 i = 0; i < totalGames; i++) {
-            if (!games[predictions[tokenId][i].gameId].set) continue;
-            gamePoints += calculatePoints(tokenId, i);
+        // Each stored prediction currently has exactly `totalGames` entries because
+        // submitPrediction enforces an exact-length payload and setTotalGames is
+        // locked after submissions start. If partial submissions are ever allowed,
+        // revisit this loop bound before changing that invariant.
+        uint8 totalGamesCount = totalGames;
+        for (uint8 i; i < totalGamesCount;) {
+            if (games[predictions[tokenId][i].gameId].set) {
+                gamePoints += calculatePoints(tokenId, i);
+            }
+            unchecked {
+                ++i;
+            }
         }
 
         // Si los ganadores están establecidos, sumar los puntos de los ganadores
@@ -681,11 +752,4 @@ contract Predictions is Ownable {
         return gamePoints + winnerPoints;
     }
 
-    // Function to update total points of a carton
-    function updateTotalPoints(uint256 tokenId) external {
-        if (!used[tokenId]) revert NoPredictionsSubmitted();
-        uint256 newPoints = calculateTotalPoints(tokenId);
-        totalPoints[tokenId] = newPoints;
-        emit PointsUpdated(tokenId, newPoints);
-    }
 }

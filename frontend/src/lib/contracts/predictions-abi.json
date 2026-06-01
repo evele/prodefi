@@ -921,25 +921,6 @@
   },
   {
     "type": "function",
-    "name": "totalPoints",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tournamentId",
     "inputs": [],
     "outputs": [
@@ -995,19 +976,6 @@
         "name": "team2Goals",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "updateTotalPoints",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1098,25 +1066,6 @@
         "type": "address",
         "indexed": true,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PointsUpdated",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "points",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1311,6 +1260,25 @@
   },
   {
     "type": "event",
+    "name": "SubmissionDeadlineUpdated",
+    "inputs": [
+      {
+        "name": "oldDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TeamsHashFrozen",
     "inputs": [],
     "anonymous": false
@@ -1430,6 +1398,11 @@
   },
   {
     "type": "error",
+    "name": "GoalValueTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidExpectedEntries",
     "inputs": []
   },
@@ -1543,6 +1516,16 @@
   {
     "type": "error",
     "name": "ResultsAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionDeadlineLocked",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionWindowStillOpen",
     "inputs": []
   },
   {

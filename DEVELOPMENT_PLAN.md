@@ -116,11 +116,11 @@ Immediate next backend step:
 
 ### Known Bugs in Contracts — FIXED
 
-All critical bugs fixed. All dead code cleaned up:
+All critical bugs fixed. Dead code cleanup status:
 - ~~Array sizing mismatch (`bool[33]` → `bool[49]`)~~ FIXED
 - ~~Inconsistent team ID validation~~ FIXED (unified to `> 0 && <= MAX_TEAM_ID`)
 - ~~`Counter.sol`, `Counter.t.sol`~~ DELETED (Feb 14)
-- `PredictionsFactory.sol` — kept intentionally for future multi-tournament support
+- ~~`PredictionsFactory.sol` in `src/`~~ ARCHIVED to `docs/archive/contracts/PredictionsFactory.sol` (Jun 1) after CI size failure; deploy flow continues to instantiate `Predictions` directly
 
 ### Other Observations
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
 import "./BaseTest.sol";
 
@@ -58,17 +58,7 @@ contract IntegrationTest is BaseTest {
         _assertPointsInRange(allPoints[1], 60, 75); // User2 medium score
         _assertPointsInRange(allPoints[2], 0, 40); // User3 low score
 
-        // ========== PHASE 5: UPDATE POINTS AND SET RANKINGS ==========
-
-        // Update stored points
-        predictions.updateTotalPoints(TOKEN_ID_1);
-        predictions.updateTotalPoints(TOKEN_ID_2);
-        predictions.updateTotalPoints(TOKEN_ID_3);
-
-        // Verify stored points match calculated points
-        assertEq(predictions.totalPoints(TOKEN_ID_1), allPoints[0]);
-        assertEq(predictions.totalPoints(TOKEN_ID_2), allPoints[1]);
-        assertEq(predictions.totalPoints(TOKEN_ID_3), allPoints[2]);
+        // ========== PHASE 5: SET RANKINGS ==========
 
         // Set final rankings
         uint256[] memory ids = _createUint256Array(TOKEN_ID_1, TOKEN_ID_2, TOKEN_ID_3);
