@@ -107,12 +107,11 @@ contract PredictionsTest is Test {
 
     function testSetSubmissionDeadline() public {
         // 1) Try setting deadline in the past should revert
-        // 0) Advance block 2 days to be able to subtract without underflow
-        vm.warp(2 days);
-        uint256 currentTime = block.timestamp; // == 2 days
+        vm.warp(block.timestamp + 1 hours);
+        uint256 currentTime = block.timestamp;
         // 1) Try setting deadline in the past should revert
         vm.expectRevert(Predictions.DeadlineMustBeFuture.selector);
-        preds.setSubmissionDeadline(currentTime - 1 days); // now equals 1 day
+        preds.setSubmissionDeadline(currentTime - 1);
 
         // 2) Set deadline for 1 day from now
         vm.warp(currentTime);
@@ -126,6 +125,42 @@ contract PredictionsTest is Test {
         vm.warp(currentTime + 1 hours);
         vm.expectRevert(Predictions.DeadlineMustBeFuture.selector);
         preds.setSubmissionDeadline(currentTime);
+    }
+
+    function testSetSubmissionDeadline_RevertsAfterPredictionsStart() public {
+        _submitValidPrediction(user, TOKEN_ID);
+
+        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
+        preds.setSubmissionDeadline(block.timestamp + 2 days);
+    }
+
+    function testSetSubmissionDeadline_RevertsAfterDeadlineExpires() public {
+        vm.warp(preds.submissionDeadline() + 1);
+
+        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
+        preds.setSubmissionDeadline(block.timestamp + 1 days);
+    }
+
+    function testSetSubmissionDeadline_RevertsAfterSalesClose() public {
+        _setupTreasuryAndCloseSales();
+
+        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
+        preds.setSubmissionDeadline(block.timestamp + 2 days);
+    }
+
+    function testSetSubmissionDeadline_RevertsAfterAnyResultSet() public {
+        Treasury closedTreasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(closedTreasury));
+        closedTreasury.registerTournament(1, address(preds));
+        closedTreasury.grantRole(closedTreasury.TOURNAMENT_MANAGER_ROLE(), address(this));
+        closedTreasury.closeSales(1);
+        preds.setResults(1, 2, 1);
+
+        Treasury openTreasury = new Treasury(address(this), address(cart), 500);
+        cart.setTreasuryAddress(address(openTreasury));
+
+        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
+        preds.setSubmissionDeadline(block.timestamp + 2 days);
     }
 
     function testSubmitPredictionBeforeDeadline() public {

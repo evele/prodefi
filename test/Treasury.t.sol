@@ -749,9 +749,10 @@ contract TreasuryTest is BaseTest {
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = (tournament2Pool * 80) / 100;
         amounts[1] = (tournament2Pool * 20) / 100;
-        _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
         tournament2Engine.setReady(true);
+
+        _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
 
         vm.prank(tournamentManager);
         treasury.closeTournament(TOURNAMENT_ID_2, ETH_TOKEN);
@@ -787,11 +788,36 @@ contract TreasuryTest is BaseTest {
         tokenIds[0] = tournament2TokenId;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
+
+        tournament2Engine.setReady(true);
         _setFinalPrizeAmountsAndSeal(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
+
+        tournament2Engine.setReady(false);
 
         vm.prank(tournamentManager);
         vm.expectRevert(Treasury.TournamentNotReadyForFinalization.selector);
         treasury.finalizeTournament(TOURNAMENT_ID_2);
+    }
+
+    function test_SealFinalPrizeAmounts_RevertsWhenEngineNotReady() public {
+        uint256 tournament2TokenId = _mintTournamentToken(user1, TOURNAMENT_ID_2);
+        _depositFunds(TOURNAMENT_ID_2, INITIAL_DEPOSIT);
+
+        uint8[] memory percentages = new uint8[](1);
+        percentages[0] = 100;
+        _setPrizeDistribution(TOURNAMENT_ID_2, percentages);
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = tournament2TokenId;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = treasury.getPrizePool(TOURNAMENT_ID_2, ETH_TOKEN);
+
+        vm.prank(admin);
+        treasury.setFinalPrizeAmounts(TOURNAMENT_ID_2, ETH_TOKEN, tokenIds, amounts);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.TournamentNotReadyForFinalization.selector);
+        treasury.sealFinalPrizeAmounts(TOURNAMENT_ID_2, ETH_TOKEN);
     }
 
     function test_ClaimPrize_RevertsForWrongTournamentToken() public {
@@ -813,6 +839,18 @@ contract TreasuryTest is BaseTest {
 
         assertEq(treasury.globalReserve(ETH_TOKEN), 0);
         assertEq(treasury.prizePools(TOURNAMENT_ID_2, ETH_TOKEN), reserveAmount);
+    }
+
+    function test_SeedTournamentFromReserve_RevertsAfterFinalPrizeAmountsSeal() public {
+        _setupCompleteScenarioWithTreasuryNoClose(TOURNAMENT_ID_1);
+        _setDefaultPrizeDistribution(TOURNAMENT_ID_1);
+        _setDefaultFinalPrizeAmounts(TOURNAMENT_ID_1, ETH_TOKEN);
+
+        uint256 reserveAmount = treasury.getGlobalReserve(ETH_TOKEN);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.FinalPrizeAmountsAlreadySealed.selector);
+        treasury.seedTournamentFromReserve(TOURNAMENT_ID_1, ETH_TOKEN, reserveAmount);
     }
 
     // ========== EDGE CASES ==========

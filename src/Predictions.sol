@@ -24,6 +24,7 @@ interface ITreasurySalesClosed {
 contract Predictions is Ownable {
     error TeamsHashAlreadyFrozen();
     error DeadlineMustBeFuture();
+    error SubmissionDeadlineLocked();
     error PredictionsAlreadyStarted();
     error TotalGamesMustBePositive();
     error NoPredictionsProvided();
@@ -186,6 +187,7 @@ contract Predictions is Ownable {
     // Function to set the time limit for predictions
     function setSubmissionDeadline(uint256 _deadline) external onlyOwner {
         if (_deadline <= block.timestamp) revert DeadlineMustBeFuture();
+        if (_isSubmissionDeadlineLocked()) revert SubmissionDeadlineLocked();
         submissionDeadline = _deadline;
     }
     // Guard to prevent changing game count after any prediction was submitted
@@ -201,7 +203,9 @@ contract Predictions is Ownable {
         totalGames = _totalGames;
     }
 
-    // Function for owner to set positions
+    // Legacy fallback only. Admin/frontend use the batched leaderboard flow
+    // (`beginPositionsUpdate` -> `appendPositionsBatch` -> `finalizePositionsUpdate`).
+    // Keep this only as an emergency operational fallback.
     // TODO: Final leaderboard integrity improvements:
     // - Add an optional challenge window between setting final positions and tournament finalization.
     // - Add batched verification so final positions can be checked in chunks without recalculating every token in one tx.
@@ -449,12 +453,36 @@ contract Predictions is Ownable {
         emit ResultsUpdated(gameId, oldTeam1Goals, oldTeam2Goals, team1Goals, team2Goals);
     }
 
+    function _isSubmissionDeadlineLocked() internal view returns (bool) {
+        if (predictionsStarted) return true;
+        if (submissionDeadline != 0 && block.timestamp >= submissionDeadline) return true;
+        if (_tournamentSalesClosed()) return true;
+        return _hasAnyResultSet();
+    }
+
+    function _treasuryAddress() internal view returns (address) {
+        return ICartonTournamentContext(address(cartones)).treasury();
+    }
+
+    function _tournamentSalesClosed() internal view returns (bool) {
+        address treasury = _treasuryAddress();
+        if (treasury == address(0)) return false;
+
+        return ITreasurySalesClosed(treasury).salesClosed(tournamentId);
+    }
+
+    function _hasAnyResultSet() internal view returns (bool) {
+        for (uint8 i = 1; i <= totalGames; i++) {
+            if (games[i].set) return true;
+        }
+        return false;
+    }
+
     function _revertIfTournamentSalesOpen() internal view {
-        ICartonTournamentContext carton = ICartonTournamentContext(address(cartones));
-        address treasury = carton.treasury();
+        address treasury = _treasuryAddress();
         if (treasury == address(0)) return;
 
-        if (ITreasurySalesClosed(treasury).salesClosed(tournamentId) == false) {
+        if (!_tournamentSalesClosed()) {
             revert TournamentSalesStillOpen();
         }
     }
@@ -467,8 +495,7 @@ contract Predictions is Ownable {
     }
 
     function _revertIfTournamentClosedForCorrections() internal view {
-        ICartonTournamentContext carton = ICartonTournamentContext(address(cartones));
-        address treasury = carton.treasury();
+        address treasury = _treasuryAddress();
         if (treasury == address(0)) return;
 
         if (ITreasuryTournamentStatus(treasury).isTournamentClosedAnyAsset(tournamentId)) {

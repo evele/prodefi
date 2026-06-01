@@ -8,13 +8,13 @@
 
 ## Resumen ejecutivo
 
-El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "cartones"), `Treasury` (custodia multi-asset de pools de premios), `Predictions` (motor de juego/scoring por torneo) y `PredictionsFactory` (dead code, no usado en `Deploy.s.sol`). El diseño hereda buenas piezas de OpenZeppelin (AccessControl, SafeERC20, ReentrancyGuard, ERC1155Pausable) y separa razonablemente las responsabilidades, pero presenta varias debilidades de severidad alta y media: contabilidad ERC20/ETH desacoplada de saldos reales con riesgo de DoS por tokens fee-on-transfer/rebasing y varios puntos donde el owner puede atascar el torneo (DoS por centralización). La inconsistencia grave de `userTokens` por ownership parcial fue mitigada al forzar `amount == 1` por cartón, el índice `userTokens` ahora usa remove O(1), y los ganadores oficiales ahora pueden corregirse antes de publicar el leaderboard final. No se encontró ninguna vulnerabilidad crítica explotable de robo directo de fondos por un actor no privilegiado.
+El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "cartones"), `Treasury` (custodia multi-asset de pools de premios), `Predictions` (motor de juego/scoring por torneo) y `PredictionsFactory` (dead code, no usado en `Deploy.s.sol`). El diseño hereda buenas piezas de OpenZeppelin (AccessControl, SafeERC20, ReentrancyGuard, ERC1155Pausable) y separa razonablemente las responsabilidades, pero presenta varias debilidades de severidad alta y media: contabilidad ERC20/ETH desacoplada de saldos reales con riesgo de DoS por tokens fee-on-transfer/rebasing y varios puntos donde el owner puede atascar el torneo (DoS por centralización). La inconsistencia grave de `userTokens` por ownership parcial fue mitigada al forzar `amount == 1` por cartón, el índice `userTokens` ahora usa remove O(1), los ganadores oficiales ahora pueden corregirse antes de publicar el leaderboard final, la deadline de submission ya no puede reabrirse después de expirar o una vez que el torneo avanzó de fase, y el flujo de sellado/fondeo final del `Treasury` ahora evita sembrar reservas después del seal y exige que el engine del torneo ya esté listo antes de sellar premios. No se encontró ninguna vulnerabilidad crítica explotable de robo directo de fondos por un actor no privilegiado.
 
 | Severidad | Cantidad |
 |-----------|----------|
 | Critical  | 0        |
 | High      | 2        |
-| Medium    | 7        |
+| Medium    | 5        |
 | Low       | 9        |
 | Informational | 8    |
 
@@ -93,7 +93,9 @@ El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "carton
 
 ### [MEDIUM] M-2 — Submission deadline puede atrasarse arbitrariamente y "abrir" la ventana después de cerrar
 
-- **Contrato**: `src/Predictions.sol:185-188`
+- **Estado**: RESUELTO — `Predictions.setSubmissionDeadline` ahora revierte con `SubmissionDeadlineLocked()` si ya expiró la deadline vigente, si ya hubo submissions, si Treasury marca ventas cerradas o si existe al menos un resultado oficial cargado. Se agregaron tests para cada condición de lock.
+
+- **Contrato**: `src/Predictions.sol:186-190`, `450-477`
 - **Impacto**: El owner puede llamar `setSubmissionDeadline` después de que la deadline anterior expirara, mientras no haya restricción de "una vez vencida no se puede mover". Esto permite re-abrir el envío de predicciones para tokens nuevos, dándole a usuarios con info posterior una ventaja injusta (front-running de outcomes ya conocidos). Combinado con el hecho de que `setResults` requiere que las ventas estén cerradas pero NO chequea deadline, el owner podría: (1) cerrar ventas, (2) ver resultados parciales, (3) extender deadline, (4) mintear/asignar cartones a una cuenta propia y enviar predicciones "perfectas".
 - **Descripción**: La función sólo valida `_deadline > block.timestamp`. No hay flag de "frozen" ni guard de "no se puede modificar si ya empezó a haber resultados oficiales".
 - **Recomendación**: Bloquear `setSubmissionDeadline` cuando (a) ya pasó la deadline original, o (b) cualquier `games[i].set == true`, o (c) `predictionsStarted == true` (al menos no se puede REDUCIR si ya hay submits, y no se puede AUMENTAR si ya hubo resultados). Un patrón sano: permitir extender sólo hasta un máximo absoluto fijado al constructor, y bloquear cualquier movimiento una vez seteado el primer resultado.
@@ -103,11 +105,12 @@ El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "carton
 
 ### [MEDIUM] M-3 — `setPositions` (legacy) y `appendPositionsBatch` permiten arbitrar el ranking sin verificación on-chain
 
+- **Estado**: PARCIALMENTE MITIGADO / ACLARADO — el flujo operativo actual ya no usa `setPositions` como camino normal. `Predictions` lo documenta explícitamente como fallback legacy, y el admin publica posiciones con el flujo batched (`beginPositionsUpdate` → `appendPositionsBatch` → `finalizePositionsUpdate`) usando por defecto los `calculateTotalPoints(tokenId)` on-chain; el CSV manual quedó relegado a override de emergencia. El riesgo residual sigue siendo de centralización: el contrato aún no verifica on-chain que los puntos declarados en cada batch coincidan con `calculateTotalPoints`, y `Treasury` sigue aceptando `finalPrizeAmounts` cargados por admin.
 - **Contrato**: `src/Predictions.sol:207-238, 259-309`
-- **Impacto**: El leaderboard se calcula off-chain. El owner declara `_predictionPoints` que sólo se valida como "no creciente" (ordenado descendentemente). NO se compara contra `calculateTotalPoints(tokenId)` on-chain. Un owner deshonesto puede declarar puntos arbitrarios para favorecer cartones propios y empujarlos a las primeras posiciones de pago. Como Treasury usa `finalPrizeAmounts` (también declarado por el admin), el owner controla 100% el pago final.
-- **Descripción**: El TODO en la línea 203-206 ya identifica este riesgo: "Final leaderboard integrity improvements". Es una decisión de diseño consciente pero representa un riesgo de centralización alto.
-- **Recomendación**: Como mínimo: (1) En `appendPositionsBatch` recomputar y validar `calculateTotalPoints(tokenId) == pointValue` y revertir si difiere (esto es costoso pero es la única defensa real). (2) Como mitigación más liviana: publicar un `leaderboardHash` (commit) y permitir desafíos durante una ventana N días (mencionado en el TODO). (3) Mover ownership a un multisig / timelock.
-- **Evaluación GPT**: Confirmado, y agregaría que `setPositions` legacy es peor que el batch porque ni siquiera valida `used[tokenId]` ni torneo. Si no se puede verificar puntos onchain por gas, al menos conviene deprecar `setPositions` y exigir el flujo batched con validaciones mínimas.
+- **Impacto**: El ranking final y los payouts siguen dependiendo de un operador confiable. `appendPositionsBatch` valida elegibilidad del token, torneo, duplicados y completitud del draft, pero NO compara `pointValue` contra `calculateTotalPoints(tokenId)` on-chain. Por eso un owner deshonesto todavía podría reordenar cartones válidos mintiendo los puntos. El problema principal es de integridad administrativa, no de exploit por un tercero sin privilegios.
+- **Descripción**: El TODO en `Predictions` ya reconoce que faltan garantías de integridad del leaderboard. El flujo actual reduce bastante el riesgo operativo respecto del legacy one-shot porque el admin usa puntos on-chain por defecto y el batch valida membresía/completitud, pero la fuente de verdad final del ranking y de `finalPrizeAmounts` sigue siendo una publicación administrativa.
+- **Recomendación**: Mantener como política el flujo batched + on-chain-first en admin, y si más adelante quieren endurecer sin cambiar el modelo de gas: (1) deshabilitar definitivamente `setPositions` en contrato cuando ya no haga falta el fallback; (2) publicar un `leaderboardHash` / commitment con ventana de challenge; o (3) en una fase posterior, validar `calculateTotalPoints(tokenId) == pointValue` por batch con tamaño más chico. Para operación productiva, mover ownership a un multisig / timelock sigue siendo la mitigación práctica más barata.
+- **Evaluación GPT**: Parcialmente confirmado. El legacy `setPositions` es objetivamente peor que el batch porque ni siquiera valida `used[tokenId]` ni torneo, pero hoy ya no es el flujo normal. El riesgo remanente es más "admin-operated / no trustless" que una vulnerabilidad técnica explotable por usuarios.
 
 ---
 
@@ -123,7 +126,9 @@ El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "carton
 
 ### [MEDIUM] M-5 — `seedTournamentFromReserve` no actualiza `closedPrizePools` ni interactúa correctamente con el flujo de sellado
 
-- **Contrato**: `src/Treasury.sol:342-355`
+- **Estado**: RESUELTO — `Treasury.seedTournamentFromReserve` ahora revierte si `finalPrizeAmountsReady[tournamentId][token]` ya está sellado, y `sealFinalPrizeAmounts` además exige que el engine registrado para ese torneo esté `ready` antes de congelar los montos. Se agregaron tests para ambos guards.
+
+- **Contrato**: `src/Treasury.sol:289-306`, `363-376`
 - **Impacto**: Si el admin sembró el pool desde reserva DESPUÉS de haber sellado los amounts finales (`finalPrizeAmountsReady[token] = true`), el `prizePools[tournamentId][token]` aumentaría pero `finalPrizeAmountTotals` queda igual y al finalizar (línea 373) `closedPrizePools` toma el valor inflado. Como `getUserPrizeAmount` para tournament finalizado usa `closedPrizePools` * percentage / 100, la view function devolvería un monto distinto al que realmente recibirán los usuarios (los users reciben `finalPrizeAmounts`, no porcentajes). Inconsistencia entre vistas y realidad; potencial confusión y reportes erróneos.
 - **Descripción**: No hay revert si se llama post-sello, lo cual abre una vía para inflar artificialmente la vista del prize pool sin afectar pagos.
 - **Recomendación**: Revertir `seedTournamentFromReserve` si `finalPrizeAmountsReady[token] == true` (o agregar lógica para reabrir el sello). Alternativamente, deprecar `getUserPrizeAmount` para tournament finalizado y exponer únicamente `finalPrizeAmounts`.
@@ -313,9 +318,9 @@ El sistema se compone de cuatro contratos: `Carton` (ERC1155 vendedor de "carton
 Suite total: 3871 líneas distribuidas en 7 archivos. Cobertura aparente:
 
 - **Carton.t.sol** (502 líneas) — cubre roles, pause, mint/burn básico, compras con USDC, integración con Treasury, validaciones de tournament. **Faltante**: tests con ERC20 fee-on-transfer (cubre H-2), tests de `_update` con burns parciales y batches grandes (cubre H-3, M-1), tests donde el `treasury` se cambia mid-tournament (cubre M-8).
-- **Treasury.t.sol** (1370 líneas) — cobertura amplia: deposits, claims, distribuciones, cierres, multi-asset, integración. **Faltante**: tests de re-entrancy en `claimPrize` (cubre H-1), tests de `seedTournamentFromReserve` post-sello (cubre M-5), tests con `prizeDistributionTokens` poblado pero sin pool (cubre M-4).
-- **Predictions.t.sol** (1111 líneas) — buena cobertura de submissions, scoring, batched positions. El diff sólo agrega un test simple para el nuevo `getOfficialWinners`. **Faltante**: tests de `setSubmissionDeadline` post-deadline (cubre M-2), tests de `setResults` antes de deadline (cubre M-7), tests con `goals > 127` que disparan L-5, tests de manipulación de positions por owner (cubre M-3).
-- **TournamentSmoke.t.sol** (369 líneas) — flujos E2E con USDC, roles, batch results. **Faltante**: flujo completo con corrección de `officialWinners` (cubre H-4) — naturalmente falta porque no existe la función.
+- **Treasury.t.sol** (1497 líneas) — cobertura amplia: deposits, claims, distribuciones, cierres, multi-asset, integración, reentrancy ETH, guards de `sealFinalPrizeAmounts` y `seedTournamentFromReserve` post-sello. **Faltante**: tests con `prizeDistributionTokens` poblado pero sin pool (cubre M-4).
+- **Predictions.t.sol** (1204 líneas) — buena cobertura de submissions, scoring, batched positions, corrección de `officialWinners` y locks de `setSubmissionDeadline` (post-deadline, post-submit, post-cierre de ventas y post-resultados). **Faltante**: tests de `setResults` antes de deadline (cubre M-7), tests con `goals > 127` que disparan L-5, tests de manipulación de positions por owner (cubre M-3).
+- **TournamentSmoke.t.sol** (369 líneas) — flujos E2E con USDC, roles, batch results y corrección de resultados dentro de la ventana operativa. **Faltante**: un smoke completo que cambie `officialWinners` antes del cierre definitivo para cubrir el camino feliz de H-4 en E2E.
 - **Integration.t.sol** y **ERC20Integration.t.sol** — flujos optimistas. Bien.
 - **PredictionsFactory.sol** — sin tests dedicados.
 
@@ -324,15 +329,12 @@ Suite total: 3871 líneas distribuidas en 7 archivos. Cobertura aparente:
 ## 4. Recomendaciones generales priorizadas
 
 1. **Inmediato (antes de mainnet)**:
-   - Implementar H-4 (corrección de `officialWinners`) y M-7 (deadline guard en setResults). Bajo costo, alto retorno.
-   - Refactor `userTokens` en `Carton` (H-3, M-1) — elimina riesgo de DoS por gas y datos corruptos.
-   - Pasar `Treasury` a `ReentrancyGuard` (H-1) — defensive coding barato.
-   - Medir delta de balance en `depositFromSalesERC20` (H-2) o documentar y restringir tokens aceptados.
+    - Implementar M-7 (deadline guard en `setResults`). Bajo costo, alto retorno para fairness.
+    - Medir delta de balance en `depositFromSalesERC20` (H-2) o documentar y restringir tokens aceptados.
 
 2. **Corto plazo**:
-   - Restringir movimientos de `setSubmissionDeadline` (M-2).
-   - Bloquear `seedTournamentFromReserve` post-sello (M-5).
    - Permitir des-registrar tokens vacíos en finalize (M-4).
+   - Proteger o eliminar `PredictionsFactory.sol` / flujo huérfano de ownership (M-6).
    - Considerar verificación on-chain de leaderboard via hash commit + ventana de challenge (M-3).
 
 3. **Operativo**:

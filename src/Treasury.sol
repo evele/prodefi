@@ -292,6 +292,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
         if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
         if (!prizeDistributionSet[tournamentId][token]) revert NoPrizeDistribution();
         if (finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsAlreadySealed();
+        if (!_competitionEngineReady(tournamentId)) revert TournamentNotReadyForFinalization();
 
         uint256 assignedTotal = finalPrizeAmountTotals[tournamentId][token];
         uint256 prizeablePool = prizePools[tournamentId][token];
@@ -368,6 +369,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
         _requireSupportedPrizeToken(token);
         if (amount == 0) revert ZeroAmount();
         if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+        if (finalPrizeAmountsReady[tournamentId][token]) revert FinalPrizeAmountsAlreadySealed();
         if (globalReserve[token] < amount) revert InsufficientGlobalReserve();
 
         globalReserve[token] -= amount;
@@ -419,5 +421,11 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
     function _requireSupportedPrizeToken(address token) internal view {
         if (!isSupportedPrizeToken(token)) revert UnsupportedPrizeToken();
+    }
+
+    function _competitionEngineReady(uint256 tournamentId) internal view returns (bool) {
+        address engine = competitionEngineByTournament[tournamentId];
+        if (engine == address(0)) return false;
+        return ICompetitionEngine(engine).isReadyForFinalization();
     }
 }

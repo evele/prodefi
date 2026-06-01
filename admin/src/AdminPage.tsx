@@ -682,6 +682,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
   const [csvInput, setCsvInput] = useState('')
+  const [manualOverrideEnabled, setManualOverrideEnabled] = useState(false)
 
   const positionsBaseContracts = useMemo(
     () => {
@@ -816,6 +817,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
 
   const canFillFromOnchain = tournamentId > 0n && usedTokenIds.length > 0 && onchainPointsData?.length === usedTokenIds.length
   const activePendingUpdateMatchesTournament = Boolean(positionsUpdateInProgress && pendingTournamentId === tournamentId)
+  const canChangePositionSource = !activePendingUpdateMatchesTournament
 
   const fillFromOnchain = () => {
     if (tournamentId === 0n) {
@@ -837,6 +839,28 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     toast.success(`Loaded ${onchainPointEntries.length} cartone${onchainPointEntries.length === 1 ? '' : 's'} from on-chain points.`)
   }
 
+  const enableManualOverride = () => {
+    if (!canChangePositionSource) {
+      toast.error('Finish or cancel the open leaderboard draft before changing the source.')
+      return
+    }
+
+    if (canFillFromOnchain && csvInput.trim().length === 0) {
+      setCsvInput(onchainPointEntries.map((entry) => `${entry.tokenId.toString()},${entry.points.toString()}`).join('\n'))
+    }
+
+    setManualOverrideEnabled(true)
+  }
+
+  const disableManualOverride = () => {
+    if (!canChangePositionSource) {
+      toast.error('Finish or cancel the open leaderboard draft before changing the source.')
+      return
+    }
+
+    setManualOverrideEnabled(false)
+  }
+
   const refreshPositionsReads = async () => {
     await Promise.all([refetchPositionsBaseData(), refetchSubmittedCount(), refetchPositionData(), refetchPositionVersionData()])
   }
@@ -845,6 +869,27 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     if (tournamentId === 0n) {
       toast.error('Set an active tournament first.')
       return null
+    }
+
+    if (!manualOverrideEnabled) {
+      if (usedTokenIds.length === 0) {
+        toast.error('There are no submitted cartones for the active tournament yet.')
+        return null
+      }
+
+      if (!canFillFromOnchain) {
+        toast.error('Still loading on-chain points. Try again in a moment.')
+        return null
+      }
+
+      const entries = onchainPointEntries.map((entry) => ({ tokenId: entry.tokenId, points: entry.points }))
+      const expectedEntries = Number(submittedCount ?? 0n)
+      if (entries.length !== expectedEntries) {
+        toast.error(`On-chain points loaded ${entries.length} entries, but tournament ${tournamentId.toString()} has ${expectedEntries} submitted cartones.`)
+        return null
+      }
+
+      return entries
     }
 
     const { entries, error } = parseLeaderboardCsv(csvInput)
@@ -1013,33 +1058,71 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     return computeSharedRanks(entries)
   }, [csvInput])
 
+  const onchainPreview = useMemo(() => {
+    if (!canFillFromOnchain) return []
+    return computeSharedRanks(onchainPointEntries)
+  }, [canFillFromOnchain, onchainPointEntries])
+
+  const previewEntries = manualOverrideEnabled ? parsedPreview : onchainPreview
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Set Positions</CardTitle>
-        <CardDescription>Set the active tournament leaderboard in batches, or fill it automatically from on-chain totals.</CardDescription>
+        <CardDescription>Publish the active tournament leaderboard in batches. Default source is on-chain total points; manual CSV override is emergency-only.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-3 text-sm space-y-1">
           <div><span className="font-medium">Active tournament:</span> {tournamentId > 0n ? tournamentId.toString() : '—'}</div>
           <div><span className="font-medium">Tournament cartones:</span> {tournamentScopedTokenIds.length}</div>
           <div><span className="font-medium">Submitted cartones:</span> {submittedCount?.toString() ?? '—'}</div>
+          <div><span className="font-medium">Batch size:</span> {POSITION_BATCH_SIZE}</div>
+          <div><span className="font-medium">Position source:</span> {manualOverrideEnabled ? 'Manual override' : 'On-chain totals'}</div>
           <div><span className="font-medium">Draft in progress:</span> {String(Boolean(positionsUpdateInProgress))}</div>
           {activePendingUpdateMatchesTournament && (
             <div><span className="font-medium">Draft progress:</span> {(pendingProcessedEntries ?? 0n).toString()} / {(pendingExpectedEntries ?? 0n).toString()}</div>
           )}
         </div>
 
-        <textarea
-          className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-          placeholder={"1,150\n3,120\n2,120\n4,95"}
-          value={csvInput}
-          onChange={(e) => setCsvInput(e.target.value)}
-        />
+        {!manualOverrideEnabled && (
+          <div className="rounded-lg border border-border p-3 text-sm space-y-2 mb-3">
+            <div className="font-medium">Default flow: on-chain totals</div>
+            <div style={{ color: 'var(--text-secondary)' }}>
+              `Open Draft` and `Append Next Batch` will use `calculateTotalPoints(tokenId)` for every submitted carton in the active tournament.
+            </div>
+          </div>
+        )}
+
+        {manualOverrideEnabled && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50/40 p-3 space-y-3 mb-3">
+            <div className="text-sm font-medium">Manual CSV override</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Use this only as an operational fallback. The normal path is on-chain totals.
+            </div>
+            <textarea
+              className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              placeholder={"1,150\n3,120\n2,120\n4,95"}
+              value={csvInput}
+              onChange={(e) => setCsvInput(e.target.value)}
+            />
+          </div>
+        )}
+
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0}>
-            Fill Positions
-          </Button>
+          {manualOverrideEnabled ? (
+            <>
+              <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0 || !canChangePositionSource}>
+                Load On-Chain Into Editor
+              </Button>
+              <Button type="button" variant="outline" onClick={disableManualOverride} disabled={!canManagePredictions || isBusy || !canChangePositionSource}>
+                Use On-Chain Totals
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" onClick={enableManualOverride} disabled={!canManagePredictions || isBusy || !canChangePositionSource}>
+              Enable Manual Override
+            </Button>
+          )}
           <Button type="button" onClick={openPositionsDraft} disabled={!canManagePredictions || isBusy || Boolean(positionsUpdateInProgress)}>
             {isBusy ? 'Working...' : '1. Open Draft'}
           </Button>
@@ -1057,12 +1140,20 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
         </div>
 
         <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          {usedTokenIds.length === 0
-            ? 'No hay cartones enviados todavía para el torneo activo.'
-            : canFillFromOnchain
-              ? `Fill Positions arma el CSV con ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
-              : 'Cargando puntos onchain para autocompletar el ranking...'}
+          {manualOverrideEnabled
+            ? 'Manual override habilitado. El draft usara exactamente el CSV visible arriba.'
+            : usedTokenIds.length === 0
+              ? 'No hay cartones enviados todavía para el torneo activo.'
+              : canFillFromOnchain
+                ? `El draft usara ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
+                : 'Cargando puntos onchain para preparar el ranking por defecto...'}
         </p>
+
+        {!canChangePositionSource && (
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            La fuente del leaderboard queda bloqueada mientras haya un draft abierto para no mezclar batches de distintos orígenes.
+          </p>
+        )}
 
         {activePendingUpdateMatchesTournament && (
           <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -1074,11 +1165,11 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
           </p>
         )}
 
-        {parsedPreview.length > 0 && (
+        {previewEntries.length > 0 && (
           <div className="mt-4">
-            <div className="text-sm font-medium mb-1">Preview from CSV:</div>
+            <div className="text-sm font-medium mb-1">{manualOverrideEnabled ? 'Preview from manual CSV:' : 'Preview from on-chain totals:'}</div>
             <div className="text-xs text-gray-600 space-y-0.5">
-              {parsedPreview.map((entry) => (
+              {previewEntries.map((entry) => (
                 <div key={`preview-${entry.tokenId.toString()}`}>
                   #{entry.rank} — Token {entry.tokenId.toString()} · {entry.points.toString()} pts
                 </div>
