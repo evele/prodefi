@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "./BaseTest.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 /// @title Integration Tests for ProDefi System
 /// @notice Tests the complete workflow from minting cartones to final rankings

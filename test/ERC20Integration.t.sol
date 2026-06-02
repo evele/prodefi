@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { Carton } from "../src/Carton.sol";
 import { Treasury } from "../src/Treasury.sol";
 import { Predictions } from "../src/Predictions.sol";

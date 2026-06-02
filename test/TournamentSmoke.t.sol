@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
-import "./BaseTest.sol";
-import "../src/Treasury.sol";
-import "./mocks/MockERC20.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 contract TournamentSmokeTest is BaseTest {
     Treasury public treasury;

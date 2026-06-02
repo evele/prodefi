@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
-import "../src/Carton.sol";
-import "../src/Predictions.sol";
-import "../src/Treasury.sol";
+import { Test } from "forge-std/Test.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
+import { Treasury } from "../src/Treasury.sol";
 
 contract PredictionsTest is Test {
     event SubmissionDeadlineUpdated(uint256 oldDeadline, uint256 newDeadline);
@@ -13,14 +13,14 @@ contract PredictionsTest is Test {
     Predictions preds;
     address user = address(0xABCD);
     address user2 = address(0xBEEF);
-    uint256 TOKEN_ID;
+    uint256 tokenId;
 
     function setUp() public {
         // 1) Deploy Carton and grant all roles to this test contract
         cart = new Carton(address(this), address(this), address(this));
         cart.setActiveTournament(1);
         // 2) Mint a carton (ERC-1155) to user
-        TOKEN_ID = cart.mint(user, 1, "");
+        tokenId = cart.mint(user, 1, "");
 
         // 3) Deploy Predictions pointing to Carton
         preds = new Predictions(address(cart), 1);
@@ -76,10 +76,10 @@ contract PredictionsTest is Test {
 
         // Simulate user calling submitPrediction
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
 
         // Verify that getPrediction returns stored data
-        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        Predictions.Prediction[] memory stored = preds.getPrediction(tokenId);
         assertEq(stored.length, 4, "length should be 4");
 
         // Check fields of stored[0]
@@ -95,7 +95,7 @@ contract PredictionsTest is Test {
         // A second submission with same tokenId should revert
         vm.prank(user);
         vm.expectRevert();
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testOnlyOwnerCannotSubmit() public {
@@ -108,7 +108,7 @@ contract PredictionsTest is Test {
         // Simulate that a non-owner calls and should revert
         vm.prank(address(0xDEAD));
         vm.expectRevert();
-        preds.submitPrediction(TOKEN_ID, arr2);
+        preds.submitPrediction(tokenId, arr2);
     }
 
     function testSetSubmissionDeadline() public {
@@ -138,7 +138,7 @@ contract PredictionsTest is Test {
     }
 
     function testSetSubmissionDeadline_RevertsAfterPredictionsStart() public {
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
 
         vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
         preds.setSubmissionDeadline(block.timestamp + 2 days);
@@ -188,10 +188,10 @@ contract PredictionsTest is Test {
 
         // 3) Simular que el usuario envía las predicciones antes del deadline
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
 
         // 4) Verificar que las predicciones se guardaron correctamente
-        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        Predictions.Prediction[] memory stored = preds.getPrediction(tokenId);
         assertEq(stored.length, 4);
     }
 
@@ -213,7 +213,7 @@ contract PredictionsTest is Test {
         // 4) Intentar enviar predicciones después del deadline debe revertir
         vm.prank(user);
         vm.expectRevert(Predictions.DeadlinePassed.selector);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testInvalidPrediction() public {
@@ -221,7 +221,7 @@ contract PredictionsTest is Test {
         Predictions.Prediction[] memory arr3 = new Predictions.Prediction[](3);
         vm.prank(user);
         vm.expectRevert(Predictions.WrongPredictionCount.selector);
-        preds.submitPrediction(TOKEN_ID, arr3);
+        preds.submitPrediction(tokenId, arr3);
 
         // 2) Una vez vencida la ventana de submission, ya no se puede enviar aunque luego carguen resultados.
         _warpPastSubmissionDeadline();
@@ -236,7 +236,7 @@ contract PredictionsTest is Test {
         arr5[3] = Predictions.Prediction({ gameId: 4, result: [uint8(0), uint8(0)] });
         vm.prank(user);
         vm.expectRevert(Predictions.DeadlinePassed.selector);
-        preds.submitPrediction(TOKEN_ID, arr5);
+        preds.submitPrediction(tokenId, arr5);
     }
 
     // ========== Game ID validation tests ==========
@@ -250,7 +250,7 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidGameId.selector);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testSubmitPrediction_GameIdOutOfRange() public {
@@ -262,7 +262,7 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidGameId.selector);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testSubmitPrediction_DuplicateGameId() public {
@@ -274,7 +274,7 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.DuplicateGameId.selector);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     function testCalculateDifferencePoints_HandlesSubtractionOverflowBoundary() public view {
@@ -291,7 +291,7 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.GoalValueTooHigh.selector);
-        preds.submitPrediction(TOKEN_ID, arr);
+        preds.submitPrediction(tokenId, arr);
     }
 
     modifier setup() {
@@ -309,16 +309,16 @@ contract PredictionsTest is Test {
         // Try making winner prediction without having carton
         vm.prank(address(0xDEAD));
         vm.expectRevert();
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
     }
 
     function testWinnerPrediction_Valid() public setup {
         // Hacer predicción válida de ganadores
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
 
         // Verify it was stored correctly
-        uint8[4] memory prediction = preds.getWinnersPrediction(TOKEN_ID);
+        uint8[4] memory prediction = preds.getWinnersPrediction(tokenId);
         assertEq(prediction[0], 1);
         assertEq(prediction[1], 2);
         assertEq(prediction[2], 3);
@@ -329,38 +329,38 @@ contract PredictionsTest is Test {
         // Intentar predecir equipo inválido (>= MAX_TEAM_ID)
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidTeamId.selector);
-        preds.predictWinners(TOKEN_ID, [49, 2, 3, 4]);
+        preds.predictWinners(tokenId, [49, 2, 3, 4]);
     }
 
     function testWinnerPrediction_DuplicateTeams() public setup {
         // Intentar predecir equipos duplicados
         vm.prank(user);
         vm.expectRevert(Predictions.DuplicateTeamId.selector);
-        preds.predictWinners(TOKEN_ID, [1, 2, 2, 4]);
+        preds.predictWinners(tokenId, [1, 2, 2, 4]);
     }
 
     function testWinnerPrediction_AlreadyPredicted() public setup {
         // Hacer predicción válida de ganadores
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
 
         // Intentar hacer otra predicción de ganadores
         vm.prank(user);
         vm.expectRevert(Predictions.WinnersAlreadyPredicted.selector);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
     }
 
     function testSubmitPredictionAndWinners_Valid() public {
         Predictions.Prediction[] memory arr = _buildValidPredictions();
 
         vm.prank(user);
-        preds.submitPredictionAndWinners(TOKEN_ID, arr, [1, 2, 3, 4]);
+        preds.submitPredictionAndWinners(tokenId, arr, [1, 2, 3, 4]);
 
-        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        Predictions.Prediction[] memory stored = preds.getPrediction(tokenId);
         assertEq(stored.length, 4, "length should be 4");
-        assertTrue(preds.used(TOKEN_ID), "games should be marked as submitted");
+        assertTrue(preds.used(tokenId), "games should be marked as submitted");
 
-        uint8[4] memory winners = preds.getWinnersPrediction(TOKEN_ID);
+        uint8[4] memory winners = preds.getWinnersPrediction(tokenId);
         assertEq(winners[0], 1);
         assertEq(winners[1], 2);
         assertEq(winners[2], 3);
@@ -372,12 +372,12 @@ contract PredictionsTest is Test {
 
         vm.prank(user);
         vm.expectRevert(Predictions.DuplicateTeamId.selector);
-        preds.submitPredictionAndWinners(TOKEN_ID, arr, [1, 2, 2, 4]);
+        preds.submitPredictionAndWinners(tokenId, arr, [1, 2, 2, 4]);
 
-        Predictions.Prediction[] memory stored = preds.getPrediction(TOKEN_ID);
+        Predictions.Prediction[] memory stored = preds.getPrediction(tokenId);
         assertEq(stored.length, 0, "game predictions should not persist on revert");
-        assertFalse(preds.used(TOKEN_ID), "games should remain unsubmitted on revert");
-        uint8[4] memory winners = preds.getWinnersPrediction(TOKEN_ID);
+        assertFalse(preds.used(tokenId), "games should remain unsubmitted on revert");
+        uint8[4] memory winners = preds.getWinnersPrediction(tokenId);
         assertEq(winners[0], 0, "winner prediction should not persist on revert");
     }
 
@@ -391,11 +391,11 @@ contract PredictionsTest is Test {
 
         // First submit predictions before setting results
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, gamePreds);
+        preds.submitPrediction(tokenId, gamePreds);
 
         // Winner picks must also be submitted before the deadline.
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
 
         // Establecer resultados de los partidos (1-based gameIds)
         _warpPastSubmissionDeadline();
@@ -405,32 +405,32 @@ contract PredictionsTest is Test {
         preds.setResults(4, 2, 2); // Empate: 7 + 3 = 10 puntos
 
         // Verificar puntos de cada partido
-        assertEq(preds.calculatePoints(TOKEN_ID, 0), 10);
-        assertEq(preds.calculatePoints(TOKEN_ID, 1), 10);
-        assertEq(preds.calculatePoints(TOKEN_ID, 2), 9);
-        assertEq(preds.calculatePoints(TOKEN_ID, 3), 10);
+        assertEq(preds.calculatePoints(tokenId, 0), 10);
+        assertEq(preds.calculatePoints(tokenId, 1), 10);
+        assertEq(preds.calculatePoints(tokenId, 2), 9);
+        assertEq(preds.calculatePoints(tokenId, 3), 10);
 
         // Verificar puntos totales (solo partidos)
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
+        assertEq(preds.calculateTotalPoints(tokenId), 39);
 
         // Establecer ganadores oficiales
         preds.setOfficialWinners([1, 2, 3, 4]);
 
         // Verificar puntos de ganadores
-        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63); // 25 + 18 + 10 + 10
+        assertEq(preds.calculateWinnerPoints(tokenId), 63); // 25 + 18 + 10 + 10
 
         // Verificar puntos totales (partidos + ganadores)
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 102); // 39 + 63
+        assertEq(preds.calculateTotalPoints(tokenId), 102); // 39 + 63
 
         // Establecer posiciones
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](1);
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         points[0] = 102;
         preds.setPositions(ids, points);
 
         // Verificar que las posiciones se establecieron correctamente
-        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
+        assertEq(preds.getCartonPosition(tokenId), 1);
     }
 
     function testMatchPointsClampAtZeroAndKeepOutcomeBonus() public {
@@ -441,7 +441,7 @@ contract PredictionsTest is Test {
         gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(1), uint8(0)] });
 
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, gamePreds);
+        preds.submitPrediction(tokenId, gamePreds);
 
         _warpPastSubmissionDeadline();
         preds.setResults(1, 5, 5); // Exacto -> 10
@@ -449,11 +449,11 @@ contract PredictionsTest is Test {
         preds.setResults(3, 5, 5); // diffTotal 9 -> base 0, sin bonus -> 0
         preds.setResults(4, 6, 5); // diffTotal 10 -> base 0, +3 por acertar local -> 3
 
-        assertEq(preds.calculatePoints(TOKEN_ID, 0), 10);
-        assertEq(preds.calculatePoints(TOKEN_ID, 1), 6);
-        assertEq(preds.calculatePoints(TOKEN_ID, 2), 0);
-        assertEq(preds.calculatePoints(TOKEN_ID, 3), 3);
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 19);
+        assertEq(preds.calculatePoints(tokenId, 0), 10);
+        assertEq(preds.calculatePoints(tokenId, 1), 6);
+        assertEq(preds.calculatePoints(tokenId, 2), 0);
+        assertEq(preds.calculatePoints(tokenId, 3), 3);
+        assertEq(preds.calculateTotalPoints(tokenId), 19);
     }
 
     function testWinnerPointsUseUpdatedWeights() public setup {
@@ -464,7 +464,7 @@ contract PredictionsTest is Test {
         preds.setOfficialWinners([1, 2, 3, 4]);
 
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
         vm.prank(user);
         preds.predictWinners(championOnlyTokenId, [1, 3, 5, 6]);
         vm.prank(user);
@@ -472,7 +472,7 @@ contract PredictionsTest is Test {
         vm.prank(user);
         preds.predictWinners(podiumSwapTokenId, [5, 6, 4, 3]);
 
-        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63);
+        assertEq(preds.calculateWinnerPoints(tokenId), 63);
         assertEq(preds.calculateWinnerPoints(championOnlyTokenId), 25);
         assertEq(preds.calculateWinnerPoints(runnerUpOnlyTokenId), 18);
         assertEq(preds.calculateWinnerPoints(podiumSwapTokenId), 20);
@@ -486,7 +486,7 @@ contract PredictionsTest is Test {
         gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, gamePreds);
+        preds.submitPrediction(tokenId, gamePreds);
 
         _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
@@ -495,7 +495,7 @@ contract PredictionsTest is Test {
         preds.setResults(4, 2, 2);
         preds.setOfficialWinners([1, 2, 3, 4]);
 
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
+        assertEq(preds.calculateTotalPoints(tokenId), 39);
     }
 
     function testPartialResultsCanBeRecalculated() public {
@@ -506,32 +506,32 @@ contract PredictionsTest is Test {
         gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, gamePreds);
+        preds.submitPrediction(tokenId, gamePreds);
 
         _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1); // 10 puntos
         preds.setResults(2, 1, 1); // 10 puntos
 
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 20);
+        assertEq(preds.calculateTotalPoints(tokenId), 20);
 
         vm.expectRevert(Predictions.ResultNotSet.selector);
-        preds.calculatePoints(TOKEN_ID, 2);
+        preds.calculatePoints(tokenId, 2);
 
         preds.setResults(3, 0, 3); // 9 puntos
         preds.setResults(4, 2, 2); // 10 puntos
 
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 39);
+        assertEq(preds.calculateTotalPoints(tokenId), 39);
     }
 
     function testSetPositions() public {
         uint256 tokenId2 = cart.mint(user, 1, "");
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
         _submitValidPrediction(user, tokenId2);
 
         // 1) Intentar establecer posiciones con arrays de diferente longitud
         uint256[] memory ids = new uint256[](1);
         uint256[] memory points = new uint256[](2);
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         points[0] = 90;
         points[1] = 80;
         vm.expectRevert(Predictions.ArrayLengthMismatch.selector);
@@ -540,7 +540,7 @@ contract PredictionsTest is Test {
         // 2) Intentar establecer posiciones con puntos desordenados
         ids = new uint256[](2);
         points = new uint256[](2);
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         ids[1] = tokenId2;
         points[0] = 80;
         points[1] = 90;
@@ -551,7 +551,7 @@ contract PredictionsTest is Test {
         points[0] = 90;
         points[1] = 80;
         preds.setPositions(ids, points);
-        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
+        assertEq(preds.getCartonPosition(tokenId), 1);
         assertEq(preds.getCartonPosition(tokenId2), 2);
 
         // 4) Reemplazar el leaderboard con una sola entrada invalida posiciones viejas
@@ -563,7 +563,7 @@ contract PredictionsTest is Test {
 
         assertEq(preds.getCartonPosition(tokenId2), 1);
         vm.expectRevert(Predictions.TokenNotInLeaderboard.selector);
-        preds.getCartonPosition(TOKEN_ID);
+        preds.getCartonPosition(tokenId);
     }
 
     function testSetPositions_SharedRanks() public {
@@ -571,7 +571,7 @@ contract PredictionsTest is Test {
         uint256 tokenId3 = cart.mint(user, 1, "");
         uint256 tokenId4 = cart.mint(user, 1, "");
 
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
         _submitValidPrediction(user, tokenId2);
         _submitValidPrediction(user, tokenId3);
         _submitValidPrediction(user, tokenId4);
@@ -579,7 +579,7 @@ contract PredictionsTest is Test {
         uint256[] memory ids = new uint256[](4);
         uint256[] memory points = new uint256[](4);
 
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         ids[1] = tokenId2;
         ids[2] = tokenId3;
         ids[3] = tokenId4;
@@ -591,7 +591,7 @@ contract PredictionsTest is Test {
 
         preds.setPositions(ids, points);
 
-        assertEq(preds.getCartonPosition(TOKEN_ID), 1);
+        assertEq(preds.getCartonPosition(tokenId), 1);
         assertEq(preds.getCartonPosition(tokenId2), 2);
         assertEq(preds.getCartonPosition(tokenId3), 2);
         assertEq(preds.getCartonPosition(tokenId4), 4);
@@ -1177,19 +1177,19 @@ contract PredictionsTest is Test {
         gamePreds[3] = Predictions.Prediction({ gameId: 4, result: [uint8(2), uint8(2)] });
 
         vm.prank(user);
-        preds.submitPrediction(TOKEN_ID, gamePreds);
+        preds.submitPrediction(tokenId, gamePreds);
 
         _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 10);
+        assertEq(preds.calculateTotalPoints(tokenId), 10);
 
         preds.updateResults(1, 0, 0);
-        assertEq(preds.calculateTotalPoints(TOKEN_ID), 4);
+        assertEq(preds.calculateTotalPoints(tokenId), 4);
     }
 
     function testUpdateResultsInvalidatesPublishedLeaderboard() public {
         uint256 tokenId2 = _mintTournamentToken(user2, 1);
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
         _submitValidPrediction(user2, tokenId2);
 
         _setupTreasuryAndCloseSales();
@@ -1201,7 +1201,7 @@ contract PredictionsTest is Test {
         preds.setOfficialWinners([1, 2, 3, 4]);
 
         uint256[] memory ids = new uint256[](2);
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         ids[1] = tokenId2;
         uint256[] memory points = new uint256[](2);
         points[0] = 100;
@@ -1214,7 +1214,7 @@ contract PredictionsTest is Test {
         assertFalse(preds.hasFinalPositions());
         assertFalse(preds.isReadyForFinalization());
         vm.expectRevert(Predictions.LeaderboardStale.selector);
-        preds.getCartonPosition(TOKEN_ID);
+        preds.getCartonPosition(tokenId);
     }
 
     function testAppendPositionsBatchRevertsWhenCompetitionStateChangesMidUpdate() public {
@@ -1252,7 +1252,7 @@ contract PredictionsTest is Test {
         Treasury treasury = new Treasury(address(this), address(cart), 500);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
 
         treasury.depositFromSales{ value: 1 ether }(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
@@ -1269,7 +1269,7 @@ contract PredictionsTest is Test {
         preds.setOfficialWinners([uint8(1), uint8(2), uint8(3), uint8(4)]);
 
         uint256[] memory tokenIds = new uint256[](1);
-        tokenIds[0] = TOKEN_ID;
+        tokenIds[0] = tokenId;
         uint256[] memory points = new uint256[](1);
         points[0] = 100;
         preds.setPositions(tokenIds, points);
@@ -1292,9 +1292,9 @@ contract PredictionsTest is Test {
     function testWinnerPrediction_HighTeamIds() public setup {
         // Predict winners with high team IDs (all valid: 1-48)
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [33, 34, 47, 48]);
+        preds.predictWinners(tokenId, [33, 34, 47, 48]);
 
-        uint8[4] memory prediction = preds.getWinnersPrediction(TOKEN_ID);
+        uint8[4] memory prediction = preds.getWinnersPrediction(tokenId);
         assertEq(prediction[0], 33);
         assertEq(prediction[3], 48);
     }
@@ -1302,7 +1302,7 @@ contract PredictionsTest is Test {
     function testWinnerPrediction_RevertTeamIdZero() public setup {
         vm.prank(user);
         vm.expectRevert(Predictions.InvalidTeamId.selector);
-        preds.predictWinners(TOKEN_ID, [0, 2, 3, 4]);
+        preds.predictWinners(tokenId, [0, 2, 3, 4]);
     }
 
     function testSetOfficialWinners_RevertTeamIdZero() public {
@@ -1334,9 +1334,9 @@ contract PredictionsTest is Test {
         preds.setOfficialWinners([1, 2, 3, 4]);
 
         vm.prank(user);
-        preds.predictWinners(TOKEN_ID, [1, 2, 3, 4]);
+        preds.predictWinners(tokenId, [1, 2, 3, 4]);
 
-        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 63);
+        assertEq(preds.calculateWinnerPoints(tokenId), 63);
 
         preds.updateOfficialWinners([1, 3, 2, 4]);
 
@@ -1346,7 +1346,7 @@ contract PredictionsTest is Test {
         assertEq(teams[1], 3);
         assertEq(teams[2], 2);
         assertEq(teams[3], 4);
-        assertEq(preds.calculateWinnerPoints(TOKEN_ID), 35);
+        assertEq(preds.calculateWinnerPoints(tokenId), 35);
     }
 
     function testUpdateOfficialWinners_RevertWhenNotSet() public {
@@ -1363,10 +1363,10 @@ contract PredictionsTest is Test {
 
     function testUpdateOfficialWinners_RevertWhenPositionsAlreadyPublished() public {
         preds.setOfficialWinners([1, 2, 3, 4]);
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
 
         uint256[] memory ids = new uint256[](1);
-        ids[0] = TOKEN_ID;
+        ids[0] = tokenId;
         uint256[] memory points = new uint256[](1);
         points[0] = 100;
         preds.setPositions(ids, points);
@@ -1377,7 +1377,7 @@ contract PredictionsTest is Test {
 
     function testUpdateOfficialWinners_RevertWhenPositionsUpdateInProgress() public {
         uint256 tokenId2 = _mintTournamentToken(user2, 1);
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
         _submitValidPrediction(user2, tokenId2);
         preds.setOfficialWinners([1, 2, 3, 4]);
 
@@ -1391,7 +1391,7 @@ contract PredictionsTest is Test {
         Treasury treasury = new Treasury(address(this), address(cart), 500);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
-        _submitValidPrediction(user, TOKEN_ID);
+        _submitValidPrediction(user, tokenId);
 
         treasury.depositFromSales{ value: 1 ether }(1);
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
@@ -1408,7 +1408,7 @@ contract PredictionsTest is Test {
         preds.setOfficialWinners([uint8(1), uint8(2), uint8(3), uint8(4)]);
 
         uint256[] memory tokenIds = new uint256[](1);
-        tokenIds[0] = TOKEN_ID;
+        tokenIds[0] = tokenId;
         uint256[] memory points = new uint256[](1);
         points[0] = 100;
         preds.setPositions(tokenIds, points);

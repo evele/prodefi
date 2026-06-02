@@ -66,7 +66,7 @@ contract Predictions is Ownable {
     error LeaderboardStale();
 
     IERC1155 public cartones;
-    uint256 public immutable tournamentId;
+    uint256 public immutable TOURNAMENT_ID;
     /// @notice Anchor for off-chain teams config (id + name + groupId)
     /// @dev Set via setTeamsHash(); frontend verifies local config against this before submitting predictions
     bytes32 public teamsHash;
@@ -176,7 +176,7 @@ contract Predictions is Ownable {
     constructor(address _cartones, uint256 _tournamentId) Ownable(msg.sender) {
         if (_tournamentId == 0) revert InvalidTournamentId();
         cartones = IERC1155(_cartones);
-        tournamentId = _tournamentId;
+        TOURNAMENT_ID = _tournamentId;
     }
 
     // Allow owner to set teams metadata hash; can be frozen
@@ -243,7 +243,7 @@ contract Predictions is Ownable {
             uint256 tokenId = _predictionIds[i];
             if (maxPoints < _predictionPoints[i]) revert PointsNotOrdered();
             if (tokenPendingVersion[tokenId] == newVersion) revert DuplicatePositionToken();
-            if (!used[tokenId] || _tokenTournamentId(tokenId) != tournamentId) {
+            if (!used[tokenId] || _tokenTournamentId(tokenId) != TOURNAMENT_ID) {
                 revert TokenNotEligibleForTournament();
             }
 
@@ -268,10 +268,10 @@ contract Predictions is Ownable {
     function beginPositionsUpdate(uint256 expectedEntries) external onlyOwner {
         if (positionsUpdateInProgress) revert PositionsUpdateAlreadyInProgress();
         if (expectedEntries == 0) revert InvalidExpectedEntries();
-        if (submittedCountByTournament[tournamentId] != expectedEntries) revert ExpectedEntriesMismatch();
+        if (submittedCountByTournament[TOURNAMENT_ID] != expectedEntries) revert ExpectedEntriesMismatch();
 
         positionsUpdateInProgress = true;
-        pendingTournamentId = tournamentId;
+        pendingTournamentId = TOURNAMENT_ID;
         pendingCompetitionStateRevision = competitionStateRevision;
         pendingExpectedEntries = expectedEntries;
         pendingProcessedEntries = 0;
@@ -282,7 +282,7 @@ contract Predictions is Ownable {
         positionsUpdateNonce = pendingPositionsVersion;
         delete pendingPositionTokenIds;
 
-        emit PositionsUpdateBegan(tournamentId, pendingPositionsVersion, expectedEntries);
+        emit PositionsUpdateBegan(TOURNAMENT_ID, pendingPositionsVersion, expectedEntries);
     }
 
     function appendPositionsBatch(uint256[] calldata tokenIds, uint256[] calldata points) external onlyOwner {
@@ -410,8 +410,12 @@ contract Predictions is Ownable {
     }
 
     modifier onlyCartonOwner(uint256 tokenId) {
-        if (cartones.balanceOf(msg.sender, tokenId) < 1) revert NotCartonOwner();
+        _onlyCartonOwner(tokenId);
         _;
+    }
+
+    function _onlyCartonOwner(uint256 tokenId) internal {
+        if (cartones.balanceOf(msg.sender, tokenId) < 1) revert NotCartonOwner();
     }
 
     function submitPrediction(uint256 tokenId, Prediction[] calldata _prediction) external onlyCartonOwner(tokenId) {
@@ -430,12 +434,12 @@ contract Predictions is Ownable {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (used[tokenId]) revert PredictionAlreadySubmitted();
         if (_prediction.length != totalGames) revert WrongPredictionCount();
-        if (_tokenTournamentId(tokenId) != tournamentId) revert TokenNotEligibleForTournament();
+        if (_tokenTournamentId(tokenId) != TOURNAMENT_ID) revert TokenNotEligibleForTournament();
 
         bool[] memory usedGameId = new bool[](totalGames + 1);
 
         used[tokenId] = true;
-        submittedCountByTournament[tournamentId] += 1;
+        submittedCountByTournament[TOURNAMENT_ID] += 1;
         if (!predictionsStarted) predictionsStarted = true;
 
         uint256 predictionLength = _prediction.length;
@@ -532,7 +536,7 @@ contract Predictions is Ownable {
         address treasury = _treasuryAddress();
         if (treasury == address(0)) return false;
 
-        return ITreasurySalesClosed(treasury).salesClosed(tournamentId);
+        return ITreasurySalesClosed(treasury).salesClosed(TOURNAMENT_ID);
     }
 
     function _hasAnyResultSet() internal view returns (bool) {
@@ -568,7 +572,7 @@ contract Predictions is Ownable {
         address treasury = _treasuryAddress();
         if (treasury == address(0)) return;
 
-        if (ITreasuryTournamentStatus(treasury).isTournamentClosedAnyAsset(tournamentId)) {
+        if (ITreasuryTournamentStatus(treasury).isTournamentClosedAnyAsset(TOURNAMENT_ID)) {
             revert TournamentClosedForCorrections();
         }
     }
@@ -619,6 +623,7 @@ contract Predictions is Ownable {
 
         uint16 diffTotal = uint16(calculateDifferencePoints(pred.result[0], game.result[0]))
             + uint16(calculateDifferencePoints(pred.result[1], game.result[1]));
+        // forge-lint: disable-next-line(unsafe-typecast) -- diffTotal < MATCH_BASE_POINTS (= 7) guaranteed by ternary guard
         uint8 points = diffTotal >= MATCH_BASE_POINTS ? 0 : uint8(MATCH_BASE_POINTS - diffTotal);
 
         if (
@@ -639,10 +644,6 @@ contract Predictions is Ownable {
         return (goalsL > goalsV) ? LOCAL : (goalsL == goalsV) ? EMPATE : VISITANTE;
     }
 
-    function abs(int8 x) public pure returns (uint8) {
-        return x >= 0 ? uint8(uint16(uint8(x))) : uint8(uint16(-int16(x)));
-    }
-
     // Functions for winner predictions
     function predictWinners(uint256 tokenId, uint8[4] calldata teams) external onlyCartonOwner(tokenId) {
         _predictWinners(msg.sender, tokenId, teams);
@@ -651,9 +652,9 @@ contract Predictions is Ownable {
     function _predictWinners(address sender, uint256 tokenId, uint8[4] calldata teams) internal {
         if (block.timestamp >= submissionDeadline) revert DeadlinePassed();
         if (winnersPredictions[tokenId].set) revert WinnersAlreadyPredicted();
-        if (_tokenTournamentId(tokenId) != tournamentId) revert TokenNotEligibleForTournament();
+        if (_tokenTournamentId(tokenId) != TOURNAMENT_ID) revert TokenNotEligibleForTournament();
 
-        if (!all_different(teams)) revert DuplicateTeamId();
+        if (!allDifferent(teams)) revert DuplicateTeamId();
 
         // Validate that team IDs are valid
         for (uint256 i; i < MAX_WINNERS;) {
@@ -668,7 +669,7 @@ contract Predictions is Ownable {
         emit WinnersPredicted(sender, tokenId, teams);
     }
 
-    function all_different(uint8[4] calldata teams) public pure returns (bool) {
+    function allDifferent(uint8[4] calldata teams) public pure returns (bool) {
         for (uint256 i; i < MAX_WINNERS;) {
             for (uint256 j = i + 1; j < MAX_WINNERS;) {
                 if (teams[i] == teams[j]) {

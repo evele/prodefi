@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "./BaseTest.sol";
-import "../src/Treasury.sol";
-import "./mocks/MockERC20.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 contract MockCompetitionEngine {
     bool public ready;
@@ -32,27 +34,27 @@ contract MockCompetitionEngine {
 }
 
 contract ReentrantPrizeClaimer {
-    Treasury public immutable treasury;
+    Treasury public immutable TREASURY;
     uint256 public tournamentId;
     uint256 public tokenId;
     bool public reentryAttempted;
     bool public reentryBlocked;
 
     constructor(Treasury treasury_) {
-        treasury = treasury_;
+        TREASURY = treasury_;
     }
 
     function attack(uint256 tournamentId_, uint256 tokenId_) external {
         tournamentId = tournamentId_;
         tokenId = tokenId_;
-        treasury.claimPrize(tournamentId_, tokenId_, address(0));
+        TREASURY.claimPrize(tournamentId_, tokenId_, address(0));
     }
 
     receive() external payable {
         if (reentryAttempted) return;
         reentryAttempted = true;
 
-        try treasury.claimPrize(tournamentId, tokenId, address(0)) { }
+        try TREASURY.claimPrize(tournamentId, tokenId, address(0)) { }
         catch {
             reentryBlocked = true;
         }
@@ -80,6 +82,7 @@ contract ReentrantPrizeClaimer {
 contract TreasuryTest is BaseTest {
     // ========== ADDITIONAL CONTRACTS ==========
     Treasury public treasury;
+    // forge-lint: disable-next-line(mixed-case-variable)
     MockERC20 public USDC;
     MockCompetitionEngine public tournament2Engine;
 
@@ -1772,6 +1775,7 @@ contract TreasuryTest is BaseTest {
 
         // After close the snapshot reflects the sealed claimable pool, which may be smaller if some paid places were left empty.
         uint256 prizeAfterClose = treasury.getUserPrizeAmount(TOURNAMENT_ID_1, ETH_TOKEN, 1);
+        // forge-lint: disable-next-line(divide-before-multiply) -- mirrors the two-step BPS calculation in production
         assertEq(prizeAfterClose, (((_prizeableAmount(INITIAL_DEPOSIT) * 95) / 100) * 50) / 100);
 
         assertLt(prizeAfterClose, prizeBeforeClose);

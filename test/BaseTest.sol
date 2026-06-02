@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
-import "../src/Carton.sol";
-import "../src/Predictions.sol";
+import { Test } from "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 /// @title Base Test Contract with Common Utilities
 /// @notice Provides reusable setup and helper functions for all tests
@@ -131,6 +132,7 @@ abstract contract BaseTest is Test {
     {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast) -- i < 4, so i + 1 ∈ [1..4], safe for uint8
             preds[i] = Predictions.Prediction({ gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]] });
         }
         return preds;

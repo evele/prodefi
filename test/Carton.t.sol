@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import "./BaseTest.sol";
-import "./mocks/MockERC20.sol";
-import "../src/Treasury.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 contract NonTreasuryContract { }
 
@@ -14,6 +16,7 @@ contract CartonTest is BaseTest {
 
     address user = address(0xBEEF);
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     MockERC20 USDC;
     Treasury treasury;
 
@@ -168,6 +171,61 @@ contract CartonTest is BaseTest {
         carton.setURI(newURI);
     }
 
+    function testSetMetadataVariantCount_OnlyAdmin() public {
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        carton.setMetadataVariantCount(48);
+
+        vm.prank(admin);
+        carton.setMetadataVariantCount(48);
+
+        assertEq(carton.metadataVariantCount(), 48);
+    }
+
+    function testUri_FallsBackToLegacyTemplateWhenVariantsDisabled() public {
+        string memory newURI = "https://newuri.com/{id}";
+
+        vm.prank(uriSetter);
+        carton.setURI(newURI);
+
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 1, "");
+
+        assertEq(carton.variantByTokenId(tokenId), 0);
+        assertEq(carton.uri(tokenId), newURI);
+    }
+
+    function testMint_AssignsVariantWhenConfigured() public {
+        vm.prank(admin);
+        carton.setMetadataVariantCount(48);
+
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 1, "");
+
+        uint256 variantId = carton.variantByTokenId(tokenId);
+        assertGe(variantId, 1);
+        assertLe(variantId, 48);
+    }
+
+    function testMintBatch_AssignsVariantsWhenConfigured() public {
+        vm.prank(admin);
+        carton.setMetadataVariantCount(96);
+
+        vm.prank(minter);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 1;
+        amounts[1] = 1;
+        uint256[] memory ids = carton.mintBatch(user, amounts, "");
+
+        uint256 firstVariant = carton.variantByTokenId(ids[0]);
+        uint256 secondVariant = carton.variantByTokenId(ids[1]);
+
+        assertGe(firstVariant, 1);
+        assertLe(firstVariant, 96);
+        assertGe(secondVariant, 1);
+        assertLe(secondVariant, 96);
+    }
+
     function testAdminCanGrantRoles() public {
         address newMinter = address(0x1234);
         bytes32 minterRole = carton.MINTER_ROLE();
@@ -218,6 +276,7 @@ contract CartonTest is BaseTest {
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(address(USDC), 1000000);
+        carton.setMetadataVariantCount(48);
         vm.stopPrank();
 
         USDC.mint(user, 1000000);
@@ -228,10 +287,13 @@ contract CartonTest is BaseTest {
         vm.stopPrank();
 
         assertEq(carton.balanceOf(user, 1), 1);
+        assertGe(carton.variantByTokenId(1), 1);
+        assertLe(carton.variantByTokenId(1), 48);
         assertEq(USDC.balanceOf(address(carton)), treasuryBalanceBefore + 1000000);
     }
 
     function test_BuyCartonWithUSDT_RevertNotAccepted() public {
+        // forge-lint: disable-next-line(mixed-case-variable)
         MockERC20 USDT = new MockERC20("Tether", "USDT", 6);
         USDT.mint(user1, 1_000_000);
         vm.prank(user1);
