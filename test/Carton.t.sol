@@ -38,22 +38,6 @@ contract CartonTest is BaseTest {
         vm.stopPrank();
     }
 
-    function testMintBatchAndSupply() public {
-        uint256[] memory ids = _createUint256Array(1, 2, 0);
-        uint256[] memory amounts = _createUint256Array(1, 1, 0);
-
-        // Resize arrays to 2 elements
-        assembly {
-            mstore(ids, 2)
-            mstore(amounts, 2)
-        }
-
-        _mintBatchCartons(user, ids, amounts);
-
-        assertEq(carton.totalSupply(1), 1, "ID=1 supply should be 1");
-        assertEq(carton.balanceOf(user, 2), 1, "user balance for ID=2 should be 1");
-    }
-
     function testPausePreventsTransfers() public {
         _mintCarton(user, 10);
 
@@ -63,16 +47,6 @@ contract CartonTest is BaseTest {
         vm.prank(user);
         vm.expectRevert();
         carton.safeTransferFrom(user, address(this), 10, 1, "");
-    }
-
-    function testBurn() public {
-        vm.prank(minter);
-        uint256 tokenId = carton.mint(user, 1, "");
-
-        vm.prank(user);
-        carton.burn(user, tokenId, 1);
-
-        assertEq(carton.totalSupply(tokenId), 0, "supply after burn should be 0");
     }
 
     function testMint_RevertAmountNotOne() public {
@@ -265,13 +239,6 @@ contract CartonTest is BaseTest {
         assertTrue(carton.supportsInterface(0x01ffc9a7)); // ERC165
     }
 
-    function testBuyCartonRevertsAfterUsdcOnlyCleanup() public {
-        vm.deal(user, 1 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.1 ether }();
-    }
-
     function testBuyCartonWithToken() public {
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
@@ -302,33 +269,6 @@ contract CartonTest is BaseTest {
         vm.prank(user1);
         vm.expectRevert(Carton.TokenNotAccepted.selector);
         carton.buyCartonWithToken(address(USDT));
-    }
-
-    function testBuyCartonWithExcessRevertsAfterUsdcOnlyCleanup() public {
-        vm.deal(user, 1 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.15 ether }();
-    }
-
-    function testBuyCartonInsufficientPaymentStillRevertsAsDisabled() public {
-        vm.deal(user, 0.05 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.05 ether }();
-    }
-
-    function testBuyCartonPriceNotSetStillRevertsAsDisabled() public {
-        vm.deal(user, 1 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.1 ether }();
-    }
-
-    function testSetCartonPrice() public {
-        vm.prank(admin);
-        carton.setCartonPrice(0.1 ether);
-        assertEq(carton.cartonPrice(), 0.1 ether, "Price should be set");
     }
 
     function testSetCartonTokenPrice() public {
@@ -364,12 +304,6 @@ contract CartonTest is BaseTest {
         vm.prank(admin);
         vm.expectRevert(Carton.ZeroTournamentId.selector);
         carton.setTokenPrice(0, address(USDC), 1000000);
-    }
-
-    function testOnlyAdminCanSetPrice() public {
-        vm.prank(user);
-        vm.expectRevert();
-        carton.setCartonPrice(0.1 ether);
     }
 
     function testOnlyAdmingCanSetCartonTokenPrice() public {
@@ -471,21 +405,6 @@ contract CartonTest is BaseTest {
         assertEq(receiverTokens[0], firstTokenId, "Receiver should get the transferred token");
     }
 
-    function testGetUserTokens_BurnRemovesOnlyBurnedToken() public {
-        vm.startPrank(minter);
-        uint256 firstTokenId = carton.mint(user, 1, "");
-        uint256 secondTokenId = carton.mint(user, 1, "");
-        vm.stopPrank();
-
-        vm.prank(user);
-        carton.burn(user, firstTokenId, 1);
-
-        uint256[] memory remainingTokens = carton.getUserTokens(user);
-        assertEq(remainingTokens.length, 1, "User should keep one token after burn");
-        assertEq(remainingTokens[0], secondTokenId, "Remaining token should stay tracked");
-    }
-
-    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
     event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
     event RescueETHWithdrawn(address indexed recipient, uint256 amount);
@@ -569,27 +488,6 @@ contract CartonTest is BaseTest {
         vm.prank(admin);
         vm.expectRevert(Carton.ZeroTournamentId.selector);
         carton.setActiveTournament(0);
-    }
-
-    function testBuyCartonWithEthRevertsEvenWithTreasuryConfigured() public {
-        // Setup Treasury
-        treasury = _deployTreasuryAndRegister(1, address(predictions));
-
-        vm.startPrank(admin);
-        carton.setActiveTournament(1);
-
-        // Grant FUND_DEPOSITOR_ROLE to Carton
-        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
-        vm.stopPrank();
-
-        // Buy carton
-        vm.deal(user, 1 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.1 ether }();
-
-        assertEq(carton.balanceOf(user, 1), 0);
-        assertEq(treasury.prizePools(1, address(0)), 0);
     }
 
     function testBuyCartonWithToken_WithTreasuryIntegration() public {
@@ -686,13 +584,6 @@ contract CartonTest is BaseTest {
         vm.prank(user);
         vm.expectRevert();
         carton.setAcceptedToken(address(USDC), true);
-    }
-
-    function testBuyCartonWithoutTreasuryConfiguredStillReverts() public {
-        vm.deal(user, 1 ether);
-        vm.prank(user);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.1 ether }();
     }
 
     function testBuyCartonWithToken_WithoutTreasuryConfigured() public {

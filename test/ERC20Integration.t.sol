@@ -44,15 +44,6 @@ contract ERC20IntegrationTest is Test {
         vm.stopPrank();
     }
 
-    function test_BuyCartonWithETH_RevertsAfterUsdcOnlyCleanup() public {
-        vm.startPrank(user1);
-        vm.deal(user1, 1 ether);
-        vm.expectRevert(Carton.EthPurchaseDisabled.selector);
-        carton.buyCarton{ value: 0.1 ether }();
-
-        vm.stopPrank();
-    }
-
     function test_BuyCartonWithUSDC_AutoDepositsToTreasury() public {
         vm.startPrank(user1);
 

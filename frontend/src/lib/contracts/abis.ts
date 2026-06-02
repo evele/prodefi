@@ -81,7 +81,7 @@ export const CARTON_ABI = [
     "name": "acceptedTokens",
     "inputs": [
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -158,59 +158,6 @@ export const CARTON_ABI = [
   },
   {
     "type": "function",
-    "name": "burn",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "value",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "burnBatch",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "ids",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "values",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "buyCarton",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
     "name": "buyCartonWithToken",
     "inputs": [
       {
@@ -239,38 +186,6 @@ export const CARTON_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "cartonPrice",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "exists",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -372,6 +287,19 @@ export const CARTON_ABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "metadataVariantCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -688,12 +616,12 @@ export const CARTON_ABI = [
   },
   {
     "type": "function",
-    "name": "setCartonPrice",
+    "name": "setMetadataVariantCount",
     "inputs": [
       {
-        "name": "newPrice",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "count",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [],
@@ -809,12 +737,12 @@ export const CARTON_ABI = [
     "name": "tokenPricesByTournament",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -834,38 +762,6 @@ export const CARTON_ABI = [
     "inputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "totalSupply",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "totalSupply",
-    "inputs": [
-      {
-        "name": "id",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -920,6 +816,25 @@ export const CARTON_ABI = [
   },
   {
     "type": "function",
+    "name": "variantByTokenId",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "withdraw",
     "inputs": [],
     "outputs": [],
@@ -959,6 +874,25 @@ export const CARTON_ABI = [
   },
   {
     "type": "event",
+    "name": "ActiveTournamentChanged",
+    "inputs": [
+      {
+        "name": "oldTournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newTournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ApprovalForAll",
     "inputs": [
       {
@@ -978,31 +912,6 @@ export const CARTON_ABI = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "CartonPurchased",
-    "inputs": [
-      {
-        "name": "buyer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "price",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1047,25 +956,6 @@ export const CARTON_ABI = [
         "type": "address",
         "indexed": false,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PriceUpdated",
-    "inputs": [
-      {
-        "name": "oldPrice",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newPrice",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1191,6 +1081,37 @@ export const CARTON_ABI = [
   },
   {
     "type": "event",
+    "name": "TokenPriceUpdated",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "oldPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TransferBatch",
     "inputs": [
       {
@@ -1297,6 +1218,25 @@ export const CARTON_ABI = [
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "URIUpdated",
+    "inputs": [
+      {
+        "name": "oldURI",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "newURI",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
       }
     ],
     "anonymous": false
@@ -1454,17 +1394,7 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
-    "name": "EthPurchaseDisabled",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ExpectedPause",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InsufficientPayment",
     "inputs": []
   },
   {
@@ -1489,17 +1419,7 @@ export const CARTON_ABI = [
   },
   {
     "type": "error",
-    "name": "PriceNotSet",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "RefundFailed",
     "inputs": []
   },
   {
@@ -1584,19 +1504,32 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
-    "name": "abs",
+    "name": "TOURNAMENT_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "allDifferent",
     "inputs": [
       {
-        "name": "x",
-        "type": "int8",
-        "internalType": "int8"
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "pure"
@@ -1613,25 +1546,6 @@ export const PREDICTIONS_ABI = [
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "all_different",
-    "inputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -1968,6 +1882,25 @@ export const PREDICTIONS_ABI = [
     "type": "function",
     "name": "isReadyForFinalization",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isTokenInCurrentLeaderboard",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -2521,19 +2454,6 @@ export const PREDICTIONS_ABI = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tournamentId",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -3268,6 +3188,19 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "RESERVE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "TOURNAMENT_MANAGER_ROLE",
     "inputs": [],
     "outputs": [
@@ -3441,12 +3374,12 @@ export const TREASURY_ABI = [
     "name": "finalPrizeAmountTotals",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3465,17 +3398,17 @@ export const TREASURY_ABI = [
     "name": "finalPrizeAmounts",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3494,12 +3427,12 @@ export const TREASURY_ABI = [
     "name": "finalPrizeAmountsDraftRevision",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3518,12 +3451,12 @@ export const TREASURY_ABI = [
     "name": "finalPrizeAmountsReady",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3542,12 +3475,12 @@ export const TREASURY_ABI = [
     "name": "finalPrizeAmountsSealedRevision",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3902,12 +3835,12 @@ export const TREASURY_ABI = [
     "name": "prizeDistributionSet",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -3926,12 +3859,12 @@ export const TREASURY_ABI = [
     "name": "prizeDistributionTokens",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "index",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -3950,17 +3883,17 @@ export const TREASURY_ABI = [
     "name": "prizePoolDistributions",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "index",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -4069,19 +4002,6 @@ export const TREASURY_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "reserveBps",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -4868,6 +4788,11 @@ export const TREASURY_ABI = [
   {
     "type": "error",
     "name": "SalesNotClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TokenNotInCurrentLeaderboard",
     "inputs": []
   },
   {
