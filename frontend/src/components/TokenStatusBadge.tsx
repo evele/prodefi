@@ -3,9 +3,9 @@ import type { PredictionStatus } from '../lib/types'
 const STATUS_CONFIG: Record<PredictionStatus, { text: string; dotColor: string; textColor: string; bgColor: string }> = {
   none: {
     text: 'Pendiente',
-    dotColor: 'var(--text-disabled)',
-    textColor: 'var(--text-disabled)',
-    bgColor: 'rgba(58, 71, 92, 0.2)',
+    dotColor: 'var(--accent-gold)',
+    textColor: 'var(--accent-gold)',
+    bgColor: 'rgba(255, 214, 0, 0.12)',
   },
   partial: {
     text: 'Pendiente',

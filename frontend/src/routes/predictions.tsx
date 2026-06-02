@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, CheckCircle2, Clock3, LockKeyhole } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ConfirmModal } from '../components/ui/modal'
 import { TeamInfoSheet } from '../components/TeamInfoSheet'
@@ -9,8 +8,10 @@ import { PredictionGroupCarousel } from '../components/PredictionGroupCarousel'
 import { ClaimSection } from '../components/ClaimSection'
 import { TokenStatusBadge } from '../components/TokenStatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
-import { useAccount, useReadContract, useReadContracts } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { toast } from 'sonner'
+import type { Abi, Address } from 'viem'
+import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
 import { hasOpenfortGasSponsorship } from '../lib/chains'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
@@ -22,6 +23,7 @@ import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { useUserBalance } from '../hooks/useBalance'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapCombinedPredictionErrorToMessage } from '../lib/transaction-errors'
+import { appPublicClient } from '../lib/publicClient'
 
 const SHOW_GROUP_STRIP = true
 
@@ -84,7 +86,7 @@ function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired
   switch (status) {
     case 'submitted':
       return {
-        label: 'Enviado onchain',
+        label: 'Enviado',
         detail: 'Esta parte ya quedó confirmada para este cartón.',
         bg: 'rgba(0,230,118,0.1)',
         color: 'var(--accent-green)',
@@ -113,15 +115,6 @@ function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired
   }
 }
 
-type FlowCallout = {
-  eyebrow: string
-  title: string
-  detail: string
-  tone: 'neutral' | 'success' | 'warning'
-  ctaLabel?: string
-  ctaTarget?: 'games-panel' | 'winners-panel'
-}
-
 type BlockingStateCard = {
   eyebrow: string
   title: string
@@ -131,7 +124,20 @@ type BlockingStateCard = {
   actionTo?: '/'
 }
 
-function getFlowCalloutToneStyles(tone: FlowCallout['tone']) {
+type SubmittedScoredGameEntry = {
+  gameId: number
+  predictionIndex: number
+  officialGame: { id: number; set: boolean } | null
+}
+
+type PredictionReadContract = {
+  address: Address
+  abi: Abi
+  functionName: string
+  args: readonly unknown[]
+}
+
+function getFlowCalloutToneStyles(tone: 'neutral' | 'success' | 'warning') {
   switch (tone) {
     case 'success':
       return {
@@ -173,13 +179,68 @@ function PredictionsPage() {
   const { carton } = useSearch({ from: '/predictions' })
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const tokenId = useMemo(() => (carton ? BigInt(carton) : undefined), [carton])
+  const [activeTournamentId, setActiveTournamentId] = useState<bigint>()
+  const [ownedCartons, setOwnedCartons] = useState<bigint[]>([])
+  const [ownedCartonTournamentIds, setOwnedCartonTournamentIds] = useState<bigint[]>([])
+  const [deadline, setDeadline] = useState<bigint>()
+  const [totalGames, setTotalGames] = useState<number>()
+  const [onchainTeamsHash, setOnchainTeamsHash] = useState<`0x${string}`>()
 
-  const { data: activeTournamentId } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'activeTournamentId',
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
-  })
+  const refetchBasePredictionReads = useCallback(async () => {
+    const [nextTournamentId, nextDeadline, nextTotalGames, nextTeamsHash] = await Promise.all([
+      appPublicClient.readContract({
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'activeTournamentId',
+      }),
+      appPublicClient.readContract({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'submissionDeadline',
+      }),
+      appPublicClient.readContract({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'totalGames',
+      }),
+      appPublicClient.readContract({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'teamsHash',
+      }),
+    ])
+
+    const nextOwnedCartons = normalizedAddress && isConnected
+      ? await appPublicClient.readContract({
+          address: CONTRACT_ADDRESSES.CARTON,
+          abi: CARTON_ABI,
+          functionName: 'getUserTokens',
+          args: [normalizedAddress],
+        })
+      : []
+
+    const nextOwnedCartonTournamentIds = await Promise.all(
+      nextOwnedCartons.map((ownedTokenId) =>
+        appPublicClient.readContract({
+          address: CONTRACT_ADDRESSES.CARTON,
+          abi: CARTON_ABI,
+          functionName: 'tokenTournamentId',
+          args: [ownedTokenId],
+        })
+      ),
+    )
+
+    setActiveTournamentId(nextTournamentId)
+    setDeadline(nextDeadline)
+    setTotalGames(nextTotalGames)
+    setOnchainTeamsHash(nextTeamsHash)
+    setOwnedCartons(Array.from(nextOwnedCartons))
+    setOwnedCartonTournamentIds(nextOwnedCartonTournamentIds)
+  }, [isConnected, normalizedAddress])
+
+  useEffect(() => {
+    void refetchBasePredictionReads()
+  }, [refetchBasePredictionReads])
 
   const [{ games, groups }, setGameState] = useState(() => buildAllGroupGames())
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
@@ -219,48 +280,16 @@ function PredictionsPage() {
     return new Set(nonZero).size === winnerPrediction.length && nonZero.length === 4
   }, [winnerPrediction])
 
-  const { data: ownedCartons } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'getUserTokens',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
-    query: {
-      enabled: Boolean(normalizedAddress) && isConnected,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: true,
-    },
-  })
-
-  const ownedCartonTournamentContracts = useMemo(
-    () =>
-      (ownedCartons ?? []).map((ownedTokenId) => ({
-        address: CONTRACT_ADDRESSES.CARTON,
-        abi: CARTON_ABI,
-        functionName: 'tokenTournamentId' as const,
-        args: [ownedTokenId] as const,
-      })),
-    [ownedCartons],
-  )
-
-  const { data: ownedCartonTournamentResults } = useReadContracts({
-    contracts: ownedCartonTournamentContracts,
-    query: {
-      enabled: ownedCartonTournamentContracts.length > 0,
-      refetchInterval: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  })
-
   const activeTournamentOwnedCartons = useMemo(() => {
-    if (!ownedCartons?.length || activeTournamentId === undefined) return []
+    if (!ownedCartons.length || activeTournamentId === undefined) return []
 
     return ownedCartons.filter(
-      (_, index) => ((ownedCartonTournamentResults?.[index]?.result as bigint | undefined) ?? 0n) === activeTournamentId,
+      (_, index) => (ownedCartonTournamentIds[index] ?? 0n) === activeTournamentId,
     )
-  }, [activeTournamentId, ownedCartons, ownedCartonTournamentResults])
+  }, [activeTournamentId, ownedCartonTournamentIds, ownedCartons])
 
   const selectedCartonIsWalletOwned = useMemo(
-    () => tokenId !== undefined && (ownedCartons?.some((id) => id === tokenId) ?? false),
+    () => tokenId !== undefined && ownedCartons.some((id) => id === tokenId),
     [ownedCartons, tokenId],
   )
 
@@ -268,10 +297,10 @@ function PredictionsPage() {
     () => tokenId !== undefined && activeTournamentOwnedCartons.some((id) => id === tokenId),
     [activeTournamentOwnedCartons, tokenId],
   )
-  const hasAnyOwnedCartons = (ownedCartons?.length ?? 0) > 0
+  const hasAnyOwnedCartons = ownedCartons.length > 0
   const hasOwnedCartons = activeTournamentOwnedCartons.length > 0
 
-  const { data: cartonGroupsState, refetch: refetchCartonUsedState } = useReadContract({
+  const { data: cartonGroupsState, refetch: refetchCartonUsedState } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'used',
@@ -279,7 +308,7 @@ function PredictionsPage() {
     query: { enabled: tokenId !== undefined, refetchInterval: 10000, refetchOnWindowFocus: true },
   })
 
-  const { data: cartonWinnersState, refetch: refetchCartonWinnersState } = useReadContract({
+  const { data: cartonWinnersState, refetch: refetchCartonWinnersState } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'winnersPredictions',
@@ -287,7 +316,7 @@ function PredictionsPage() {
     query: { enabled: tokenId !== undefined, refetchInterval: 10000, refetchOnWindowFocus: true },
   })
 
-  const { data: submittedGames, refetch: refetchSubmittedGames } = useReadContract({
+  const { data: submittedGames, refetch: refetchSubmittedGames } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'getPrediction',
@@ -299,7 +328,7 @@ function PredictionsPage() {
     },
   })
 
-  const { data: submittedWinners, refetch: refetchSubmittedWinners } = useReadContract({
+  const { data: submittedWinners, refetch: refetchSubmittedWinners } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'getWinnersPrediction',
@@ -404,19 +433,6 @@ function PredictionsPage() {
     submitPredictionAndWinners()
   }
 
-  const { data: deadline } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'submissionDeadline',
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
-  })
-  const { data: totalGames } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'totalGames',
-    query: { refetchInterval: 10000, refetchOnWindowFocus: true },
-  })
-
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
     const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
@@ -444,42 +460,46 @@ function PredictionsPage() {
       })),
     [normalizedSubmittedGames],
   )
-  const { data: submittedOfficialGamesData, refetch: refetchSubmittedOfficialGamesData } = useReadContracts({
+  const { data: submittedOfficialGamesData, refetch: refetchSubmittedOfficialGamesData } = useAppReadContracts({
     contracts: submittedOfficialGameContracts,
     query: {
       enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedOfficialGameContracts.length > 0,
       refetchOnWindowFocus: false,
     },
   })
-  const submittedScoredGameEntries = useMemo(
-    () =>
-      normalizedSubmittedGames
-        .map((entry, index) => ({
-          gameId: entry.gameId,
-          predictionIndex: index,
-          officialGame: normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result),
-        }))
-        .filter((entry) => Boolean(entry.officialGame?.set)),
-    [normalizedSubmittedGames, submittedOfficialGamesData],
-  )
-  const submittedGamePointsContracts = useMemo(() => {
-    if (!tokenId || !cartonGroupsState) return []
+  const submittedScoredGameEntries: SubmittedScoredGameEntry[] = []
 
-    return submittedScoredGameEntries.map((entry) => ({
-      address: CONTRACT_ADDRESSES.PREDICTIONS,
-      abi: PREDICTIONS_ABI,
-      functionName: 'calculatePoints' as const,
-      args: [tokenId, entry.predictionIndex] as const,
-    }))
-  }, [cartonGroupsState, submittedScoredGameEntries, tokenId])
-  const { data: submittedGamePointsData, refetch: refetchSubmittedGamePointsData } = useReadContracts({
+  normalizedSubmittedGames.forEach((entry, index) => {
+    const officialGame = normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result)
+    if (!officialGame?.set) return
+
+    submittedScoredGameEntries.push({
+      gameId: entry.gameId,
+      predictionIndex: index,
+      officialGame,
+    })
+  })
+
+  const submittedGamePointsContracts: PredictionReadContract[] = []
+
+  if (tokenId && cartonGroupsState) {
+    for (const entry of submittedScoredGameEntries) {
+      submittedGamePointsContracts.push({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'calculatePoints',
+        args: [tokenId, entry.predictionIndex],
+      })
+    }
+  }
+  const { data: submittedGamePointsData, refetch: refetchSubmittedGamePointsData } = useAppReadContracts({
     contracts: submittedGamePointsContracts,
     query: {
       enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedGamePointsContracts.length > 0,
       refetchOnWindowFocus: false,
     },
   })
-  const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useReadContract({
+  const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'calculateTotalPoints',
@@ -489,25 +509,18 @@ function PredictionsPage() {
       refetchOnWindowFocus: false,
     },
   })
-  const submittedOfficialGamesKey = useMemo(
-    () => normalizedSubmittedGames.map((entry) => entry.gameId).join(','),
-    [normalizedSubmittedGames],
-  )
+  const submittedOfficialGamesKey = normalizedSubmittedGames.map((entry) => entry.gameId).join(',')
 
   useEffect(() => {
     if (!tokenId || !cartonGroupsState || !submittedOfficialGameContracts.length) return
 
     void refetchSubmittedOfficialGamesData()
   }, [cartonGroupsState, deadlineValue, refetchSubmittedOfficialGamesData, submittedOfficialGameContracts.length, submittedOfficialGamesKey, tokenId])
-  const submittedPointsByGameId = useMemo(() => {
-    const next: Record<number, bigint> = {}
+  const submittedPointsByGameId: Record<number, bigint> = {}
 
-    submittedScoredGameEntries.forEach((entry, index) => {
-      next[entry.gameId] = (submittedGamePointsData?.[index]?.result as bigint | undefined) ?? 0n
-    })
-
-    return next
-  }, [submittedGamePointsData, submittedScoredGameEntries])
+  submittedScoredGameEntries.forEach((entry, index) => {
+    submittedPointsByGameId[entry.gameId] = (submittedGamePointsData?.[index]?.result as bigint | undefined) ?? 0n
+  })
   const submittedGameState = useMemo(() => {
     if (!normalizedSubmittedGames.length) return null
 
@@ -584,26 +597,26 @@ function PredictionsPage() {
     void refetchSelectedCartonTotalPoints()
   }, [cartonGroupsState, deadlineValue, refetchSelectedCartonTotalPoints, refetchSubmittedGamePointsData, submittedGamePointsContracts.length, submittedScoredGamesKey, tokenId])
 
-  const ownedCartonStatusContracts = useMemo(() => {
-    if (!activeTournamentOwnedCartons.length) return []
+  const ownedCartonStatusContracts: PredictionReadContract[] = []
 
-    return activeTournamentOwnedCartons.flatMap((ownedTokenId) => [
+  for (const ownedTokenId of activeTournamentOwnedCartons) {
+    ownedCartonStatusContracts.push(
       {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'used',
         args: [ownedTokenId],
-      } as const,
+      },
       {
         address: CONTRACT_ADDRESSES.PREDICTIONS,
         abi: PREDICTIONS_ABI,
         functionName: 'winnersPredictions',
         args: [ownedTokenId],
-      } as const,
-    ])
-  }, [activeTournamentOwnedCartons])
+      },
+    )
+  }
 
-  const { data: ownedCartonStatusResults, refetch: refetchOwnedCartonStatusResults } = useReadContracts({
+  const { data: ownedCartonStatusResults, refetch: refetchOwnedCartonStatusResults } = useAppReadContracts({
     contracts: ownedCartonStatusContracts,
     query: {
       enabled: ownedCartonStatusContracts.length > 0,
@@ -611,10 +624,7 @@ function PredictionsPage() {
     },
   })
 
-  const ownedCartonStatusKey = useMemo(
-    () => activeTournamentOwnedCartons.map((ownedTokenId) => ownedTokenId.toString()).join(','),
-    [activeTournamentOwnedCartons],
-  )
+  const ownedCartonStatusKey = activeTournamentOwnedCartons.map((ownedTokenId) => ownedTokenId.toString()).join(',')
 
   useEffect(() => {
     if (!ownedCartonStatusContracts.length) return
@@ -652,12 +662,6 @@ function PredictionsPage() {
     if (tokenId !== undefined || orderedOwnedCartons.length === 0) return
     navigate({ to: '/predictions', search: { carton: orderedOwnedCartons[0].tokenId.toString() }, replace: true })
   }, [navigate, orderedOwnedCartons, tokenId])
-
-  const { data: onchainTeamsHash } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'teamsHash',
-  })
 
   const [teamsHashStatus, setTeamsHashStatus] = useState<'unknown' | 'match' | 'mismatch' | 'unset'>('unknown')
   useEffect(() => {
@@ -708,7 +712,7 @@ function PredictionsPage() {
         : !tournamentReadyForSubmission
           ? 'Esperando configuracion completa del torneo'
           : selectedCartonWinnersSubmitted
-            ? 'Top 4 ya enviado onchain'
+            ? 'Top 4 ya enviado'
             : hasValidWinners
               ? 'Top 4 listo para enviar'
               : 'Falta elegir 1°, 2°, 3° y 4° puesto',
@@ -838,115 +842,8 @@ function PredictionsPage() {
     return null
   })()
 
-  const flowCallout: FlowCallout | null = (() => {
-    if (!isConnected) {
-      return {
-        eyebrow: 'Antes de comenzar',
-        title: 'Conéctate para abrir tus cartones.',
-        detail: 'Desde aqui podras revisar estados, completar predicciones y enviarlas onchain.',
-        tone: 'neutral',
-      }
-    }
-
-    if (!hasOwnedCartons) {
-      return {
-        eyebrow: 'Sin cartones',
-        title: 'Todavia no tienes cartones para completar.',
-        detail: 'Cuando compres uno, esta pantalla te llevará por el flujo de partidos y top 4.',
-        tone: 'neutral',
-      }
-    }
-
-    if (!tokenId) {
-      return {
-        eyebrow: 'Elige un carton',
-        title: 'Selecciona el carton con el que quieres seguir.',
-        detail: 'La pantalla se adapta al estado de ese carton para mostrarte el siguiente paso.',
-        tone: 'neutral',
-      }
-    }
-
-    if (!selectedCartonIsOwned) {
-      return {
-        eyebrow: 'Carton invalido',
-        title: 'Ese carton no pertenece a la wallet conectada.',
-        detail: 'Cambia de carton para seguir con una prediccion valida.',
-        tone: 'warning',
-      }
-    }
-
-    if (!hasDeadlineConfigured || teamsHashStatus === 'unset' || teamsHashStatus === 'mismatch' || totalGamesMismatch) {
-      return {
-        eyebrow: 'Torneo en configuracion',
-        title: 'Todavia falta informacion base para cerrar predicciones.',
-        detail: 'Cuando el torneo quede sincronizado, podras enviar este carton normalmente.',
-        tone: 'warning',
-      }
-    }
-
-    if (selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted) {
-      return {
-        eyebrow: 'Prediccion cerrada',
-        title: 'Tu carton ya quedo confirmado onchain.',
-        detail: 'No tienes mas acciones pendientes aqui. Solo queda esperar resultados y luego revisar premios.',
-        tone: 'success',
-        ctaLabel: 'Revisar top 4',
-        ctaTarget: 'winners-panel',
-      }
-    }
-
-    if (hasPartialSubmission) {
-      return {
-        eyebrow: 'Estado parcial',
-        title: 'Este cartón quedó en un estado intermedio que ya no forma parte del flujo principal.',
-        detail: 'Para nuevos cartones la app solo admite el envío completo en una sola transacción.',
-        tone: 'warning',
-      }
-    }
-
-    if (isExpired) {
-      return {
-        eyebrow: 'Plazo cerrado',
-        title: 'Este carton quedo incompleto al cerrar el deadline.',
-        detail: 'Puedes revisar lo que alcanzo a quedar cargado, pero ya no es posible enviar cambios.',
-        tone: 'warning',
-      }
-    }
-
-    if (canAttemptCombinedSubmit && canSubmitCombined) {
-      return {
-        eyebrow: 'Listo para enviar',
-        title: 'Ya puedes cerrar la prediccion completa en una sola transaccion.',
-        detail: 'Tus partidos y tu top 4 ya están completos. Revisa una vez más y envía todo junto.',
-        tone: 'success',
-        ctaLabel: 'Revisar envio',
-        ctaTarget: 'winners-panel',
-      }
-    }
-
-    if (hasCompleteGamePredictions) {
-      return {
-        eyebrow: 'Partidos completos',
-        title: 'Tus resultados ya están listos.',
-        detail: 'Ahora elige a los 4 primeros para habilitar el envío completo del cartón.',
-        tone: 'neutral',
-        ctaLabel: 'Ir al top 4',
-        ctaTarget: 'winners-panel',
-      }
-    }
-
-    return {
-      eyebrow: 'Empieza aqui',
-      title: 'Completa primero los resultados de partidos.',
-      detail: 'Cuando cierres esa parte, la pantalla te empuja al top 4 del torneo para luego enviar todo junto.',
-      tone: 'neutral',
-      ctaLabel: 'Ir a partidos',
-      ctaTarget: 'games-panel',
-    }
-  })()
-
   const gasReadinessNotice = (() => {
-    if (!isConnected || nativeBalance.isLoading || !hasOwnedCartons || isExpired) return null
+    if (!isConnected || nativeBalance.isLoading || nativeBalance.value === undefined || !hasOwnedCartons || isExpired) return null
     if (hasOpenfortGasSponsorship) return null
     if (nativeBalance.value > 0n) return null
 
@@ -964,11 +861,6 @@ function PredictionsPage() {
   const handleRouteNavigation = (to?: BlockingStateCard['actionTo']) => {
     if (!to) return
     navigate({ to })
-  }
-
-  const scrollToSection = (target?: FlowCallout['ctaTarget']) => {
-    if (!target || typeof document === 'undefined') return
-    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const selectorEmptyStyles = getFlowCalloutToneStyles(!isConnected || !hasOwnedCartons ? 'neutral' : 'warning')
@@ -1015,54 +907,6 @@ function PredictionsPage() {
           Predice resultados y el top 4 del torneo
         </p>
       </div>
-
-      {(() => {
-        if (!flowCallout) return null
-        const toneStyles = getFlowCalloutToneStyles(flowCallout.tone)
-        const Icon = flowCallout.tone === 'success' ? CheckCircle2 : flowCallout.tone === 'warning' ? LockKeyhole : Clock3
-
-        return (
-          <div
-            className="rounded-xl p-4 sm:p-5"
-            style={{
-              background: toneStyles.background,
-              border: toneStyles.border,
-            }}
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div
-                  className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                  style={{ background: 'rgba(255,255,255,0.04)', color: toneStyles.accent }}
-                >
-                  <Icon size={18} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.24em]" style={{ color: toneStyles.accent }}>
-                    {flowCallout.eyebrow}
-                  </p>
-                  <p className="text-base font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
-                    {flowCallout.title}
-                  </p>
-                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    {flowCallout.detail}
-                  </p>
-                </div>
-              </div>
-              {flowCallout.ctaLabel && flowCallout.ctaTarget && (
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => scrollToSection(flowCallout.ctaTarget)}
-                >
-                  {flowCallout.ctaLabel}
-                  <ArrowDownRight size={16} />
-                </Button>
-              )}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ─── Status banners ─── */}
       {teamsHashStatus === 'mismatch' && (

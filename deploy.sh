@@ -4,6 +4,44 @@
 
 echo "🚀 Deploying contracts to Anvil..."
 
+upsert_env_value() {
+  local file_path="$1"
+  local key="$2"
+  local value="$3"
+
+  if grep -q "^${key}=" "$file_path"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file_path"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$file_path"
+  fi
+}
+
+prepare_env_file() {
+  local file_path="$1"
+  local example_path="$2"
+
+  if [ -f "$file_path" ]; then
+    return
+  fi
+
+  if [ -f "$example_path" ]; then
+    cp "$example_path" "$file_path"
+  else
+    touch "$file_path"
+  fi
+}
+
+update_contract_envs() {
+  local file_path="$1"
+  local example_path="$2"
+
+  prepare_env_file "$file_path" "$example_path"
+  upsert_env_value "$file_path" "VITE_CARTON_ADDRESS" "$CARTON_ADDRESS"
+  upsert_env_value "$file_path" "VITE_PREDICTIONS_ADDRESS" "$PREDICTIONS_ADDRESS"
+  upsert_env_value "$file_path" "VITE_TREASURY_ADDRESS" "$TREASURY_ADDRESS"
+  upsert_env_value "$file_path" "VITE_USDC_ADDRESS" "$USDC_ADDRESS"
+}
+
 # Optional TEAMS_HASH (used by Predictions constructor). Example usage:
 #   export TEAMS_HASH=0x... && ./deploy.sh
 if [ -n "$TEAMS_HASH" ]; then
@@ -16,9 +54,15 @@ fi
 
 # Ejecutar el deploy script y capturar la salida
 DEPLOY_OUTPUT=$(forge script script/Deploy.s.sol --fork-url http://localhost:8545 --broadcast 2>&1)
+DEPLOY_STATUS=$?
 
 # Imprimir la salida completa del deploy
 echo "$DEPLOY_OUTPUT"
+
+if [ $DEPLOY_STATUS -ne 0 ]; then
+  echo "❌ Error: forge script failed before contract addresses could be extracted"
+  exit $DEPLOY_STATUS
+fi
 
 # Extraer las direcciones de los contratos de forma robusta aunque Foundry
 # agregue prefijos o cambie levemente el formato de los logs.
@@ -41,17 +85,7 @@ fi
 echo ""
 echo "📝 Updating frontend .env file..."
 
-# Crear el archivo .env con las nuevas direcciones
-cat > frontend/.env << EOF
-# Contract addresses deployed to Anvil
-VITE_CARTON_ADDRESS=$CARTON_ADDRESS
-VITE_PREDICTIONS_ADDRESS=$PREDICTIONS_ADDRESS
-VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS
-VITE_USDC_ADDRESS=$USDC_ADDRESS
-
-# Optional: WalletConnect Project ID (for production)
-# VITE_WALLETCONNECT_PROJECT_ID=your_project_id
-EOF
+update_contract_envs frontend/.env frontend/.env.example
 
 echo "✅ Frontend .env file updated successfully!"
 echo ""
@@ -88,16 +122,7 @@ else
 fi
 
 # Crear el archivo .env en el admin con las nuevas direcciones
-cat > admin/.env << EOF
-# Contract addresses deployed to Anvil
-VITE_CARTON_ADDRESS=$CARTON_ADDRESS
-VITE_PREDICTIONS_ADDRESS=$PREDICTIONS_ADDRESS
-VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS
-VITE_USDC_ADDRESS=$USDC_ADDRESS
-
-# Optional: WalletConnect Project ID (for production)
-# VITE_WALLETCONNECT_PROJECT_ID=your_project_id
-EOF
+update_contract_envs admin/.env admin/.env.example
 
 echo "✅ Admin .env file updated successfully!"
 echo ""
