@@ -1,10 +1,13 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { useAccount, useReadContract, useReadContracts } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
 import { formatUnits } from 'viem'
 import { computeSharedRanks } from '../lib/prize-payout'
+import { useAppReadContracts } from '../hooks/useAppRead'
 import { useStableValue } from '../hooks/useStableValue'
+import { appChainId } from '../lib/chains'
+import { appPublicClient } from '../lib/publicClient'
 
 export const Route = createFileRoute('/leaderboard')({
   component: LeaderboardPage,
@@ -13,62 +16,125 @@ export const Route = createFileRoute('/leaderboard')({
 function LeaderboardPage() {
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
+  const [activeTournamentId, setActiveTournamentId] = useState<bigint>()
+  const [nextTokenId, setNextTokenId] = useState<bigint>()
+  const [positionsVersion, setPositionsVersion] = useState<bigint>()
+  const [positionsUpdateInProgress, setPositionsUpdateInProgress] = useState<boolean>()
+  const [userTokensRaw, setUserTokensRaw] = useState<bigint[]>()
+  const [tournamentFinalized, setTournamentFinalized] = useState<boolean>()
+  const [usdcPool, setUsdcPool] = useState<bigint>()
 
-  const { data: activeTournamentId } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'activeTournamentId',
-    query: { refetchInterval: 10_000 },
-  })
   const tournamentId = activeTournamentId ?? 0n
-
-  const { data: nextTokenId } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'nextTokenId',
-    query: { refetchInterval: 10_000 },
-  })
 
   const candidateTokenIds = useMemo(() => {
     const upperBound = Number(nextTokenId ?? 1n)
     return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
   }, [nextTokenId])
 
-  const { data: positionsVersion } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'positionsVersion',
-    query: { refetchInterval: 10_000 },
-  })
+  useEffect(() => {
+    let cancelled = false
 
-  const { data: positionsUpdateInProgress } = useReadContract({
-    address: CONTRACT_ADDRESSES.PREDICTIONS,
-    abi: PREDICTIONS_ABI,
-    functionName: 'positionsUpdateInProgress',
-    query: { refetchInterval: 10_000 },
-  })
+    const fetchBaseReads = async () => {
+      try {
+        const [nextActiveTournamentId, nextNextTokenId, nextPositionsVersion, nextPositionsUpdateInProgress] = await Promise.all([
+          appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.CARTON,
+            abi: CARTON_ABI,
+            functionName: 'activeTournamentId',
+          }),
+          appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.CARTON,
+            abi: CARTON_ABI,
+            functionName: 'nextTokenId',
+          }),
+          appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.PREDICTIONS,
+            abi: PREDICTIONS_ABI,
+            functionName: 'positionsVersion',
+          }),
+          appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.PREDICTIONS,
+            abi: PREDICTIONS_ABI,
+            functionName: 'positionsUpdateInProgress',
+          }),
+        ])
+
+        const [nextUserTokensRaw, nextTournamentFinalized, nextUsdcPool] = await Promise.all([
+          normalizedAddress && isConnected
+            ? appPublicClient.readContract({
+                address: CONTRACT_ADDRESSES.CARTON,
+                abi: CARTON_ABI,
+                functionName: 'getUserTokens',
+                args: [normalizedAddress],
+              })
+            : Promise.resolve([]),
+          nextActiveTournamentId > 0n
+            ? appPublicClient.readContract({
+                address: CONTRACT_ADDRESSES.TREASURY,
+                abi: TREASURY_ABI,
+                functionName: 'tournamentFinalized',
+                args: [nextActiveTournamentId],
+              })
+            : Promise.resolve(false),
+          nextActiveTournamentId > 0n
+            ? appPublicClient.readContract({
+                address: CONTRACT_ADDRESSES.TREASURY,
+                abi: TREASURY_ABI,
+                functionName: 'getPrizePool',
+                args: [nextActiveTournamentId, CONTRACT_ADDRESSES.USDC],
+              })
+            : Promise.resolve(undefined),
+        ])
+
+        if (cancelled) return
+
+        setActiveTournamentId(nextActiveTournamentId)
+        setNextTokenId(nextNextTokenId)
+        setPositionsVersion(nextPositionsVersion)
+        setPositionsUpdateInProgress(nextPositionsUpdateInProgress)
+        setUserTokensRaw(Array.from(nextUserTokensRaw))
+        setTournamentFinalized(nextTournamentFinalized)
+        setUsdcPool(nextUsdcPool)
+      } catch {
+        if (cancelled) return
+        setUsdcPool(undefined)
+      }
+    }
+
+    void fetchBaseReads()
+    const intervalId = window.setInterval(() => {
+      void fetchBaseReads()
+    }, 10_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [isConnected, normalizedAddress])
 
   const candidateTokenIdsKey = useMemo(
     () => candidateTokenIds.map((tokenId) => tokenId.toString()).join(','),
     [candidateTokenIds],
   )
 
-  const { data: positionData, refetch: refetchPositionData } = useReadContracts({
+  const { data: positionData, refetch: refetchPositionData } = useAppReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'tokenPositions' as const,
       args: [tokenId] as const,
+      chainId: appChainId,
     })),
     query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
 
-  const { data: positionVersionData, refetch: refetchPositionVersionData } = useReadContracts({
+  const { data: positionVersionData, refetch: refetchPositionVersionData } = useAppReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'tokenPositionsVersion' as const,
       args: [tokenId] as const,
+      chainId: appChainId,
     })),
     query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
@@ -104,12 +170,13 @@ function LeaderboardPage() {
 
   const positionsArray = useStableValue(livePositionsArray, livePositionsArray !== undefined) ?? []
 
-  const { data: usedData, refetch: refetchUsedData } = useReadContracts({
+  const { data: usedData, refetch: refetchUsedData } = useAppReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
       functionName: 'used' as const,
       args: [tokenId] as const,
+      chainId: appChainId,
     })),
     query: { enabled: candidateTokenIds.length > 0, refetchOnWindowFocus: false },
   })
@@ -153,7 +220,7 @@ function LeaderboardPage() {
     [usedTokenIds],
   )
 
-  const { data: pointsData, refetch: refetchPointsData } = useReadContracts({
+  const { data: pointsData, refetch: refetchPointsData } = useAppReadContracts({
     contracts: pointsContracts,
     query: { enabled: pointsContracts.length > 0, refetchOnWindowFocus: false },
   })
@@ -183,37 +250,10 @@ function LeaderboardPage() {
 
   const pointsByTokenId = useStableValue(livePointsByTokenId, livePointsByTokenId !== undefined) ?? new Map<string, bigint>()
 
-  const { data: userTokensRaw } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'getUserTokens',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
-    query: {
-      enabled: Boolean(normalizedAddress) && isConnected,
-      refetchInterval: 10_000,
-      refetchOnWindowFocus: false,
-    },
-  })
   const userTokenSet = useMemo<Set<string>>(
     () => new Set((userTokensRaw ?? []).map((id) => id.toString())),
     [userTokensRaw],
   )
-
-  const { data: tournamentFinalized } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'tournamentFinalized',
-    args: tournamentId > 0n ? [tournamentId] : undefined,
-    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
-  })
-
-  const { data: usdcPool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
-  })
 
   const usdcPrizeContracts = useMemo(
     () =>
@@ -222,6 +262,7 @@ function LeaderboardPage() {
         abi: TREASURY_ABI,
         functionName: 'getClaimablePrizeAmount' as const,
         args: [tournamentId, tokenId, CONTRACT_ADDRESSES.USDC] as const,
+        chainId: appChainId,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [positionsArray.map((entry) => entry.tokenId.toString()).join(','), tournamentId],
@@ -232,7 +273,7 @@ function LeaderboardPage() {
     [positionsArray],
   )
 
-  const { data: usdcPrizesData, refetch: refetchUsdcPrizesData } = useReadContracts({
+  const { data: usdcPrizesData, refetch: refetchUsdcPrizesData } = useAppReadContracts({
     contracts: usdcPrizeContracts,
     query: { enabled: Boolean(tournamentFinalized) && usdcPrizeContracts.length > 0, refetchOnWindowFocus: false },
   })

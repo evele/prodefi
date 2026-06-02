@@ -306,25 +306,6 @@ export const CARTON_ABI = [
   },
   {
     "type": "function",
-    "name": "mintedByTournament",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "mint",
     "inputs": [
       {
@@ -448,6 +429,25 @@ export const CARTON_ABI = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "mintedByTournament",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1536,25 +1536,6 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "function",
-    "name": "allDifferent",
-    "inputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
     "name": "allResultsSet",
     "inputs": [],
     "outputs": [
@@ -1596,54 +1577,6 @@ export const PREDICTIONS_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "calculateDifferencePoints",
-    "inputs": [
-      {
-        "name": "goalsP",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "goalsR",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
-    "name": "calculatePoints",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "index",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1791,30 +1724,6 @@ export const PREDICTIONS_ABI = [
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLocalEmpateVisitante",
-    "inputs": [
-      {
-        "name": "goalsL",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "goalsV",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -3162,6 +3071,11 @@ export const TREASURY_ABI = [
         "name": "reserveBps_",
         "type": "uint16",
         "internalType": "uint16"
+      },
+      {
+        "name": "emergencyDelay_",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
@@ -3194,7 +3108,33 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "EMERGENCY_DELAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "FUND_DEPOSITOR_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PAUSER_ROLE",
     "inputs": [],
     "outputs": [
       {
@@ -3383,6 +3323,29 @@ export const TREASURY_ABI = [
         "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "emergencyWithdrawTournament",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -3851,6 +3814,26 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "pause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "paused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "prizeDistributionSet",
     "inputs": [
       {
@@ -4061,6 +4044,25 @@ export const TREASURY_ABI = [
   },
   {
     "type": "function",
+    "name": "salesClosedAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "sealFinalPrizeAmounts",
     "inputs": [
       {
@@ -4246,6 +4248,36 @@ export const TREASURY_ABI = [
     "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "unpause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawGlobalReserve",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "ClaimPrize",
     "inputs": [
@@ -4340,6 +4372,37 @@ export const TREASURY_ABI = [
   },
   {
     "type": "event",
+    "name": "EmergencyTournamentWithdrawn",
+    "inputs": [
+      {
+        "name": "tournamentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FinalPrizeAmountsReopened",
     "inputs": [
       {
@@ -4415,6 +4478,44 @@ export const TREASURY_ABI = [
         "type": "uint256[]",
         "indexed": false,
         "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "GlobalReserveWithdrawn",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Paused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -4653,6 +4754,19 @@ export const TREASURY_ABI = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "Unpaused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AccessControlBadConfirmation",
     "inputs": []
@@ -4691,6 +4805,21 @@ export const TREASURY_ABI = [
   {
     "type": "error",
     "name": "ETHTransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EmergencyDelayNotPassed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EnforcedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExpectedPause",
     "inputs": []
   },
   {
@@ -4857,6 +4986,11 @@ export const TREASURY_ABI = [
   {
     "type": "error",
     "name": "ZeroAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroRecipient",
     "inputs": []
   },
   {

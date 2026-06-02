@@ -1,48 +1,80 @@
-import { useAccount, useBalance, useReadContract } from 'wagmi'
+import { useEffect, useState } from 'react'
+import { useAccount } from 'wagmi'
 import { formatEther, formatUnits } from 'viem'
 import { CONTRACT_ADDRESSES, USDC_ABI } from '../lib/contracts'
+import { appChain } from '../lib/chains'
+import { appPublicClient } from '../lib/publicClient'
 
 export function useUserBalance() {
   const { address, isConnected } = useAccount()
   const userAddress = address as `0x${string}` | undefined
+  const [ethBalance, setEthBalance] = useState<bigint | undefined>()
+  const [usdcRawBalance, setUsdcRawBalance] = useState<bigint | undefined>()
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<unknown>()
 
-  const {
-    data: ethBalance,
-    isLoading: isEthLoading,
-    error: ethError,
-  } = useBalance({
-    address,
-    query: {
-      enabled: !!address && isConnected,
-      refetchInterval: 5000,
-    },
-  })
+  useEffect(() => {
+    if (!isConnected || !userAddress) {
+      setEthBalance(undefined)
+      setUsdcRawBalance(undefined)
+      setIsLoading(false)
+      setError(undefined)
+      return
+    }
 
-  const { data: usdcRawBalance, isLoading: isUsdcLoading } = useReadContract({
-    address: CONTRACT_ADDRESSES.USDC,
-    abi: USDC_ABI,
-    functionName: 'balanceOf',
-    args: userAddress ? [userAddress] : undefined,
-    query: {
-      enabled: !!address && isConnected,
-      refetchInterval: 5000,
-    },
-  })
+    let cancelled = false
+
+    const fetchBalances = async () => {
+      setIsLoading(true)
+      try {
+        const [nextEthBalance, nextUsdcBalance] = await Promise.all([
+          appPublicClient.getBalance({ address: userAddress }),
+          appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.USDC,
+            abi: USDC_ABI,
+            functionName: 'balanceOf',
+            args: [userAddress],
+          }),
+        ])
+
+        if (cancelled) return
+        setEthBalance(nextEthBalance)
+        setUsdcRawBalance(nextUsdcBalance)
+        setError(undefined)
+      } catch (caught) {
+        if (cancelled) return
+        setError(caught)
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    void fetchBalances()
+    const intervalId = window.setInterval(() => {
+      void fetchBalances()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [isConnected, userAddress])
 
   return {
     isConnected,
     eth: {
-      value: ethBalance?.value ?? 0n,
-      amount: ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0.0000',
-      symbol: ethBalance?.symbol ?? 'ETH',
-      isLoading: isEthLoading,
-      error: ethError,
+      value: ethBalance,
+      amount: ethBalance !== undefined ? Number(formatEther(ethBalance)).toFixed(4) : undefined,
+      symbol: appChain.nativeCurrency.symbol,
+      isLoading: isLoading || (isConnected && ethBalance === undefined && !error),
+      error,
     },
     usdc: {
-      value: usdcRawBalance ?? 0n,
-      amount: usdcRawBalance ? Number(formatUnits(usdcRawBalance, 6)).toFixed(2) : '0.00',
+      value: usdcRawBalance,
+      amount: usdcRawBalance !== undefined ? Number(formatUnits(usdcRawBalance, 6)).toFixed(2) : undefined,
       symbol: 'USDC',
-      isLoading: isUsdcLoading,
+      isLoading: isLoading || (isConnected && usdcRawBalance === undefined && !error),
+      error,
     },
   }
 }

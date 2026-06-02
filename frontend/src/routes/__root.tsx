@@ -42,9 +42,9 @@ function RootLayout() {
                 className="flex items-center gap-3 text-xs font-mono"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                <span>{eth.isLoading ? '…' : `${eth.amount} ETH`}</span>
+                <span>{eth.isLoading || eth.amount === undefined ? '…' : `${eth.amount} ETH`}</span>
                 <span style={{ color: 'var(--border-color)' }}>|</span>
-                <span>{usdc.isLoading ? '…' : `${usdc.amount} USDC`}</span>
+                <span>{usdc.isLoading || usdc.amount === undefined ? '…' : `${usdc.amount} USDC`}</span>
               </div>
             )}
             <nav className="flex gap-1" style={{ color: 'var(--text-secondary)' }}>

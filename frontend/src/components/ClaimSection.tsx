@@ -1,22 +1,22 @@
 import { useMemo } from 'react'
-import { useReadContract } from 'wagmi'
 import { formatUnits } from 'viem'
 import { Button } from './ui/button'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
+import { useAppReadContract } from '../hooks/useAppRead'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { mapClaimError } from '../lib/transaction-errors'
 
 export function ClaimSection({ tokenId }: { tokenId: bigint }) {
   const usdcClaimWrite = useSimulatedContractWrite()
 
-  const { data: activeTournamentId } = useReadContract({
+  const { data: activeTournamentId } = useAppReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'activeTournamentId',
     query: { refetchInterval: 10_000 },
   })
 
-  const { data: tokenTournamentId } = useReadContract({
+  const { data: tokenTournamentId } = useAppReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'tokenTournamentId',
@@ -27,7 +27,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
   const tournamentId = tokenTournamentId ?? 0n
   const usesActivePredictionsEngine = tournamentId > 0n && tournamentId === (activeTournamentId ?? 0n)
 
-  const { data: tournamentFinalized } = useReadContract({
+  const { data: tournamentFinalized } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'tournamentFinalized',
@@ -35,14 +35,14 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
   })
 
-  const { data: positionsVersion } = useReadContract({
+  const { data: positionsVersion } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'positionsVersion',
     query: { enabled: usesActivePredictionsEngine && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
-  const { data: rawRank } = useReadContract({
+  const { data: rawRank } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositions',
@@ -50,7 +50,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     query: { enabled: usesActivePredictionsEngine && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
-  const { data: rankVersion } = useReadContract({
+  const { data: rankVersion } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'tokenPositionsVersion',
@@ -65,7 +65,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     return Number(rawRank)
   }, [positionsVersion, rankVersion, rawRank, usesActivePredictionsEngine])
 
-  const { data: usdcPrize } = useReadContract({
+  const { data: usdcPrize } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'getClaimablePrizeAmount',
@@ -73,7 +73,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     query: { enabled: tournamentId > 0n && Boolean(tournamentFinalized), refetchInterval: 10_000 },
   })
 
-  const { data: usdcClaimed, refetch: refetchUsdcClaimed } = useReadContract({
+  const { data: usdcClaimed, refetch: refetchUsdcClaimed } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'hasUserClaimed',

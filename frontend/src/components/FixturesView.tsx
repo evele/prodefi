@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useReadContracts } from 'wagmi'
 import { TeamInfoSheet } from './TeamInfoSheet'
 import { TeamInfoTrigger } from './TeamInfoTrigger'
+import { useAppReadContracts } from '../hooks/useAppRead'
 import { CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import {
   getFixtureKickoffDayKey,
@@ -201,7 +201,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
 
   type ContractReadResult = { status: 'success' | 'failure'; result?: unknown }
   
-  const { data: rawOfficialGamesMetaData, isLoading: isLoadingGameMeta } = useReadContracts({
+  const { data: rawOfficialGamesMetaData, isLoading: isLoadingGameMeta } = useAppReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,
@@ -213,7 +213,7 @@ export function FixturesView({ groups }: FixturesViewProps) {
       refetchOnWindowFocus: false,
     }
   })
-  const { data: rawOfficialGameResultsData, isLoading: isLoadingGameResults } = useReadContracts({
+  const { data: rawOfficialGameResultsData, isLoading: isLoadingGameResults } = useAppReadContracts({
     contracts: allGames.map((g) => ({
       address: CONTRACT_ADDRESSES.PREDICTIONS,
       abi: PREDICTIONS_ABI,

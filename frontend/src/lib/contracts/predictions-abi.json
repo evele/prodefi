@@ -30,25 +30,6 @@
   },
   {
     "type": "function",
-    "name": "allDifferent",
-    "inputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
     "name": "allResultsSet",
     "inputs": [],
     "outputs": [
@@ -90,54 +71,6 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "calculateDifferencePoints",
-    "inputs": [
-      {
-        "name": "goalsP",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "goalsR",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
-    "name": "calculatePoints",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "index",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -285,30 +218,6 @@
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLocalEmpateVisitante",
-    "inputs": [
-      {
-        "name": "goalsL",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "goalsV",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "pure"
   },
   {
     "type": "function",

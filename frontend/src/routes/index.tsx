@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useUser } from '@openfort/react'
-import { useAccount, useReadContract, useReadContracts } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../lib/contracts'
 import { formatUnits } from 'viem'
 import { toast } from 'sonner'
@@ -9,10 +9,12 @@ import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { PurchaseCartonModal } from '../components/PurchaseCartonModal'
 import { useUserBalance } from '../hooks/useBalance'
+import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { useStableValue } from '../hooks/useStableValue'
-import { canUseOpenfort, hasOpenfortGasSponsorship } from '../lib/chains'
+import { appChainId, canUseOpenfort, hasOpenfortGasSponsorship } from '../lib/chains'
 import { createCheckoutOrder, getMercadoPagoCheckoutUrl } from '../lib/orders'
+import { appPublicClient } from '../lib/publicClient'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 import { PRIZE_BANDS, getBandAmount } from '../lib/prize-payout'
@@ -25,8 +27,19 @@ export const Route = createFileRoute('/')({
 const ARS_CARTON_PRICE_LABEL = '$2.000'
 
 function HomePage() {
+  if (canUseOpenfort) return <OpenfortHomePage />
+
+  return <HomePageContent />
+}
+
+function OpenfortHomePage() {
+  const { user } = useUser()
+
+  return <HomePageContent openfortUserId={user?.id} />
+}
+
+function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   const navigate = useNavigate()
-  const openfortUser = canUseOpenfort ? useUser().user : null
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const { eth: nativeBalance } = useUserBalance()
@@ -34,32 +47,120 @@ function HomePage() {
   const approveWrite = useSimulatedContractWrite()
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false)
   const [isCreatingArsOrder, setIsCreatingArsOrder] = useState(false)
+  const [activeTournamentId, setActiveTournamentId] = useState<bigint>()
+  const [usdcPrice, setUsdcPrice] = useState<bigint>()
+  const [usdcAllowance, setUsdcAllowance] = useState<bigint>()
+  const [usdcPrizePool, setUsdcPrizePool] = useState<bigint>()
+  const [cartonsUser, setCartonsUser] = useState<bigint[]>([])
+  const [cartonTournamentIds, setCartonTournamentIds] = useState<bigint[]>([])
+  const [usdcPriceLoading, setUsdcPriceLoading] = useState(true)
 
-  const { data: activeTournamentId } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'activeTournamentId',
-  })
+  const refetchPurchaseReads = useCallback(async () => {
+    setUsdcPriceLoading(true)
+
+    const nextTournamentId = await appPublicClient.readContract({
+      address: CONTRACT_ADDRESSES.CARTON,
+      abi: CARTON_ABI,
+      functionName: 'activeTournamentId',
+    })
+
+    const [nextPrice, nextAllowance] = await Promise.all([
+      nextTournamentId > 0n
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.CARTON,
+            abi: CARTON_ABI,
+            functionName: 'tokenPricesByTournament',
+            args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
+          })
+        : Promise.resolve(0n),
+      normalizedAddress && isConnected
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.USDC,
+            abi: USDC_ABI,
+            functionName: 'allowance',
+            args: [normalizedAddress, CONTRACT_ADDRESSES.CARTON],
+          })
+        : Promise.resolve(0n),
+    ])
+
+    const nextPrizePool = nextTournamentId > 0n
+      ? await appPublicClient.readContract({
+          address: CONTRACT_ADDRESSES.TREASURY,
+          abi: TREASURY_ABI,
+          functionName: 'getPrizePool',
+          args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
+        })
+      : 0n
+
+    setActiveTournamentId(nextTournamentId)
+    setUsdcPrice(nextPrice)
+    setUsdcAllowance(nextAllowance)
+    setUsdcPrizePool(nextPrizePool)
+    setUsdcPriceLoading(false)
+  }, [isConnected, normalizedAddress])
+
+  const refetchCartonsUser = useCallback(async () => {
+    if (!normalizedAddress || !isConnected) {
+      setCartonsUser([])
+      setCartonTournamentIds([])
+      return { data: [] as bigint[] }
+    }
+
+    const nextCartons = await appPublicClient.readContract({
+      address: CONTRACT_ADDRESSES.CARTON,
+      abi: CARTON_ABI,
+      functionName: 'getUserTokens',
+      args: [normalizedAddress],
+    })
+
+    const nextTournamentIds = await Promise.all(
+      nextCartons.map((tokenId) =>
+        appPublicClient.readContract({
+          address: CONTRACT_ADDRESSES.CARTON,
+          abi: CARTON_ABI,
+          functionName: 'tokenTournamentId',
+          args: [tokenId],
+        })
+      ),
+    )
+
+    setCartonsUser(Array.from(nextCartons))
+    setCartonTournamentIds(nextTournamentIds)
+    return { data: Array.from(nextCartons) }
+  }, [isConnected, normalizedAddress])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchPurchaseReads = async () => {
+      try {
+        await refetchPurchaseReads()
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[HomePage] Failed to read purchase state', {
+            cartonAddress: CONTRACT_ADDRESSES.CARTON,
+            usdcAddress: CONTRACT_ADDRESSES.USDC,
+            chainId: appChainId,
+            error,
+          })
+        }
+
+        if (!cancelled) setUsdcPriceLoading(false)
+      }
+    }
+
+    void fetchPurchaseReads()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refetchPurchaseReads])
+
+  useEffect(() => {
+    void refetchCartonsUser()
+  }, [refetchCartonsUser])
+
   const tournamentId = activeTournamentId ?? 0n
-
-  const { data: usdcPrice, isLoading: usdcPriceLoading } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'tokenPricesByTournament',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n },
-  })
-
-  const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
-    address: CONTRACT_ADDRESSES.USDC,
-    abi: USDC_ABI,
-    functionName: 'allowance',
-    args: normalizedAddress ? [normalizedAddress, CONTRACT_ADDRESSES.CARTON] : undefined,
-    query: {
-      enabled: Boolean(normalizedAddress) && isConnected,
-      refetchInterval: 15000,
-    },
-  })
 
   const usdcPriceValue = usdcPrice ?? 0n
   const usdcAllowanceValue = usdcAllowance ?? 0n
@@ -73,11 +174,6 @@ function HomePage() {
       : usdcPriceValue > 0n
         ? `${formatUnits(usdcPriceValue, 6)} USDC`
         : '—'
-
-  const buyButtonText = () => {
-    if (!isConnected) return 'Conecta tu wallet para comprar'
-    return 'Comprar cartón'
-  }
 
   const approvalBlockedMessage = (() => {
     if (!needsApproval) return null
@@ -111,7 +207,7 @@ function HomePage() {
   })()
 
   const gasReadinessNotice = (() => {
-    if (!isConnected || nativeBalance.isLoading) return null
+    if (!isConnected || nativeBalance.isLoading || nativeBalance.value === undefined) return null
     if (hasOpenfortGasSponsorship) return null
     if (nativeBalance.value > 0n) return null
 
@@ -122,22 +218,7 @@ function HomePage() {
     }
   })()
 
-  const { data: usdcPrizePool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getPrizePool',
-    args: tournamentId > 0n ? [tournamentId, CONTRACT_ADDRESSES.USDC] : undefined,
-    query: { enabled: tournamentId > 0n },
-  })
-
-  const { data: usdcReservePool } = useReadContract({
-    address: CONTRACT_ADDRESSES.TREASURY,
-    abi: TREASURY_ABI,
-    functionName: 'getGlobalReserve',
-    args: [CONTRACT_ADDRESSES.USDC],
-  })
-
-  const { data: usdcDistributionSet } = useReadContract({
+  const { data: usdcDistributionSet } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'prizeDistributionSet',
@@ -145,7 +226,7 @@ function HomePage() {
     query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
   })
 
-  const { data: tournamentFinalized } = useReadContract({
+  const { data: tournamentFinalized } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'tournamentFinalized',
@@ -153,7 +234,7 @@ function HomePage() {
     query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
   })
 
-  const { data: finalPrizeAmountsReady } = useReadContract({
+  const { data: finalPrizeAmountsReady } = useAppReadContract({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'finalPrizeAmountsReady',
@@ -161,7 +242,7 @@ function HomePage() {
     query: { enabled: tournamentId > 0n, refetchInterval: 10000, refetchOnWindowFocus: false },
   })
 
-  const { data: nextTokenId } = useReadContract({
+  const { data: nextTokenId } = useAppReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'nextTokenId',
@@ -173,7 +254,7 @@ function HomePage() {
     return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
   }, [nextTokenId])
 
-  const { data: positionsVersion } = useReadContract({
+  const { data: positionsVersion } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'positionsVersion',
@@ -197,7 +278,7 @@ function HomePage() {
     [candidateTokenIds, finalPrizeAmountsReady],
   )
 
-  const { data: finalPrizePositionData } = useReadContracts({
+  const { data: finalPrizePositionData } = useAppReadContracts({
     contracts: finalPrizePositionContracts,
     query: {
       enabled: finalPrizePositionContracts.length > 0,
@@ -219,7 +300,7 @@ function HomePage() {
     [candidateTokenIds, finalPrizeAmountsReady],
   )
 
-  const { data: finalPrizePositionVersionData } = useReadContracts({
+  const { data: finalPrizePositionVersionData } = useAppReadContracts({
     contracts: finalPrizePositionVersionContracts,
     query: {
       enabled: finalPrizePositionVersionContracts.length > 0,
@@ -278,7 +359,7 @@ function HomePage() {
     [finalPrizeAmountsReady, finalPrizeEntries, tournamentId],
   )
 
-  const { data: finalPrizeData } = useReadContracts({
+  const { data: finalPrizeData } = useAppReadContracts({
     contracts: finalPrizeContracts,
     query: {
       enabled: finalPrizeContracts.length > 0,
@@ -297,7 +378,7 @@ function HomePage() {
     }) as const)
   }, [tournamentId, usdcDistributionSet])
 
-  const { data: prizeAmounts } = useReadContracts({
+  const { data: prizeAmounts } = useAppReadContracts({
     contracts: prizeContracts,
     query: { enabled: prizeContracts.length > 0 },
   })
@@ -381,7 +462,8 @@ function HomePage() {
         revertedMessage: 'La compra con USDC fue rechazada en cadena.',
         mapError: mapBuyCartonError,
         onSuccess: async () => {
-          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchAllowance()])
+          setIsPurchaseModalOpen(false)
+          const [cartonsResult] = await Promise.all([refetchCartonsUser(), refetchPurchaseReads()])
           const latestTokenId = cartonsResult.data?.reduce<bigint | undefined>((latest, current) => {
             if (latest === undefined || current > latest) return current
             return latest
@@ -406,7 +488,7 @@ function HomePage() {
         successMessage: 'USDC aprobado. Ya puedes comprar.',
         revertedMessage: 'La aprobación USDC fue rechazada en cadena.',
         mapError: mapApproveUsdcError,
-        onSuccess: async () => { await refetchAllowance() },
+        onSuccess: async () => { await refetchPurchaseReads() },
         logLabel: 'Approve USDC',
       },
     )
@@ -435,7 +517,7 @@ function HomePage() {
         tournamentId: Number(tournamentId),
         quantity: 1,
         paymentRail: 'fiat_ars',
-        ...(openfortUser?.id ? { openfortUserId: openfortUser.id } : {}),
+        ...(openfortUserId ? { openfortUserId } : {}),
       })
 
       const checkoutUrl = getMercadoPagoCheckoutUrl(order)
@@ -451,47 +533,21 @@ function HomePage() {
     }
   }
 
-  const { data: cartonsUser, refetch: refetchCartonsUser } = useReadContract({
-    address: CONTRACT_ADDRESSES.CARTON,
-    abi: CARTON_ABI,
-    functionName: 'getUserTokens',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
-    query: {
-      enabled: Boolean(normalizedAddress) && isConnected,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: false,
-    },
-  })
-
-  const tokenTournamentContracts = useMemo(
-    () =>
-      (cartonsUser ?? []).map((tokenId) => ({
-        address: CONTRACT_ADDRESSES.CARTON,
-        abi: CARTON_ABI,
-        functionName: 'tokenTournamentId' as const,
-        args: [tokenId] as const,
-      })),
-    [cartonsUser],
-  )
-
-  const { data: tokenTournamentResults } = useReadContracts({
-    contracts: tokenTournamentContracts,
-    query: {
-      enabled: tokenTournamentContracts.length > 0,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: false,
-    },
-  })
-
   const activeTournamentCartons = useMemo(() => {
-    if (!cartonsUser?.length || tournamentId === 0n) return []
+    if (!cartonsUser.length || tournamentId === 0n) return []
 
     return cartonsUser.filter(
-      (_, index) => ((tokenTournamentResults?.[index]?.result as bigint | undefined) ?? 0n) === tournamentId,
+      (_, index) => (cartonTournamentIds[index] ?? 0n) === tournamentId,
     )
-  }, [cartonsUser, tokenTournamentResults, tournamentId])
+  }, [cartonTournamentIds, cartonsUser, tournamentId])
 
-  const { data: deadline } = useReadContract({
+  const buyButtonText = () => {
+    if (!isConnected) return 'Conecta tu wallet para comprar'
+    if (activeTournamentCartons.length > 0) return 'Comprar cartón extra'
+    return 'Comprar cartón'
+  }
+
+  const { data: deadline } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'submissionDeadline',
@@ -518,10 +574,6 @@ function HomePage() {
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
     : '—'
 
-  const usdcReserveDisplay = usdcReservePool !== undefined
-    ? `${Number(formatUnits(usdcReservePool, 6)).toFixed(2)} USDC`
-    : '—'
-
   const cartonStatusContracts = useMemo(() => {
     if (!activeTournamentCartons.length) return []
 
@@ -541,7 +593,7 @@ function HomePage() {
     ])
   }, [activeTournamentCartons])
 
-  const { data: cartonStatusResults } = useReadContracts({
+  const { data: cartonStatusResults } = useAppReadContracts({
     contracts: cartonStatusContracts,
     query: {
       enabled: cartonStatusContracts.length > 0,
@@ -563,7 +615,7 @@ function HomePage() {
     [activeTournamentCartons, tournamentFinalized, tournamentId],
   )
 
-  const { data: claimablePrizeResults } = useReadContracts({
+  const { data: claimablePrizeResults } = useAppReadContracts({
     contracts: claimablePrizeContracts,
     query: {
       enabled: claimablePrizeContracts.length > 0,
@@ -585,7 +637,7 @@ function HomePage() {
     [activeTournamentCartons, tournamentFinalized, tournamentId],
   )
 
-  const { data: claimedPrizeResults } = useReadContracts({
+  const { data: claimedPrizeResults } = useAppReadContracts({
     contracts: claimedPrizeContracts,
     query: {
       enabled: claimedPrizeContracts.length > 0,
@@ -690,7 +742,7 @@ function HomePage() {
             className="text-xs font-medium uppercase tracking-widest"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Pool premiable
+            Pozo premiable
           </p>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span
@@ -700,12 +752,6 @@ function HomePage() {
               {usdcPoolDisplay}
             </span>
           </div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            Reserva global onchain: {usdcReserveDisplay}
-          </p>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            Se premia sobre el 95% de las ventas. El resto queda en reserva y remanentes.
-          </p>
         </section>
       )}
 
@@ -756,11 +802,11 @@ function HomePage() {
         </div>
 
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Elige entre pagar en pesos con Mercado Pago o seguir por el camino crypto nativo con USDC onchain.
+          Elige entre pagar en pesos con Mercado Pago o con crypto con USDC .
         </p>
 
         <Button
-          className="w-full h-11 text-base font-semibold"
+          className="w-full h-12 text-base font-semibold"
           disabled={!isConnected || tournamentId === 0n}
           onClick={handleBuyClick}
           style={isConnected && tournamentId > 0n ? { boxShadow: 'var(--glow-green)' } : undefined}
