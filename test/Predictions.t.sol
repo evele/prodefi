@@ -145,18 +145,22 @@ contract PredictionsTest is Test {
         preds.setSubmissionDeadline(currentTime);
     }
 
-    function testSetSubmissionDeadline_RevertsAfterPredictionsStart() public {
+    function testSetSubmissionDeadline_AllowsAfterPredictionsStart() public {
         _submitValidPrediction(user, tokenId);
 
-        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
-        preds.setSubmissionDeadline(block.timestamp + 2 days);
+        uint256 nextDeadline = block.timestamp + 2 days;
+        preds.setSubmissionDeadline(nextDeadline);
+
+        assertEq(preds.submissionDeadline(), nextDeadline);
     }
 
-    function testSetSubmissionDeadline_RevertsAfterDeadlineExpires() public {
+    function testSetSubmissionDeadline_AllowsAfterDeadlineExpires() public {
         vm.warp(preds.submissionDeadline() + 1);
 
-        vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
-        preds.setSubmissionDeadline(block.timestamp + 1 days);
+        uint256 nextDeadline = block.timestamp + 1 days;
+        preds.setSubmissionDeadline(nextDeadline);
+
+        assertEq(preds.submissionDeadline(), nextDeadline);
     }
 
     function testSetSubmissionDeadline_RevertsAfterSalesClose() public {

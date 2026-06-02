@@ -516,8 +516,6 @@ contract Predictions is Ownable {
     }
 
     function _isSubmissionDeadlineLocked() internal view returns (bool) {
-        if (predictionsStarted) return true;
-        if (submissionDeadline != 0 && block.timestamp >= submissionDeadline) return true;
         if (_tournamentSalesClosed()) return true;
         return _hasAnyResultSet();
     }
