@@ -29,7 +29,7 @@ contract CartonTest is BaseTest {
         internal
         returns (Treasury deployedTreasury)
     {
-        deployedTreasury = new Treasury(admin, address(carton), 500);
+        deployedTreasury = new Treasury(admin, address(carton), 500, 60 days);
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(deployedTreasury));
@@ -425,7 +425,7 @@ contract CartonTest is BaseTest {
     // ========== TREASURY INTEGRATION TESTS ==========
 
     function testSetTreasuryAddress() public {
-        treasury = new Treasury(admin, address(carton), 500);
+        treasury = new Treasury(admin, address(carton), 500, 60 days);
 
         vm.expectEmit(true, true, false, true);
         emit TreasuryAddressChanged(address(0), address(treasury));
@@ -437,7 +437,7 @@ contract CartonTest is BaseTest {
     }
 
     function testSetTreasuryAddress_OnlyAdmin() public {
-        treasury = new Treasury(admin, address(carton), 500);
+        treasury = new Treasury(admin, address(carton), 500, 60 days);
 
         vm.prank(user);
         vm.expectRevert();
@@ -652,7 +652,7 @@ contract CartonTest is BaseTest {
         vm.startPrank(admin);
         carton.setAcceptedToken(address(unsupportedToken), true);
         carton.setTokenPrice(address(unsupportedToken), 1000000);
-        treasury = new Treasury(admin, address(carton), 500);
+        treasury = new Treasury(admin, address(carton), 500, 60 days);
         carton.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(predictions));
         treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
@@ -669,7 +669,7 @@ contract CartonTest is BaseTest {
     }
 
     function testBuyCartonWithToken_RevertsForUnregisteredTournament() public {
-        treasury = new Treasury(admin, address(carton), 500);
+        treasury = new Treasury(admin, address(carton), 500, 60 days);
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(treasury));

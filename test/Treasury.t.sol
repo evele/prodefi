@@ -124,7 +124,7 @@ contract TreasuryTest is BaseTest {
     }
 
     function _deployTreasury() internal {
-        treasury = new Treasury(admin, address(carton), 500);
+        treasury = new Treasury(admin, address(carton), 500, 60 days);
         USDC = new MockERC20("USDC", "USDC", 6);
 
         vm.startPrank(admin);
@@ -1779,5 +1779,310 @@ contract TreasuryTest is BaseTest {
         assertEq(prizeAfterClose, (((_prizeableAmount(INITIAL_DEPOSIT) * 95) / 100) * 50) / 100);
 
         assertLt(prizeAfterClose, prizeBeforeClose);
+    }
+
+    // ========== PAUSE TESTS ==========
+
+    function test_Pause_DepositFromSalesRevertsWhenPaused() public {
+        _logTestInfo("Pause DepositFromSales Reverts When Paused");
+
+        vm.prank(admin);
+        treasury.pause();
+
+        vm.deal(fundDepositor, INITIAL_DEPOSIT);
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("EnforcedPause()"))));
+        vm.prank(fundDepositor);
+        treasury.depositFromSales{ value: INITIAL_DEPOSIT }(TOURNAMENT_ID_1);
+    }
+
+    function test_Pause_DepositFromSalesERC20RevertsWhenPaused() public {
+        _logTestInfo("Pause DepositFromSalesERC20 Reverts When Paused");
+
+        vm.prank(admin);
+        treasury.pause();
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        USDC.mint(fundDepositor, depositAmount);
+
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("EnforcedPause()"))));
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+    }
+
+    function test_Pause_ClaimPrizeStillWorksWhenPaused() public {
+        _logTestInfo("Pause ClaimPrize Still Works When Paused");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        vm.prank(admin);
+        treasury.pause();
+
+        uint256 expectedPrize = (_prizeableAmount(INITIAL_DEPOSIT) * 50) / 100;
+        uint256 initialBalance = user1.balance;
+
+        vm.prank(user1);
+        treasury.claimPrize(TOURNAMENT_ID_1, TOKEN_ID_1, ETH_TOKEN);
+
+        assertEq(user1.balance, initialBalance + expectedPrize);
+    }
+
+    function test_Pause_UnpauseRestoresDeposits() public {
+        _logTestInfo("Pause Unpause Restores Deposits");
+
+        vm.prank(admin);
+        treasury.pause();
+
+        vm.prank(admin);
+        treasury.unpause();
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+        assertEq(treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN), _prizeableAmount(INITIAL_DEPOSIT));
+    }
+
+    function test_Pause_OnlyPauserRole() public {
+        _logTestInfo("Pause Only Pauser Role");
+
+        bytes32 role = treasury.PAUSER_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), unauthorized, role
+            )
+        );
+        vm.prank(unauthorized);
+        treasury.pause();
+    }
+
+    // ========== WITHDRAW GLOBAL RESERVE TESTS ==========
+
+    function test_WithdrawGlobalReserve_ETH_Success() public {
+        _logTestInfo("WithdrawGlobalReserve ETH Success");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        uint256 reserveAmount = _reserveAmount(INITIAL_DEPOSIT);
+        uint256 recipientInitialBalance = user1.balance;
+
+        vm.expectEmit(true, true, false, true);
+        emit Treasury.GlobalReserveWithdrawn(ETH_TOKEN, user1, reserveAmount);
+
+        vm.prank(admin);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, reserveAmount, user1);
+
+        assertEq(treasury.globalReserve(ETH_TOKEN), 0);
+        assertEq(user1.balance, recipientInitialBalance + reserveAmount);
+    }
+
+    function test_WithdrawGlobalReserve_ERC20_Success() public {
+        _logTestInfo("WithdrawGlobalReserve ERC20 Success");
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        uint256 reserveAmount = _reserveAmount(depositAmount);
+        uint256 recipientInitialBalance = USDC.balanceOf(user1);
+
+        vm.prank(admin);
+        treasury.withdrawGlobalReserve(address(USDC), reserveAmount, user1);
+
+        assertEq(treasury.globalReserve(address(USDC)), 0);
+        assertEq(USDC.balanceOf(user1), recipientInitialBalance + reserveAmount);
+    }
+
+    function test_WithdrawGlobalReserve_DoesNotTouchPrizePools() public {
+        _logTestInfo("WithdrawGlobalReserve Does Not Touch Prize Pools");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        uint256 prizePoolBefore = treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN);
+        uint256 reserveAmount = _reserveAmount(INITIAL_DEPOSIT);
+
+        vm.prank(admin);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, reserveAmount, user1);
+
+        assertEq(treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN), prizePoolBefore);
+    }
+
+    function test_WithdrawGlobalReserve_RevertsInsufficientReserve() public {
+        _logTestInfo("WithdrawGlobalReserve Reverts Insufficient Reserve");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        uint256 reserveAmount = _reserveAmount(INITIAL_DEPOSIT);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.InsufficientGlobalReserve.selector);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, reserveAmount + 1, user1);
+    }
+
+    function test_WithdrawGlobalReserve_RevertsZeroAmount() public {
+        _logTestInfo("WithdrawGlobalReserve Reverts Zero Amount");
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.ZeroAmount.selector);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, 0, user1);
+    }
+
+    function test_WithdrawGlobalReserve_RevertsZeroRecipient() public {
+        _logTestInfo("WithdrawGlobalReserve Reverts Zero Recipient");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.ZeroRecipient.selector);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, _reserveAmount(INITIAL_DEPOSIT), address(0));
+    }
+
+    function test_WithdrawGlobalReserve_OnlyAdmin() public {
+        _logTestInfo("WithdrawGlobalReserve Only Admin");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        bytes32 role = treasury.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), unauthorized, role
+            )
+        );
+        vm.prank(unauthorized);
+        treasury.withdrawGlobalReserve(ETH_TOKEN, 1, user1);
+    }
+
+    // ========== EMERGENCY WITHDRAW TESTS ==========
+
+    function test_EmergencyWithdraw_RevertsBeforeDelay() public {
+        _logTestInfo("EmergencyWithdraw Reverts Before Delay");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.EmergencyDelayNotPassed.selector);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
+    }
+
+    function test_EmergencyWithdraw_RevertsIfTournamentFinalized() public {
+        _logTestInfo("EmergencyWithdraw Reverts If Tournament Finalized");
+
+        _setupCompleteScenarioWithTreasury(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.TournamentAlreadyClosed.selector);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
+    }
+
+    function test_EmergencyWithdraw_RevertsIfSalesNotClosed() public {
+        _logTestInfo("EmergencyWithdraw Reverts If Sales Not Closed");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.SalesNotClosed.selector);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
+    }
+
+    function test_EmergencyWithdraw_ETH_SuccessAfterDelay() public {
+        _logTestInfo("EmergencyWithdraw ETH Success After Delay");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        uint256 prizePool = treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN);
+        uint256 recipientInitialBalance = user1.balance;
+
+        vm.expectEmit(true, true, true, true);
+        emit Treasury.EmergencyTournamentWithdrawn(TOURNAMENT_ID_1, ETH_TOKEN, user1, prizePool);
+
+        vm.prank(admin);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
+
+        assertEq(treasury.prizePools(TOURNAMENT_ID_1, ETH_TOKEN), 0);
+        assertEq(user1.balance, recipientInitialBalance + prizePool);
+    }
+
+    function test_EmergencyWithdraw_ERC20_SuccessAfterDelay() public {
+        _logTestInfo("EmergencyWithdraw ERC20 Success After Delay");
+
+        uint256 depositAmount = 1000 * 10 ** 6;
+        vm.startPrank(fundDepositor);
+        USDC.approve(address(treasury), depositAmount);
+        treasury.depositFromSalesERC20(TOURNAMENT_ID_1, address(USDC), depositAmount);
+        vm.stopPrank();
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        uint256 prizePool = treasury.prizePools(TOURNAMENT_ID_1, address(USDC));
+        uint256 recipientInitialBalance = USDC.balanceOf(user1);
+
+        vm.prank(admin);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, address(USDC), user1);
+
+        assertEq(treasury.prizePools(TOURNAMENT_ID_1, address(USDC)), 0);
+        assertEq(USDC.balanceOf(user1), recipientInitialBalance + prizePool);
+    }
+
+    function test_EmergencyWithdraw_RevertsNoPrizePool() public {
+        _logTestInfo("EmergencyWithdraw Reverts No Prize Pool");
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.NoPrizePool.selector);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
+    }
+
+    function test_EmergencyWithdraw_RevertsZeroRecipient() public {
+        _logTestInfo("EmergencyWithdraw Reverts Zero Recipient");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        vm.prank(admin);
+        vm.expectRevert(Treasury.ZeroRecipient.selector);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, address(0));
+    }
+
+    function test_EmergencyWithdraw_OnlyAdmin() public {
+        _logTestInfo("EmergencyWithdraw Only Admin");
+
+        _depositFunds(TOURNAMENT_ID_1, INITIAL_DEPOSIT);
+
+        vm.prank(tournamentManager);
+        treasury.closeSales(TOURNAMENT_ID_1);
+
+        vm.warp(block.timestamp + 60 days + 1);
+
+        bytes32 role = treasury.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), unauthorized, role
+            )
+        );
+        vm.prank(unauthorized);
+        treasury.emergencyWithdrawTournament(TOURNAMENT_ID_1, ETH_TOKEN, user1);
     }
 }
