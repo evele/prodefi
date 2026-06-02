@@ -17,19 +17,32 @@
   },
   {
     "type": "function",
-    "name": "abs",
+    "name": "TOURNAMENT_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "allDifferent",
     "inputs": [
       {
-        "name": "x",
-        "type": "int8",
-        "internalType": "int8"
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "pure"
@@ -46,25 +59,6 @@
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "all_different",
-    "inputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -401,6 +395,25 @@
     "type": "function",
     "name": "isReadyForFinalization",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isTokenInCurrentLeaderboard",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -954,19 +967,6 @@
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tournamentId",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"

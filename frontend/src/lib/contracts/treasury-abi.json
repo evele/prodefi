@@ -61,6 +61,19 @@
   },
   {
     "type": "function",
+    "name": "RESERVE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "TOURNAMENT_MANAGER_ROLE",
     "inputs": [],
     "outputs": [
@@ -234,12 +247,12 @@
     "name": "finalPrizeAmountTotals",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -258,17 +271,17 @@
     "name": "finalPrizeAmounts",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -287,12 +300,12 @@
     "name": "finalPrizeAmountsDraftRevision",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -311,12 +324,12 @@
     "name": "finalPrizeAmountsReady",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -335,12 +348,12 @@
     "name": "finalPrizeAmountsSealedRevision",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -695,12 +708,12 @@
     "name": "prizeDistributionSet",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }
@@ -719,12 +732,12 @@
     "name": "prizeDistributionTokens",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "index",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -743,17 +756,17 @@
     "name": "prizePoolDistributions",
     "inputs": [
       {
-        "name": "",
+        "name": "tournamentId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "index",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -862,19 +875,6 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "reserveBps",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1661,6 +1661,11 @@
   {
     "type": "error",
     "name": "SalesNotClosed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TokenNotInCurrentLeaderboard",
     "inputs": []
   },
   {

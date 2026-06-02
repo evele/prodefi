@@ -4,9 +4,7 @@ pragma solidity 0.8.27;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import { ERC1155Burnable } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
 import { ERC1155Pausable } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
-import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -20,10 +18,9 @@ interface ITreasury {
 }
 
 /// @custom:security-contact inux2012@gmail.com
-contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC1155Supply, ReentrancyGuard {
+contract Carton is ERC1155, AccessControl, ERC1155Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    error EthPurchaseDisabled();
     error TokenNotAccepted();
     error TokenPriceNotSet();
     error PriceMustBePositive();
@@ -45,10 +42,10 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    uint256 public cartonPrice;
     uint256 private _nextTokenId = 1;
     uint16 public metadataVariantCount;
 
+    mapping(uint256 => uint256) public mintedByTournament;
     mapping(uint256 => uint256) public tokenTournamentId;
     mapping(uint256 => uint16) public variantByTokenId;
 
@@ -61,7 +58,6 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         address indexed buyer, uint256 indexed tokenId, address indexed token, uint256 price
     );
     event URIUpdated(string oldURI, string newURI);
-    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event TokenPriceUpdated(uint256 indexed tournamentId, address indexed token, uint256 oldPrice, uint256 newPrice);
     event ActiveTournamentChanged(uint256 indexed oldTournamentId, uint256 indexed newTournamentId);
     event AcceptedTokenSet(address indexed token, bool accepted);
@@ -123,6 +119,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         if (amount != 1) revert CartonAmountMustBeOne();
 
         uint256 tokenId = _nextTokenId++;
+        mintedByTournament[tournamentId] += 1;
         tokenTournamentId[tokenId] = tournamentId;
         _assignVariant(tokenId, account, tournamentId);
         _mint(account, tokenId, amount, data);
@@ -145,6 +142,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         _validateTournamentSelection(tournamentId);
 
         uint256 amountsLength = amounts.length;
+        mintedByTournament[tournamentId] += amountsLength;
         uint256[] memory ids = new uint256[](amountsLength);
         for (uint256 i; i < amountsLength;) {
             if (amounts[i] != 1) revert CartonAmountMustBeOne();
@@ -157,10 +155,6 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         }
         _mintBatch(to, ids, amounts, data);
         return ids;
-    }
-
-    function buyCarton() external payable {
-        revert EthPurchaseDisabled();
     }
 
     function buyCartonWithToken(address token) external whenNotPaused nonReentrant {
@@ -177,6 +171,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 tokenId = _nextTokenId++;
+        mintedByTournament[tournamentId] += 1;
         tokenTournamentId[tokenId] = tournamentId;
         _assignVariant(tokenId, msg.sender, tournamentId);
         _mint(msg.sender, tokenId, 1, "");
@@ -216,12 +211,6 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function tokenPrices(address token) external view returns (uint256) {
         return SALES_CONFIG.tokenPrices(token);
-    }
-
-    function setCartonPrice(uint256 newPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint256 oldPrice = cartonPrice;
-        cartonPrice = newPrice;
-        emit PriceUpdated(oldPrice, newPrice);
     }
 
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
@@ -294,7 +283,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ERC1155Burnable, ERC
 
     function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
         internal
-        override(ERC1155, ERC1155Pausable, ERC1155Supply)
+        override(ERC1155, ERC1155Pausable)
     {
         super._update(from, to, ids, values);
         uint256 idsLength = ids.length;
