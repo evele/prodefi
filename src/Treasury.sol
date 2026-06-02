@@ -4,6 +4,7 @@ pragma solidity 0.8.27;
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { Carton } from "./Carton.sol";
 import { TreasuryPrizeBook } from "./TreasuryPrizeBook.sol";
@@ -16,7 +17,7 @@ interface ICompetitionEngine {
 
 /// @title Treasury - Centralized multi-asset fund and prize management
 /// @notice Reusable contract for managing prize pools across multiple tournaments with ETH/ERC20 support
-contract Treasury is AccessControl, ReentrancyGuard {
+contract Treasury is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     uint16 public constant BPS_DENOMINATOR = 10_000;
@@ -56,9 +57,12 @@ contract Treasury is AccessControl, ReentrancyGuard {
     error PrizeDistributionRemovalNotAllowed();
     error CompetitionStateRevisionMismatch();
     error TokenNotInCurrentLeaderboard();
+    error ZeroRecipient();
+    error EmergencyDelayNotPassed();
 
     bytes32 public constant TOURNAMENT_MANAGER_ROLE = keccak256("TOURNAMENT_MANAGER_ROLE");
     bytes32 public constant FUND_DEPOSITOR_ROLE = keccak256("FUND_DEPOSITOR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Multi-asset prize pools: tournamentId => token => amount
     // address(0) = ETH, other addresses = ERC20 tokens
@@ -76,6 +80,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     mapping(uint256 => mapping(address => bool)) public isClosedTournament;
     mapping(uint256 => bool) public isTournamentClosedAnyAsset;
     mapping(uint256 => bool) public salesClosed;
+    mapping(uint256 => uint256) public salesClosedAt;
     mapping(uint256 => bool) public tournamentFinalized;
     mapping(uint256 => bool) public tournamentRegistered;
     mapping(uint256 => address) public competitionEngineByTournament;
@@ -84,6 +89,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     Carton public cartonContract;
     TreasuryPrizeBook private immutable PRIZE_BOOK;
     uint16 public immutable RESERVE_BPS;
+    uint256 public immutable EMERGENCY_DELAY;
 
     // Events
     event DepositFromSale(uint256 indexed tournamentId, address indexed token, uint256 amount);
@@ -111,15 +117,29 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event SupportedPrizeTokenSet(address indexed token, bool supported);
     event PrizeDistributionRemoved(uint256 indexed tournamentId, address indexed token);
     event CompetitionEngineChanged(uint256 indexed tournamentId, address indexed oldEngine, address indexed newEngine);
+    event GlobalReserveWithdrawn(address indexed token, address indexed recipient, uint256 amount);
+    event EmergencyTournamentWithdrawn(
+        uint256 indexed tournamentId, address indexed token, address indexed recipient, uint256 amount
+    );
 
-    constructor(address defaultAdmin, address cartonAddress, uint16 reserveBps_) {
+    constructor(address defaultAdmin, address cartonAddress, uint16 reserveBps_, uint256 emergencyDelay_) {
         if (reserveBps_ >= BPS_DENOMINATOR) revert InvalidReserveBps();
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(FUND_DEPOSITOR_ROLE, defaultAdmin);
+        _grantRole(PAUSER_ROLE, defaultAdmin);
         cartonContract = Carton(cartonAddress);
         PRIZE_BOOK = new TreasuryPrizeBook(address(this), cartonAddress);
         RESERVE_BPS = reserveBps_;
+        EMERGENCY_DELAY = emergencyDelay_;
+    }
+
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
     }
 
     function registerTournament(uint256 tournamentId, address engine) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -156,7 +176,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
     /// @notice Deposits ETH from sales to tournament prize pool
     /// @param tournamentId Tournament ID
-    function depositFromSales(uint256 tournamentId) external payable onlyRole(FUND_DEPOSITOR_ROLE) {
+    function depositFromSales(uint256 tournamentId) external payable whenNotPaused onlyRole(FUND_DEPOSITOR_ROLE) {
         _requireRegisteredTournament(tournamentId);
         if (msg.value == 0) revert ZeroAmount();
         if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
@@ -174,6 +194,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     /// @param amount Amount to deposit
     function depositFromSalesERC20(uint256 tournamentId, address token, uint256 amount)
         external
+        whenNotPaused
         onlyRole(FUND_DEPOSITOR_ROLE)
     {
         _requireRegisteredTournament(tournamentId);
@@ -196,6 +217,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
         _requireRegisteredTournament(tournamentId);
         if (salesClosed[tournamentId]) revert SalesAlreadyClosed();
         salesClosed[tournamentId] = true;
+        salesClosedAt[tournamentId] = block.timestamp;
         emit SalesClosed(tournamentId);
     }
 
@@ -251,6 +273,58 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
     function reopenFinalPrizeAmounts(uint256 tournamentId, address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
         PRIZE_BOOK.reopenFinalPrizeAmounts(tournamentId, token);
+    }
+
+    /// @notice Withdraw accumulated global reserve to a recipient address.
+    /// @dev Safe to call at any time: globalReserve is separate accounting from prizePools.
+    function withdrawGlobalReserve(address token, uint256 amount, address recipient)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        nonReentrant
+    {
+        if (amount == 0) revert ZeroAmount();
+        if (recipient == address(0)) revert ZeroRecipient();
+        if (globalReserve[token] < amount) revert InsufficientGlobalReserve();
+
+        globalReserve[token] -= amount;
+
+        if (token == address(0)) {
+            (bool success,) = payable(recipient).call{ value: amount }("");
+            if (!success) revert ETHTransferFailed();
+        } else {
+            IERC20(token).safeTransfer(recipient, amount);
+        }
+
+        emit GlobalReserveWithdrawn(token, recipient, amount);
+    }
+
+    /// @notice Emergency escape for prize pools of tournaments that are stuck and never finalized.
+    /// @dev Requires sales to be closed, tournament NOT finalized, and EMERGENCY_DELAY elapsed since sales closed.
+    ///      This cannot touch a finalized tournament, so user prize claims are always protected.
+    function emergencyWithdrawTournament(uint256 tournamentId, address token, address recipient)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        nonReentrant
+    {
+        _requireRegisteredTournament(tournamentId);
+        if (!salesClosed[tournamentId]) revert SalesNotClosed();
+        if (tournamentFinalized[tournamentId]) revert TournamentAlreadyClosed();
+        if (recipient == address(0)) revert ZeroRecipient();
+        if (block.timestamp < salesClosedAt[tournamentId] + EMERGENCY_DELAY) revert EmergencyDelayNotPassed();
+
+        uint256 amount = prizePools[tournamentId][token];
+        if (amount == 0) revert NoPrizePool();
+
+        prizePools[tournamentId][token] = 0;
+
+        if (token == address(0)) {
+            (bool success,) = payable(recipient).call{ value: amount }("");
+            if (!success) revert ETHTransferFailed();
+        } else {
+            IERC20(token).safeTransfer(recipient, amount);
+        }
+
+        emit EmergencyTournamentWithdrawn(tournamentId, token, recipient, amount);
     }
 
     // View functions

@@ -43,7 +43,7 @@ contract DeployScript is Script {
         }
 
         // Deploy Treasury - shared multi-tournament accounting layer
-        Treasury treasury = new Treasury(deployer, address(carton), 500);
+        Treasury treasury = new Treasury(deployer, address(carton), 500, 60 days);
         console.log("Treasury deployed at:", address(treasury));
 
         // Deploy MockUSDC (6 decimals like real USDC)
@@ -73,6 +73,8 @@ contract DeployScript is Script {
         // Grant TOURNAMENT_MANAGER_ROLE to deployer
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), deployer);
         console.log("Deployer granted TOURNAMENT_MANAGER_ROLE on Treasury");
+
+        // PAUSER_ROLE is auto-granted to deployer in the constructor.
 
         // Prize distribution is now configured only after sales close.
         // Keep the fixed 32-place vector here as the deployment-time reference for the admin flow.

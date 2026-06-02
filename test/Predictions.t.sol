@@ -59,7 +59,7 @@ contract PredictionsTest is Test {
     }
 
     function _setupTreasuryAndCloseSales() internal {
-        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
         treasury.grantRole(treasury.TOURNAMENT_MANAGER_ROLE(), address(this));
@@ -167,7 +167,7 @@ contract PredictionsTest is Test {
     }
 
     function testSetSubmissionDeadline_RevertsAfterAnyResultSet() public {
-        Treasury closedTreasury = new Treasury(address(this), address(cart), 500);
+        Treasury closedTreasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(closedTreasury));
         closedTreasury.registerTournament(1, address(preds));
         closedTreasury.grantRole(closedTreasury.TOURNAMENT_MANAGER_ROLE(), address(this));
@@ -175,7 +175,7 @@ contract PredictionsTest is Test {
         _warpPastSubmissionDeadline();
         preds.setResults(1, 2, 1);
 
-        Treasury openTreasury = new Treasury(address(this), address(cart), 500);
+        Treasury openTreasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(openTreasury));
 
         vm.expectRevert(Predictions.SubmissionDeadlineLocked.selector);
@@ -927,7 +927,7 @@ contract PredictionsTest is Test {
         preds.setResults(1, 2, 1);
 
         // Sales should be closed
-        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
         vm.expectRevert(Predictions.TournamentSalesStillOpen.selector);
@@ -1035,7 +1035,7 @@ contract PredictionsTest is Test {
     }
 
     function testSetResultsBatchRevertsWhenSalesOpen() public {
-        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
 
@@ -1246,7 +1246,7 @@ contract PredictionsTest is Test {
     }
 
     function testUpdateResultsRevertsWhenTournamentClosed() public {
-        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
         _submitValidPrediction(user, tokenId);
@@ -1385,7 +1385,7 @@ contract PredictionsTest is Test {
     }
 
     function testUpdateOfficialWinners_RevertsWhenTournamentClosed() public {
-        Treasury treasury = new Treasury(address(this), address(cart), 500);
+        Treasury treasury = new Treasury(address(this), address(cart), 500, 60 days);
         cart.setTreasuryAddress(address(treasury));
         treasury.registerTournament(1, address(preds));
         _submitValidPrediction(user, tokenId);

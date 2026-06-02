@@ -23,7 +23,7 @@ contract ERC20IntegrationTest is Test {
         // Deploy contracts
         carton = new Carton(owner, owner, owner);
         predictions = new Predictions(address(carton), TOURNAMENT_ID);
-        treasury = new Treasury(owner, address(carton), 500);
+        treasury = new Treasury(owner, address(carton), 500, 60 days);
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Setup Carton

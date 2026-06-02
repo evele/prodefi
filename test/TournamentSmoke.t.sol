@@ -32,7 +32,7 @@ contract TournamentSmokeTest is BaseTest {
         predictions.setSubmissionDeadline(block.timestamp + DEFAULT_DEADLINE_OFFSET);
         predictions.setTotalGames(4);
 
-        treasury = new Treasury(admin, address(carton), RESERVE_BPS);
+        treasury = new Treasury(admin, address(carton), RESERVE_BPS, 60 days);
         usdc = new MockERC20("USDC", "USDC", 6);
 
         carton.setTreasuryAddress(address(treasury));
