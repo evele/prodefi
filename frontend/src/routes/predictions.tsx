@@ -886,6 +886,13 @@ function PredictionsPage() {
       ? 'Este cartón quedó en un estado parcial inesperado y ya no puede seguir editándose desde esta UI.'
     : combinedSubmitBlockedMessage ?? 'El top 4 está listo. Cuando revises todo, envía la predicción completa en una sola transacción.'
 
+  const shouldShowSubmissionChecklist = !(
+    tokenId !== undefined
+    && selectedCartonIsOwned
+    && selectedCartonGamesSubmitted
+    && selectedCartonWinnersSubmitted
+  )
+
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
     const s = Math.max(0, secs)
@@ -1096,66 +1103,66 @@ function PredictionsPage() {
       )}
 
       {/* ─── Submission checklist ─── */}
-      <div
-        className="rounded-xl p-4 space-y-3"
-        style={{
-          background: checklistToneStyles ? checklistToneStyles.background : 'var(--bg-card)',
-          border: checklistToneStyles ? checklistToneStyles.border : '1px solid var(--border-color)',
-        }}
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
-              Checklist de envío
-            </p>
-            <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
-              {blockingState
-                ? blockingState.title
-                : selectedCartonGamesSubmitted && selectedCartonWinnersSubmitted
-                  ? 'Este carton ya no tiene pasos pendientes; abajo puedes revisar lo enviado.'
+      {shouldShowSubmissionChecklist && (
+        <div
+          className="rounded-xl p-4 space-y-3"
+          style={{
+            background: checklistToneStyles ? checklistToneStyles.background : 'var(--bg-card)',
+            border: checklistToneStyles ? checklistToneStyles.border : '1px solid var(--border-color)',
+          }}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+                Checklist de envío
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                {blockingState
+                  ? blockingState.title
                   : selectedCartonGamesSubmitted || selectedCartonWinnersSubmitted
                     ? 'Este cartón quedó en un estado parcial fuera del flujo principal de la app.'
                     : canAttemptCombinedSubmit && canSubmitCombined
                       ? 'Ya puedes enviar la predicción completa en una sola transacción.'
                       : 'Completa estos 3 puntos antes de enviar la predicción completa.'}
-            </p>
-            {blockingState && (
-              <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                {blockingState.detail}
               </p>
+              {blockingState && (
+                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                  {blockingState.detail}
+                </p>
+              )}
+            </div>
+            {tokenId !== undefined && selectedCartonIsOwned && (
+              <span className="text-xs sm:self-start" style={{ color: 'var(--text-secondary)' }}>
+                Carton #{tokenId.toString()}
+              </span>
             )}
           </div>
-          {tokenId !== undefined && selectedCartonIsOwned && (
-            <span className="text-xs sm:self-start" style={{ color: 'var(--text-secondary)' }}>
-              Carton #{tokenId.toString()}
-            </span>
-          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {checklistItems.map((item, index) => {
+              return (
+                <div
+                  key={item.key}
+                  className="rounded-lg px-3 py-2"
+                  style={{
+                    border: `1px solid ${item.done ? 'rgba(0,230,118,0.22)' : 'var(--border-color)'}`,
+                    background: item.done ? 'rgba(0,230,118,0.06)' : 'var(--bg-elevated)',
+                  }}
+                >
+                  <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: item.done ? 'var(--accent-green)' : 'var(--text-disabled)' }}>
+                    {item.done ? 'Listo' : `Paso ${index + 1}`}
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {item.label}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                    {item.detail}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {checklistItems.map((item, index) => {
-            return (
-              <div
-                key={item.key}
-                className="rounded-lg px-3 py-2"
-                style={{
-                  border: `1px solid ${item.done ? 'rgba(0,230,118,0.22)' : 'var(--border-color)'}`,
-                  background: item.done ? 'rgba(0,230,118,0.06)' : 'var(--bg-elevated)',
-                }}
-              >
-                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: item.done ? 'var(--accent-green)' : 'var(--text-disabled)' }}>
-                  {item.done ? 'Listo' : `Paso ${index + 1}`}
-                </p>
-                <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {item.label}
-                </p>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                  {item.detail}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      )}
 
       {/* ─── Game Predictions ─── */}
       <div
