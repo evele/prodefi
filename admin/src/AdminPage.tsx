@@ -60,7 +60,7 @@ type AdminCapability = {
   allowed: boolean
 }
 
-type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'funding' | 'lifecycle'
+type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'tokens' | 'funding' | 'lifecycle'
 
 type BatchedReadResult = {
   result: unknown
@@ -79,6 +79,7 @@ const ADMIN_SECTION_OPTIONS: Array<{ id: AdminSectionId; label: string }> = [
   { id: 'winners', label: 'Winners' },
   { id: 'positions', label: 'Positions' },
   { id: 'roles', label: 'Roles' },
+  { id: 'tokens', label: 'Tokens' },
   { id: 'funding', label: 'Funding' },
   { id: 'lifecycle', label: 'Lifecycle' },
 ]
@@ -681,6 +682,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
   const carton = CONTRACT_ADDRESSES.CARTON
   const { execute, isBusy } = useAdminWrite()
   const [csvInput, setCsvInput] = useState('')
+  const [manualOverrideEnabled, setManualOverrideEnabled] = useState(false)
 
   const positionsBaseContracts = useMemo(
     () => {
@@ -815,6 +817,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
 
   const canFillFromOnchain = tournamentId > 0n && usedTokenIds.length > 0 && onchainPointsData?.length === usedTokenIds.length
   const activePendingUpdateMatchesTournament = Boolean(positionsUpdateInProgress && pendingTournamentId === tournamentId)
+  const canChangePositionSource = !activePendingUpdateMatchesTournament
 
   const fillFromOnchain = () => {
     if (tournamentId === 0n) {
@@ -836,6 +839,28 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     toast.success(`Loaded ${onchainPointEntries.length} cartone${onchainPointEntries.length === 1 ? '' : 's'} from on-chain points.`)
   }
 
+  const enableManualOverride = () => {
+    if (!canChangePositionSource) {
+      toast.error('Finish or cancel the open leaderboard draft before changing the source.')
+      return
+    }
+
+    if (canFillFromOnchain && csvInput.trim().length === 0) {
+      setCsvInput(onchainPointEntries.map((entry) => `${entry.tokenId.toString()},${entry.points.toString()}`).join('\n'))
+    }
+
+    setManualOverrideEnabled(true)
+  }
+
+  const disableManualOverride = () => {
+    if (!canChangePositionSource) {
+      toast.error('Finish or cancel the open leaderboard draft before changing the source.')
+      return
+    }
+
+    setManualOverrideEnabled(false)
+  }
+
   const refreshPositionsReads = async () => {
     await Promise.all([refetchPositionsBaseData(), refetchSubmittedCount(), refetchPositionData(), refetchPositionVersionData()])
   }
@@ -844,6 +869,27 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     if (tournamentId === 0n) {
       toast.error('Set an active tournament first.')
       return null
+    }
+
+    if (!manualOverrideEnabled) {
+      if (usedTokenIds.length === 0) {
+        toast.error('There are no submitted cartones for the active tournament yet.')
+        return null
+      }
+
+      if (!canFillFromOnchain) {
+        toast.error('Still loading on-chain points. Try again in a moment.')
+        return null
+      }
+
+      const entries = onchainPointEntries.map((entry) => ({ tokenId: entry.tokenId, points: entry.points }))
+      const expectedEntries = Number(submittedCount ?? 0n)
+      if (entries.length !== expectedEntries) {
+        toast.error(`On-chain points loaded ${entries.length} entries, but tournament ${tournamentId.toString()} has ${expectedEntries} submitted cartones.`)
+        return null
+      }
+
+      return entries
     }
 
     const { entries, error } = parseLeaderboardCsv(csvInput)
@@ -1012,33 +1058,71 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
     return computeSharedRanks(entries)
   }, [csvInput])
 
+  const onchainPreview = useMemo(() => {
+    if (!canFillFromOnchain) return []
+    return computeSharedRanks(onchainPointEntries)
+  }, [canFillFromOnchain, onchainPointEntries])
+
+  const previewEntries = manualOverrideEnabled ? parsedPreview : onchainPreview
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Set Positions</CardTitle>
-        <CardDescription>Set the active tournament leaderboard in batches, or fill it automatically from on-chain totals.</CardDescription>
+        <CardDescription>Publish the active tournament leaderboard in batches. Default source is on-chain total points; manual CSV override is emergency-only.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-3 text-sm space-y-1">
           <div><span className="font-medium">Active tournament:</span> {tournamentId > 0n ? tournamentId.toString() : '—'}</div>
           <div><span className="font-medium">Tournament cartones:</span> {tournamentScopedTokenIds.length}</div>
           <div><span className="font-medium">Submitted cartones:</span> {submittedCount?.toString() ?? '—'}</div>
+          <div><span className="font-medium">Batch size:</span> {POSITION_BATCH_SIZE}</div>
+          <div><span className="font-medium">Position source:</span> {manualOverrideEnabled ? 'Manual override' : 'On-chain totals'}</div>
           <div><span className="font-medium">Draft in progress:</span> {String(Boolean(positionsUpdateInProgress))}</div>
           {activePendingUpdateMatchesTournament && (
             <div><span className="font-medium">Draft progress:</span> {(pendingProcessedEntries ?? 0n).toString()} / {(pendingExpectedEntries ?? 0n).toString()}</div>
           )}
         </div>
 
-        <textarea
-          className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-          placeholder={"1,150\n3,120\n2,120\n4,95"}
-          value={csvInput}
-          onChange={(e) => setCsvInput(e.target.value)}
-        />
+        {!manualOverrideEnabled && (
+          <div className="rounded-lg border border-border p-3 text-sm space-y-2 mb-3">
+            <div className="font-medium">Default flow: on-chain totals</div>
+            <div style={{ color: 'var(--text-secondary)' }}>
+              `Open Draft` and `Append Next Batch` will use `calculateTotalPoints(tokenId)` for every submitted carton in the active tournament.
+            </div>
+          </div>
+        )}
+
+        {manualOverrideEnabled && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50/40 p-3 space-y-3 mb-3">
+            <div className="text-sm font-medium">Manual CSV override</div>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Use this only as an operational fallback. The normal path is on-chain totals.
+            </div>
+            <textarea
+              className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              placeholder={"1,150\n3,120\n2,120\n4,95"}
+              value={csvInput}
+              onChange={(e) => setCsvInput(e.target.value)}
+            />
+          </div>
+        )}
+
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0}>
-            Fill Positions
-          </Button>
+          {manualOverrideEnabled ? (
+            <>
+              <Button type="button" variant="outline" onClick={fillFromOnchain} disabled={!canManagePredictions || isBusy || usedTokenIds.length === 0 || !canChangePositionSource}>
+                Load On-Chain Into Editor
+              </Button>
+              <Button type="button" variant="outline" onClick={disableManualOverride} disabled={!canManagePredictions || isBusy || !canChangePositionSource}>
+                Use On-Chain Totals
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" onClick={enableManualOverride} disabled={!canManagePredictions || isBusy || !canChangePositionSource}>
+              Enable Manual Override
+            </Button>
+          )}
           <Button type="button" onClick={openPositionsDraft} disabled={!canManagePredictions || isBusy || Boolean(positionsUpdateInProgress)}>
             {isBusy ? 'Working...' : '1. Open Draft'}
           </Button>
@@ -1056,12 +1140,20 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
         </div>
 
         <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          {usedTokenIds.length === 0
-            ? 'No hay cartones enviados todavía para el torneo activo.'
-            : canFillFromOnchain
-              ? `Fill Positions arma el CSV con ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
-              : 'Cargando puntos onchain para autocompletar el ranking...'}
+          {manualOverrideEnabled
+            ? 'Manual override habilitado. El draft usara exactamente el CSV visible arriba.'
+            : usedTokenIds.length === 0
+              ? 'No hay cartones enviados todavía para el torneo activo.'
+              : canFillFromOnchain
+                ? `El draft usara ${usedTokenIds.length} cartón${usedTokenIds.length === 1 ? '' : 'es'} enviados del torneo activo, ordenados por puntos onchain.`
+                : 'Cargando puntos onchain para preparar el ranking por defecto...'}
         </p>
+
+        {!canChangePositionSource && (
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            La fuente del leaderboard queda bloqueada mientras haya un draft abierto para no mezclar batches de distintos orígenes.
+          </p>
+        )}
 
         {activePendingUpdateMatchesTournament && (
           <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -1073,11 +1165,11 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
           </p>
         )}
 
-        {parsedPreview.length > 0 && (
+        {previewEntries.length > 0 && (
           <div className="mt-4">
-            <div className="text-sm font-medium mb-1">Preview from CSV:</div>
+            <div className="text-sm font-medium mb-1">{manualOverrideEnabled ? 'Preview from manual CSV:' : 'Preview from on-chain totals:'}</div>
             <div className="text-xs text-gray-600 space-y-0.5">
-              {parsedPreview.map((entry) => (
+              {previewEntries.map((entry) => (
                 <div key={`preview-${entry.tokenId.toString()}`}>
                   #{entry.rank} — Token {entry.tokenId.toString()} · {entry.points.toString()} pts
                 </div>
@@ -1993,6 +2085,259 @@ function MinterRoleSection({
   )
 }
 
+function TokenSupportSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasTreasuryAdminRole' | 'hasCartonAdminRole'>
+}) {
+  const treasury = CONTRACT_ADDRESSES.TREASURY
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const { execute, isBusy } = useAdminWrite()
+  const [tokenAddressInput, setTokenAddressInput] = useState<string>(CONTRACT_ADDRESSES.USDC)
+  const [reviewConfirmed, setReviewConfirmed] = useState(false)
+
+  const normalizedTokenAddress = useMemo(() => {
+    const trimmed = tokenAddressInput.trim()
+    return isAddressLike(trimmed) ? (trimmed as Address) : undefined
+  }, [tokenAddressInput])
+
+  const tokenContracts = useMemo(() => {
+    if (!normalizedTokenAddress) return []
+
+    return [
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'name' as const },
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'symbol' as const },
+      { address: normalizedTokenAddress, abi: USDC_ABI, functionName: 'decimals' as const },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'supportedPrizeTokens' as const, args: [normalizedTokenAddress] as const },
+      { address: carton, abi: CARTON_ABI, functionName: 'acceptedTokens' as const, args: [normalizedTokenAddress] as const },
+    ]
+  }, [carton, normalizedTokenAddress, treasury])
+
+  const { data: tokenReadData, refetch: refetchTokenReads } = useReadContracts({
+    contracts: tokenContracts,
+    query: { enabled: tokenContracts.length > 0, refetchInterval: 10_000 },
+  })
+
+  const tokenName = getBatchedResult<string>(tokenReadData, 0)
+  const tokenSymbol = getBatchedResult<string>(tokenReadData, 1)
+  const tokenDecimals = getBatchedResult<number>(tokenReadData, 2)
+  const treasurySupported = Boolean(getBatchedResult<boolean>(tokenReadData, 3))
+  const cartonAccepted = Boolean(getBatchedResult<boolean>(tokenReadData, 4))
+
+  const refreshTokenReads = async () => {
+    await refetchTokenReads()
+  }
+
+  const setTreasurySupport = (supported: boolean) => {
+    if (!normalizedTokenAddress) {
+      toast.error('Provide a valid token address.')
+      return
+    }
+
+    if (supported && !reviewConfirmed) {
+      toast.error('Confirm the standard-ERC20 checklist before supporting a token.')
+      return
+    }
+
+    void execute(
+      {
+        address: treasury,
+        abi: TREASURY_ABI,
+        functionName: 'setSupportedPrizeToken',
+        args: [normalizedTokenAddress, supported],
+      },
+      {
+        toastId: `admin-supported-token-${normalizedTokenAddress}-${String(supported)}`,
+        pendingMessage: supported ? 'Adding token to Treasury allowlist...' : 'Removing token from Treasury allowlist...',
+        successMessage: supported ? 'Token added to Treasury allowlist.' : 'Token removed from Treasury allowlist.',
+        revertedMessage: supported ? 'Treasury token allowlist update was rejected on-chain.' : 'Treasury token removal was rejected on-chain.',
+        logLabel: supported ? 'Admin support treasury prize token' : 'Admin unsupport treasury prize token',
+        onSuccess: refreshTokenReads,
+      },
+    )
+  }
+
+  const setCartonAcceptance = (accepted: boolean) => {
+    if (!normalizedTokenAddress) {
+      toast.error('Provide a valid token address.')
+      return
+    }
+
+    if (accepted && !reviewConfirmed) {
+      toast.error('Confirm the standard-ERC20 checklist before accepting a token.')
+      return
+    }
+
+    if (accepted && !treasurySupported) {
+      toast.error('Support the token in Treasury before enabling it in Carton.')
+      return
+    }
+
+    void execute(
+      {
+        address: carton,
+        abi: CARTON_ABI,
+        functionName: 'setAcceptedToken',
+        args: [normalizedTokenAddress, accepted],
+      },
+      {
+        toastId: `admin-accepted-token-${normalizedTokenAddress}-${String(accepted)}`,
+        pendingMessage: accepted ? 'Enabling token in Carton...' : 'Disabling token in Carton...',
+        successMessage: accepted ? 'Token enabled in Carton.' : 'Token disabled in Carton.',
+        revertedMessage: accepted ? 'Carton token enable was rejected on-chain.' : 'Carton token disable was rejected on-chain.',
+        logLabel: accepted ? 'Admin accept carton token' : 'Admin unaccept carton token',
+        onSuccess: refreshTokenReads,
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Token Allowlist</CardTitle>
+        <CardDescription>
+          Manage which ERC20s Treasury supports for prize accounting and which of those Carton can sell.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2 text-sm">
+          <div>
+            <span className="font-medium">Configured USDC:</span>{' '}
+            <span className="font-mono break-all">{CONTRACT_ADDRESSES.USDC}</span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasTreasuryAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasTreasuryAdminRole)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Carton DEFAULT_ADMIN_ROLE:</span>{' '}
+            <span className={permissions.hasCartonAdminRole ? 'text-green-600' : 'text-red-600'}>
+              {String(permissions.hasCartonAdminRole)}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Token address</div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={tokenAddressInput}
+              onChange={(e) => setTokenAddressInput(e.target.value)}
+              placeholder="0x..."
+              className="font-mono"
+            />
+            <Button variant="outline" type="button" onClick={() => setTokenAddressInput(CONTRACT_ADDRESSES.USDC)}>
+              Use configured USDC
+            </Button>
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            This admin flow can whitelist any standard ERC20, but the public player UI still assumes USDC for prices, pool display, and claims.
+          </div>
+        </div>
+
+        <div
+          className="rounded-lg border p-3 text-sm space-y-2"
+          style={{ borderColor: 'var(--border-color)', background: 'rgba(255,255,255,0.02)' }}
+        >
+          <div className="font-medium">Standard ERC20 review checklist</div>
+          <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+            <div>Automatic detection is not reliable from just a token address.</div>
+            <div>Before enabling a token, manually verify: no fee-on-transfer, no rebasing, and `transferFrom` credits the receiver with the exact requested amount.</div>
+            <div>Also verify standard `approve`, `transfer`, and `balanceOf` behavior.</div>
+          </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={reviewConfirmed}
+              onChange={(e) => setReviewConfirmed(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I manually reviewed this token and confirmed it is a standard ERC20 without fee-on-transfer or rebasing behavior.</span>
+          </label>
+        </div>
+
+        <div className="grid gap-2 text-sm md:grid-cols-2">
+          <div>
+            <span className="font-medium">Name:</span> {tokenName ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Symbol:</span> {tokenSymbol ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Decimals:</span> {tokenDecimals ?? '—'}
+          </div>
+          <div>
+            <span className="font-medium">Valid address:</span>{' '}
+            <span className={normalizedTokenAddress ? 'text-green-600' : 'text-red-600'}>
+              {String(Boolean(normalizedTokenAddress))}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Treasury supported:</span>{' '}
+            <span className={treasurySupported ? 'text-green-600' : 'text-yellow-600'}>
+              {String(treasurySupported)}
+            </span>
+          </div>
+          <div>
+            <span className="font-medium">Carton accepted:</span>{' '}
+            <span className={cartonAccepted ? 'text-green-600' : 'text-yellow-600'}>
+              {String(cartonAccepted)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={() => setTreasurySupport(true)}
+            disabled={!permissions.hasTreasuryAdminRole || !normalizedTokenAddress || treasurySupported || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Support In Treasury'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setCartonAcceptance(true)}
+            disabled={!permissions.hasCartonAdminRole || !normalizedTokenAddress || !treasurySupported || cartonAccepted || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Enable In Carton'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCartonAcceptance(false)}
+            disabled={!permissions.hasCartonAdminRole || !normalizedTokenAddress || !cartonAccepted || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Disable In Carton'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTreasurySupport(false)}
+            disabled={!permissions.hasTreasuryAdminRole || !normalizedTokenAddress || !treasurySupported || isBusy}
+          >
+            {isBusy ? 'Working...' : 'Remove From Treasury'}
+          </Button>
+        </div>
+
+        <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+          <div>Recommended order: 1) Support in Treasury, 2) Enable in Carton.</div>
+          <div>Recommended removal order: 1) Disable in Carton, 2) Remove from Treasury.</div>
+        </div>
+
+        {!permissions.hasTreasuryAdminRole && (
+          <div className="text-sm text-red-600">Adding or removing supported prize tokens requires `Treasury.DEFAULT_ADMIN_ROLE`.</div>
+        )}
+        {!permissions.hasCartonAdminRole && (
+          <div className="text-sm text-red-600">Enabling or disabling accepted sale tokens requires `Carton.DEFAULT_ADMIN_ROLE`.</div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function AdminOverviewSection({
   permissions,
   capabilities,
@@ -2409,6 +2754,12 @@ export function AdminPage() {
         allowed: permissions.hasCartonAdminRole,
       },
       {
+        label: 'Token allowlist management',
+        detail: 'support ERC20s in Treasury and enable them in Carton after manual review',
+        required: 'Treasury.DEFAULT_ADMIN_ROLE; Carton.DEFAULT_ADMIN_ROLE to sell in Carton',
+        allowed: permissions.hasTreasuryAdminRole || permissions.hasCartonAdminRole,
+      },
+      {
         label: 'Treasury external funding',
         detail: 'approve USDC and deposit external funds before sales close',
         required: 'Treasury.FUND_DEPOSITOR_ROLE',
@@ -2457,6 +2808,7 @@ export function AdminPage() {
       {activeSection === 'winners' && <SetOfficialWinnersSection canManagePredictions={permissions.isPredictionsOwner} />}
       {activeSection === 'positions' && <SetPositionsSection canManagePredictions={permissions.isPredictionsOwner} />}
       {activeSection === 'roles' && <MinterRoleSection permissions={permissions} />}
+      {activeSection === 'tokens' && <TokenSupportSection permissions={permissions} />}
       {activeSection === 'funding' && <TreasuryFundingSection permissions={permissions} />}
       {activeSection === 'lifecycle' && <CloseTournamentSection permissions={permissions} />}
     </div>

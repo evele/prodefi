@@ -205,6 +205,19 @@
   },
   {
     "type": "function",
+    "name": "competitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "finalizePositionsUpdate",
     "inputs": [],
     "outputs": [],
@@ -305,6 +318,24 @@
   },
   {
     "type": "function",
+    "name": "getOfficialWinners",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "set",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPrediction",
     "inputs": [
       {
@@ -381,27 +412,22 @@
   },
   {
     "type": "function",
-    "name": "officialWinners",
+    "name": "leaderboardCompetitionStateRevision",
     "inputs": [],
     "outputs": [
       {
-        "name": "set",
-        "type": "bool",
-        "internalType": "bool"
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
   },
   {
     "type": "function",
-    "name": "getOfficialWinners",
+    "name": "officialWinners",
     "inputs": [],
     "outputs": [
-      {
-        "name": "teams",
-        "type": "uint8[4]",
-        "internalType": "uint8[4]"
-      },
       {
         "name": "set",
         "type": "bool",
@@ -432,6 +458,19 @@
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingCompetitionStateRevision",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -921,25 +960,6 @@
   },
   {
     "type": "function",
-    "name": "totalPoints",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tournamentId",
     "inputs": [],
     "outputs": [
@@ -966,6 +986,19 @@
   },
   {
     "type": "function",
+    "name": "updateOfficialWinners",
+    "inputs": [
+      {
+        "name": "teams",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "updateResults",
     "inputs": [
       {
@@ -982,19 +1015,6 @@
         "name": "team2Goals",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "updateTotalPoints",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1040,10 +1060,48 @@
   },
   {
     "type": "event",
+    "name": "CompetitionStateRevisionUpdated",
+    "inputs": [
+      {
+        "name": "oldRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newRevision",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OfficialWinnersSet",
     "inputs": [
       {
         "name": "teams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OfficialWinnersUpdated",
+    "inputs": [
+      {
+        "name": "oldTeams",
+        "type": "uint8[4]",
+        "indexed": false,
+        "internalType": "uint8[4]"
+      },
+      {
+        "name": "newTeams",
         "type": "uint8[4]",
         "indexed": false,
         "internalType": "uint8[4]"
@@ -1066,25 +1124,6 @@
         "type": "address",
         "indexed": true,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PointsUpdated",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "points",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1279,6 +1318,25 @@
   },
   {
     "type": "event",
+    "name": "SubmissionDeadlineUpdated",
+    "inputs": [
+      {
+        "name": "oldDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newDeadline",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TeamsHashFrozen",
     "inputs": [],
     "anonymous": false
@@ -1363,6 +1421,11 @@
   },
   {
     "type": "error",
+    "name": "CompetitionStateChanged",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DeadlineMustBeFuture",
     "inputs": []
   },
@@ -1398,6 +1461,11 @@
   },
   {
     "type": "error",
+    "name": "GoalValueTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidExpectedEntries",
     "inputs": []
   },
@@ -1414,6 +1482,11 @@
   {
     "type": "error",
     "name": "InvalidTournamentId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LeaderboardStale",
     "inputs": []
   },
   {
@@ -1439,6 +1512,11 @@
   {
     "type": "error",
     "name": "OfficialWinnersAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OfficialWinnersLocked",
     "inputs": []
   },
   {
@@ -1506,6 +1584,16 @@
   {
     "type": "error",
     "name": "ResultsAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionDeadlineLocked",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionWindowStillOpen",
     "inputs": []
   },
   {

@@ -936,6 +936,25 @@
   },
   {
     "type": "event",
+    "name": "AcceptedTokenSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "accepted",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ApprovalForAll",
     "inputs": [
       {
@@ -1040,6 +1059,50 @@
       },
       {
         "name": "newPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RescueETHWithdrawn",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RescueTokenWithdrawn",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1198,6 +1261,25 @@
   },
   {
     "type": "event",
+    "name": "TreasuryAddressChanged",
+    "inputs": [
+      {
+        "name": "oldTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "URI",
     "inputs": [
       {
@@ -1248,6 +1330,16 @@
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "ActiveTournamentNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CartonAmountMustBeOne",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1373,6 +1465,11 @@
   },
   {
     "type": "error",
+    "name": "InvalidTreasuryContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoFundsToWithdraw",
     "inputs": []
   },
@@ -1434,7 +1531,22 @@
   },
   {
     "type": "error",
+    "name": "TreasuryAddressNotContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnsupportedPrizeToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "WithdrawFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroTokenAddress",
     "inputs": []
   },
   {

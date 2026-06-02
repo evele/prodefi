@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
-import "../src/Carton.sol";
-import "../src/Predictions.sol";
+import { Test } from "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 /// @title Base Test Contract with Common Utilities
 /// @notice Provides reusable setup and helper functions for all tests
@@ -131,6 +132,7 @@ abstract contract BaseTest is Test {
     {
         Predictions.Prediction[] memory preds = new Predictions.Prediction[](4);
         for (uint256 i = 0; i < 4; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast) -- i < 4, so i + 1 ∈ [1..4], safe for uint8
             preds[i] = Predictions.Prediction({ gameId: uint8(i + 1), result: [results[i * 2], results[i * 2 + 1]] });
         }
         return preds;
@@ -163,6 +165,7 @@ abstract contract BaseTest is Test {
 
     /// @notice Set all game results with default values (1-based gameIds)
     function _setDefaultGameResults() internal {
+        _movePastSubmissionDeadlineIfNeeded();
         predictions.setResults(1, 2, 1);
         predictions.setResults(2, 1, 1);
         predictions.setResults(3, 0, 2);
@@ -171,6 +174,7 @@ abstract contract BaseTest is Test {
 
     /// @notice Set custom game results (1-based gameIds)
     function _setGameResults(uint8[8] memory results) internal {
+        _movePastSubmissionDeadlineIfNeeded();
         for (uint8 i = 0; i < 4; i++) {
             predictions.setResults(i + 1, results[i * 2], results[i * 2 + 1]);
         }
@@ -216,6 +220,14 @@ abstract contract BaseTest is Test {
     /// @notice Move to after deadline
     function _moveToAfterDeadline() internal {
         vm.warp(block.timestamp + DEFAULT_DEADLINE_OFFSET + 1);
+    }
+
+    /// @notice Move to after the configured submission deadline when tests need to publish results.
+    function _movePastSubmissionDeadlineIfNeeded() internal {
+        uint256 deadline = predictions.submissionDeadline();
+        if (deadline != 0 && block.timestamp <= deadline) {
+            vm.warp(deadline + 1);
+        }
     }
 
     /// @notice Move to before deadline

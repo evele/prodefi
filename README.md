@@ -39,8 +39,8 @@ forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 
 ```bash
 cd frontend
-npm run dev
-npm run build
+pnpm dev
+pnpm build
 ```
 
 ### Admin
@@ -48,7 +48,9 @@ npm run build
 ```bash
 cd admin
 pnpm dev
+pnpm dev:openfort
 pnpm build
+pnpm build:openfort
 ```
 
 ## Project Layout
@@ -71,6 +73,6 @@ pnpm build
 
 ## Important Notes
 
-- Admin page is dev-only at `/admin/dev` and should not be exposed in production builds.
+- Admin operations live in the separate `admin/` app and are not part of the public frontend build.
 - Team lookups in the frontend should use `teamsById` or a memoized ID index, not repeated linear `find()` calls.
 - Review `knowledge/openfort.md` before changing Openfort integration.

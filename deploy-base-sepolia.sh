@@ -7,7 +7,7 @@ PRIVATE_KEY_VALUE="${PRIVATE_KEY:-}"
 FOUNDRY_ACCOUNT_VALUE="${FOUNDRY_ACCOUNT:-}"
 PASSWORD_FILE_VALUE="${ETH_PASSWORD:-}"
 FRONTEND_ENV_FILE="frontend/.env.openfort.local"
-ADMIN_ENV_FILE="admin/.env.local"
+ADMIN_ENV_FILE="admin/.env.openfort.local"
 
 if [ -z "$RPC_URL" ]; then
   echo "❌ Missing BASE_SEPOLIA_RPC_URL"
@@ -148,5 +148,5 @@ echo "  1. Fill VITE_OPENFORT_PUBLISHABLE_KEY and VITE_OPENFORT_SHIELD_PUBLISHAB
 echo "  2. Fund your test wallets with Base Sepolia ETH"
 echo "  3. Mint MockUSDC to a test wallet with:"
 echo "     cast send $USDC_ADDRESS \"mint(address,uint256)\" <wallet> 10000000 ${CAST_SEND_SIGNER_ARGS[*]} --rpc-url \"$RPC_URL\""
-echo "  4. Start the frontend with: cd frontend && npm run dev:openfort"
-echo "  5. Start admin with: cd admin && pnpm dev"
+echo "  4. Start the frontend with: cd frontend && pnpm dev:openfort"
+echo "  5. Start admin with: cd admin && pnpm dev:openfort"

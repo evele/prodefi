@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
-import "forge-std/Test.sol";
-import "./BaseTest.sol";
-import "../src/Treasury.sol";
-import "./mocks/MockERC20.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
 
 contract TournamentSmokeTest is BaseTest {
     Treasury public treasury;
@@ -35,6 +36,7 @@ contract TournamentSmokeTest is BaseTest {
         usdc = new MockERC20("USDC", "USDC", 6);
 
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(usdc), true);
         carton.setAcceptedToken(address(usdc), true);
         carton.setTokenPrice(TOURNAMENT_ID, address(usdc), CARTON_PRICE_USDC);
 
@@ -104,6 +106,8 @@ contract TournamentSmokeTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
 
+        _movePastSubmissionDeadlineIfNeeded();
+
         vm.prank(admin);
         predictions.setResults(1, 2, 1);
 
@@ -115,6 +119,8 @@ contract TournamentSmokeTest is BaseTest {
     function testSmoke_BatchResults_AnvilOnly() public {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
+
+        _movePastSubmissionDeadlineIfNeeded();
 
         uint8[] memory gameIds = new uint8[](4);
         gameIds[0] = 1;
@@ -147,6 +153,8 @@ contract TournamentSmokeTest is BaseTest {
         vm.prank(tournamentManager);
         treasury.closeSales(TOURNAMENT_ID);
 
+        _movePastSubmissionDeadlineIfNeeded();
+
         uint8[] memory gameIds = new uint8[](2);
         gameIds[0] = 1;
         gameIds[1] = 1;
@@ -177,6 +185,7 @@ contract TournamentSmokeTest is BaseTest {
         treasury.closeSales(TOURNAMENT_ID);
 
         vm.startPrank(admin);
+        _movePastSubmissionDeadlineIfNeeded();
         predictions.setResults(1, 2, 1);
         predictions.updateResults(1, 3, 2);
         vm.stopPrank();
@@ -287,6 +296,7 @@ contract TournamentSmokeTest is BaseTest {
     }
 
     function _setResultsIndividually() internal {
+        _movePastSubmissionDeadlineIfNeeded();
         vm.startPrank(admin);
         predictions.setResults(1, 2, 1);
         predictions.setResults(2, 1, 1);
@@ -296,6 +306,7 @@ contract TournamentSmokeTest is BaseTest {
     }
 
     function _setResultsBatch() internal {
+        _movePastSubmissionDeadlineIfNeeded();
         uint8[] memory gameIds = new uint8[](4);
         gameIds[0] = 1;
         gameIds[1] = 2;

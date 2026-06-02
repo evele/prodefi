@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import { Predictions } from "./Predictions.sol";
+// Archived from src/ on 2026-06-01.
+// Kept only as historical reference after CI size failures showed that this
+// unused factory should not stay in the compiled contract set.
+
+import { Predictions } from "../../../src/Predictions.sol";
 
 contract PredictionsFactory {
     event TournamentCreated(

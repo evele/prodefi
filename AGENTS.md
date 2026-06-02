@@ -18,9 +18,9 @@
   - Alt: `./deploy.sh` if provided for scripted deploys.
   - Base Sepolia local workflow usually uses the Forge keystore account `deployer` rather than raw `PRIVATE_KEY`. For `cast`/deploy commands, prefer `--account deployer` plus `--password-file "$ETH_PASSWORD"` when needed, and use `BASE_SEPOLIA_RPC_URL` (or `https://sepolia.base.org` explicitly) for RPC.
 - Frontend (inside `frontend/`)
-  - `npm run dev` — start Vite dev server.
-  - `npm run build` — type-check and build.
-  - `npm run lint` — ESLint checks.
+  - `pnpm dev` — start Vite dev server.
+  - `pnpm build` — type-check and build.
+  - `pnpm lint` — ESLint checks.
 - Landing deploy (from repo root)
   - `firebase use prodefi` — select Firebase project `prodefi-f2237`.
   - `firebase deploy --only hosting` — build and publish `landing/site/dist` via Firebase Hosting.
@@ -54,5 +54,5 @@
 - MockUSDC on Base Sepolia is mintable. Current testnet deployment uses `0xd7D7895B9acF093b842Ceed37Ac4763793Dd110C`; sending `100` mock USDC means calling `mint(address,uint256)` with `100000000` (6 decimals).
 
 ## Notes (Dev-only UI & Lookups)
-- Admin page exists only for development at `/admin/dev`; the navbar link is rendered only when `import.meta.env.DEV` is true. Do not expose/admin-link in production builds.
+- Admin lifecycle/scoring operations live in the separate `admin/` app, not in the public `frontend/` routes. Do not add admin controls or links to the production user app.
 - Teams lookups in the frontend should use the O(1) map `teamsById` (or `indexTeamsById()` with `useMemo` for dynamic lists) instead of linear `find()` per render when printing many names (e.g., 32 teams).

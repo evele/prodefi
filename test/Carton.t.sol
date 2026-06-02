@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity 0.8.27;
 
-import "./BaseTest.sol";
-import "./mocks/MockERC20.sol";
-import "../src/Treasury.sol";
+import { BaseTest } from "./BaseTest.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
+import { Treasury } from "../src/Treasury.sol";
+import { Carton } from "../src/Carton.sol";
+import { Predictions } from "../src/Predictions.sol";
+
+contract NonTreasuryContract { }
 
 contract CartonTest is BaseTest {
+    event URIUpdated(string oldURI, string newURI);
+    event TokenPriceUpdated(uint256 indexed tournamentId, address indexed token, uint256 oldPrice, uint256 newPrice);
+    event ActiveTournamentChanged(uint256 indexed oldTournamentId, uint256 indexed newTournamentId);
+
     address user = address(0xBEEF);
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     MockERC20 USDC;
     Treasury treasury;
 
@@ -24,13 +33,14 @@ contract CartonTest is BaseTest {
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(deployedTreasury));
+        deployedTreasury.setSupportedPrizeToken(address(USDC), true);
         deployedTreasury.registerTournament(tournamentId, engine);
         vm.stopPrank();
     }
 
     function testMintBatchAndSupply() public {
         uint256[] memory ids = _createUint256Array(1, 2, 0);
-        uint256[] memory amounts = _createUint256Array(3, 5, 0);
+        uint256[] memory amounts = _createUint256Array(1, 1, 0);
 
         // Resize arrays to 2 elements
         assembly {
@@ -40,8 +50,8 @@ contract CartonTest is BaseTest {
 
         _mintBatchCartons(user, ids, amounts);
 
-        assertEq(carton.totalSupply(1), 3, "ID=1 supply should be 3");
-        assertEq(carton.balanceOf(user, 2), 5, "user balance for ID=2 should be 5");
+        assertEq(carton.totalSupply(1), 1, "ID=1 supply should be 1");
+        assertEq(carton.balanceOf(user, 2), 1, "user balance for ID=2 should be 1");
     }
 
     function testPausePreventsTransfers() public {
@@ -57,12 +67,36 @@ contract CartonTest is BaseTest {
 
     function testBurn() public {
         vm.prank(minter);
-        uint256 tokenId = carton.mint(user, 2, "");
+        uint256 tokenId = carton.mint(user, 1, "");
 
         vm.prank(user);
-        carton.burn(user, tokenId, 2);
+        carton.burn(user, tokenId, 1);
 
         assertEq(carton.totalSupply(tokenId), 0, "supply after burn should be 0");
+    }
+
+    function testMint_RevertAmountNotOne() public {
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mint(user, 2, "");
+    }
+
+    function testMintBatch_RevertAmountNotOne() public {
+        uint256[] memory amounts = _createUint256Array(1, 2, 0);
+
+        assembly {
+            mstore(amounts, 2)
+        }
+
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mintBatch(user, amounts, "");
+    }
+
+    function testMintForTournament_RevertAmountNotOne() public {
+        vm.prank(minter);
+        vm.expectRevert(Carton.CartonAmountMustBeOne.selector);
+        carton.mintForTournament(user, 1, 2, "");
     }
 
     // Access Control Tests
@@ -127,6 +161,71 @@ contract CartonTest is BaseTest {
         carton.setURI(newURI);
     }
 
+    function testSetURI_EmitsURIUpdated() public {
+        string memory newURI = "https://newuri.com/{id}";
+
+        vm.expectEmit(false, false, false, true);
+        emit URIUpdated("", newURI);
+
+        vm.prank(uriSetter);
+        carton.setURI(newURI);
+    }
+
+    function testSetMetadataVariantCount_OnlyAdmin() public {
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        carton.setMetadataVariantCount(48);
+
+        vm.prank(admin);
+        carton.setMetadataVariantCount(48);
+
+        assertEq(carton.metadataVariantCount(), 48);
+    }
+
+    function testUri_FallsBackToLegacyTemplateWhenVariantsDisabled() public {
+        string memory newURI = "https://newuri.com/{id}";
+
+        vm.prank(uriSetter);
+        carton.setURI(newURI);
+
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 1, "");
+
+        assertEq(carton.variantByTokenId(tokenId), 0);
+        assertEq(carton.uri(tokenId), newURI);
+    }
+
+    function testMint_AssignsVariantWhenConfigured() public {
+        vm.prank(admin);
+        carton.setMetadataVariantCount(48);
+
+        vm.prank(minter);
+        uint256 tokenId = carton.mint(user, 1, "");
+
+        uint256 variantId = carton.variantByTokenId(tokenId);
+        assertGe(variantId, 1);
+        assertLe(variantId, 48);
+    }
+
+    function testMintBatch_AssignsVariantsWhenConfigured() public {
+        vm.prank(admin);
+        carton.setMetadataVariantCount(96);
+
+        vm.prank(minter);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 1;
+        amounts[1] = 1;
+        uint256[] memory ids = carton.mintBatch(user, amounts, "");
+
+        uint256 firstVariant = carton.variantByTokenId(ids[0]);
+        uint256 secondVariant = carton.variantByTokenId(ids[1]);
+
+        assertGe(firstVariant, 1);
+        assertLe(firstVariant, 96);
+        assertGe(secondVariant, 1);
+        assertLe(secondVariant, 96);
+    }
+
     function testAdminCanGrantRoles() public {
         address newMinter = address(0x1234);
         bytes32 minterRole = carton.MINTER_ROLE();
@@ -177,6 +276,7 @@ contract CartonTest is BaseTest {
         vm.startPrank(admin);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(address(USDC), 1000000);
+        carton.setMetadataVariantCount(48);
         vm.stopPrank();
 
         USDC.mint(user, 1000000);
@@ -187,10 +287,13 @@ contract CartonTest is BaseTest {
         vm.stopPrank();
 
         assertEq(carton.balanceOf(user, 1), 1);
+        assertGe(carton.variantByTokenId(1), 1);
+        assertLe(carton.variantByTokenId(1), 48);
         assertEq(USDC.balanceOf(address(carton)), treasuryBalanceBefore + 1000000);
     }
 
     function test_BuyCartonWithUSDT_RevertNotAccepted() public {
+        // forge-lint: disable-next-line(mixed-case-variable)
         MockERC20 USDT = new MockERC20("Tether", "USDT", 6);
         USDT.mint(user1, 1_000_000);
         vm.prank(user1);
@@ -235,6 +338,34 @@ contract CartonTest is BaseTest {
         assertEq(carton.tokenPricesByTournament(1, address(USDC)), price);
     }
 
+    function testSetCartonTokenPrice_EmitsTokenPriceUpdated() public {
+        uint256 initialPrice = 1000000;
+        uint256 updatedPrice = 2000000;
+
+        vm.prank(admin);
+        carton.setTokenPrice(address(USDC), initialPrice);
+
+        vm.expectEmit(true, true, false, true);
+        emit TokenPriceUpdated(1, address(USDC), initialPrice, updatedPrice);
+
+        vm.prank(admin);
+        carton.setTokenPrice(address(USDC), updatedPrice);
+    }
+
+    function testSetCartonTokenPrice_RevertWhenActiveTournamentNotSet() public {
+        Carton freshCarton = new Carton(admin, pauser, minter);
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.ActiveTournamentNotSet.selector);
+        freshCarton.setTokenPrice(address(USDC), 1000000);
+    }
+
+    function testSetCartonTokenPrice_RevertWhenExplicitTournamentIsZero() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.ZeroTournamentId.selector);
+        carton.setTokenPrice(0, address(USDC), 1000000);
+    }
+
     function testOnlyAdminCanSetPrice() public {
         vm.prank(user);
         vm.expectRevert();
@@ -258,6 +389,8 @@ contract CartonTest is BaseTest {
         vm.deal(address(carton), 0.1 ether);
 
         uint256 balanceBefore = recipient.balance;
+        vm.expectEmit(true, false, false, true);
+        emit RescueETHWithdrawn(recipient, 0.1 ether);
         vm.prank(recipient);
         carton.withdraw();
 
@@ -275,6 +408,30 @@ contract CartonTest is BaseTest {
         vm.prank(user);
         vm.expectRevert();
         carton.withdraw();
+    }
+
+    function testWithdrawToken() public {
+        address recipient = makeAddr("tokenRecipient");
+
+        vm.startPrank(admin);
+        carton.grantRole(carton.DEFAULT_ADMIN_ROLE(), recipient);
+        vm.stopPrank();
+
+        USDC.mint(address(carton), 1_000_000);
+
+        vm.expectEmit(true, true, false, true);
+        emit RescueTokenWithdrawn(recipient, address(USDC), 1_000_000);
+        vm.prank(recipient);
+        carton.withdrawToken(address(USDC));
+
+        assertEq(USDC.balanceOf(address(carton)), 0, "Carton should have no token balance after rescue");
+        assertEq(USDC.balanceOf(recipient), 1_000_000, "Recipient should receive rescued tokens");
+    }
+
+    function testWithdrawTokenNoFunds() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.NoTokensToWithdraw.selector);
+        carton.withdrawToken(address(USDC));
     }
 
     function testGetUserTokens() public {
@@ -296,13 +453,52 @@ contract CartonTest is BaseTest {
         assertEq(twoTokens.length, 2, "User should have two tokens");
     }
 
+    function testGetUserTokens_TransferKeepsListsInSync() public {
+        vm.startPrank(minter);
+        uint256 firstTokenId = carton.mint(user, 1, "");
+        uint256 secondTokenId = carton.mint(user, 1, "");
+        vm.stopPrank();
+
+        vm.prank(user);
+        carton.safeTransferFrom(user, user2, firstTokenId, 1, "");
+
+        uint256[] memory senderTokens = carton.getUserTokens(user);
+        uint256[] memory receiverTokens = carton.getUserTokens(user2);
+
+        assertEq(senderTokens.length, 1, "Sender should keep one token");
+        assertEq(senderTokens[0], secondTokenId, "Sender should keep the remaining token");
+        assertEq(receiverTokens.length, 1, "Receiver should get one token");
+        assertEq(receiverTokens[0], firstTokenId, "Receiver should get the transferred token");
+    }
+
+    function testGetUserTokens_BurnRemovesOnlyBurnedToken() public {
+        vm.startPrank(minter);
+        uint256 firstTokenId = carton.mint(user, 1, "");
+        uint256 secondTokenId = carton.mint(user, 1, "");
+        vm.stopPrank();
+
+        vm.prank(user);
+        carton.burn(user, firstTokenId, 1);
+
+        uint256[] memory remainingTokens = carton.getUserTokens(user);
+        assertEq(remainingTokens.length, 1, "User should keep one token after burn");
+        assertEq(remainingTokens[0], secondTokenId, "Remaining token should stay tracked");
+    }
+
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event CartonPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price);
+    event TreasuryAddressChanged(address indexed oldTreasury, address indexed newTreasury);
+    event RescueETHWithdrawn(address indexed recipient, uint256 amount);
+    event RescueTokenWithdrawn(address indexed recipient, address indexed token, uint256 amount);
+    event AcceptedTokenSet(address indexed token, bool accepted);
 
     // ========== TREASURY INTEGRATION TESTS ==========
 
     function testSetTreasuryAddress() public {
         treasury = new Treasury(admin, address(carton), 500);
+
+        vm.expectEmit(true, true, false, true);
+        emit TreasuryAddressChanged(address(0), address(treasury));
 
         vm.prank(admin);
         carton.setTreasuryAddress(address(treasury));
@@ -324,11 +520,33 @@ contract CartonTest is BaseTest {
         carton.setTreasuryAddress(address(0));
     }
 
+    function testSetTreasuryAddress_RevertEOA() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.TreasuryAddressNotContract.selector);
+        carton.setTreasuryAddress(user);
+    }
+
+    function testSetTreasuryAddress_RevertInvalidInterface() public {
+        NonTreasuryContract invalidTreasury = new NonTreasuryContract();
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.InvalidTreasuryContract.selector);
+        carton.setTreasuryAddress(address(invalidTreasury));
+    }
+
     function testSetActiveTournament() public {
         vm.prank(admin);
         carton.setActiveTournament(1);
 
         assertEq(carton.activeTournamentId(), 1);
+    }
+
+    function testSetActiveTournament_EmitsActiveTournamentChanged() public {
+        vm.expectEmit(true, true, false, true);
+        emit ActiveTournamentChanged(1, 7);
+
+        vm.prank(admin);
+        carton.setActiveTournament(7);
     }
 
     function testMintStoresTokenTournamentId() public {
@@ -426,6 +644,50 @@ contract CartonTest is BaseTest {
         vm.stopPrank();
     }
 
+    function testSetAcceptedToken_RevertsForUnsupportedTreasuryToken() public {
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+        treasury = _deployTreasuryAndRegister(1, address(predictions));
+
+        vm.prank(admin);
+        vm.expectRevert(Carton.UnsupportedPrizeToken.selector);
+        carton.setAcceptedToken(address(unsupportedToken), true);
+    }
+
+    function testSetAcceptedToken_RevertsForZeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert(Carton.ZeroTokenAddress.selector);
+        carton.setAcceptedToken(address(0), true);
+    }
+
+    function testSetAcceptedToken_EmitsAcceptedTokenSet() public {
+        vm.expectEmit(true, true, false, true);
+        emit AcceptedTokenSet(address(USDC), true);
+
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+
+        assertTrue(carton.acceptedTokens(address(USDC)));
+    }
+
+    function testSetAcceptedToken_EmitsAcceptedTokenSet_Disabling() public {
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), true);
+
+        vm.expectEmit(true, true, false, true);
+        emit AcceptedTokenSet(address(USDC), false);
+
+        vm.prank(admin);
+        carton.setAcceptedToken(address(USDC), false);
+
+        assertFalse(carton.acceptedTokens(address(USDC)));
+    }
+
+    function testSetAcceptedToken_OnlyAdmin() public {
+        vm.prank(user);
+        vm.expectRevert();
+        carton.setAcceptedToken(address(USDC), true);
+    }
+
     function testBuyCartonWithoutTreasuryConfiguredStillReverts() public {
         vm.deal(user, 1 ether);
         vm.prank(user);
@@ -482,11 +744,34 @@ contract CartonTest is BaseTest {
         assertEq(treasury.globalReserve(address(USDC)), 100000);
     }
 
+    function testBuyCartonWithToken_RevalidatesSupportedTokenInTreasury() public {
+        MockERC20 unsupportedToken = new MockERC20("Unsupported", "BAD", 6);
+
+        vm.startPrank(admin);
+        carton.setAcceptedToken(address(unsupportedToken), true);
+        carton.setTokenPrice(address(unsupportedToken), 1000000);
+        treasury = new Treasury(admin, address(carton), 500);
+        carton.setTreasuryAddress(address(treasury));
+        treasury.registerTournament(1, address(predictions));
+        treasury.grantRole(treasury.FUND_DEPOSITOR_ROLE(), address(carton));
+        carton.setActiveTournament(1);
+        vm.stopPrank();
+
+        unsupportedToken.mint(user, 1000000);
+
+        vm.startPrank(user);
+        unsupportedToken.approve(address(carton), 1000000);
+        vm.expectRevert(Carton.UnsupportedPrizeToken.selector);
+        carton.buyCartonWithToken(address(unsupportedToken));
+        vm.stopPrank();
+    }
+
     function testBuyCartonWithToken_RevertsForUnregisteredTournament() public {
         treasury = new Treasury(admin, address(carton), 500);
 
         vm.startPrank(admin);
         carton.setTreasuryAddress(address(treasury));
+        treasury.setSupportedPrizeToken(address(USDC), true);
         carton.setAcceptedToken(address(USDC), true);
         carton.setTokenPrice(2, address(USDC), 1000000);
         vm.stopPrank();
