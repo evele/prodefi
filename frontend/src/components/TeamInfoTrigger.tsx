@@ -16,6 +16,7 @@ export function TeamInfoTrigger({ teamId, onOpenTeamInfo, children, className = 
   return (
     <button
       type="button"
+      tabIndex={-1}
       aria-haspopup="dialog"
       aria-label={`Ver info de ${accessibleName}`}
       className={`inline-flex min-w-0 cursor-pointer items-center rounded-md px-1 py-1 text-inherit outline-none transition-all hover:bg-white/[0.03] hover:opacity-85 focus-visible:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-white/15 ${className}`.trim()}

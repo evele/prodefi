@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { formatEther, formatUnits } from 'viem'
 import { CONTRACT_ADDRESSES, USDC_ABI } from '../lib/contracts'
@@ -12,6 +12,7 @@ export function useUserBalance() {
   const [usdcRawBalance, setUsdcRawBalance] = useState<bigint | undefined>()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<unknown>()
+  const hasLoadedBalancesRef = useRef(false)
 
   useEffect(() => {
     if (!isConnected || !userAddress) {
@@ -19,13 +20,17 @@ export function useUserBalance() {
       setUsdcRawBalance(undefined)
       setIsLoading(false)
       setError(undefined)
+      hasLoadedBalancesRef.current = false
       return
     }
 
     let cancelled = false
 
     const fetchBalances = async () => {
-      setIsLoading(true)
+      if (!hasLoadedBalancesRef.current) {
+        setIsLoading(true)
+      }
+
       try {
         const [nextEthBalance, nextUsdcBalance] = await Promise.all([
           appPublicClient.getBalance({ address: userAddress }),
@@ -41,6 +46,7 @@ export function useUserBalance() {
         setEthBalance(nextEthBalance)
         setUsdcRawBalance(nextUsdcBalance)
         setError(undefined)
+        hasLoadedBalancesRef.current = true
       } catch (caught) {
         if (cancelled) return
         setError(caught)

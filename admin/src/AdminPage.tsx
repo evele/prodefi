@@ -1217,6 +1217,14 @@ function TreasuryFundingSection({
   const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
   const parsedAmount = useMemo(() => parseUsdcAmount(amountInput), [amountInput])
 
+  const { data: mintedTournamentCount } = useReadContract({
+    address: CONTRACT_ADDRESSES.CARTON,
+    abi: CARTON_ABI,
+    functionName: 'mintedByTournament',
+    args: parsedTournamentId > 0n ? [parsedTournamentId] : undefined,
+    query: { enabled: parsedTournamentId > 0n, refetchInterval: 10_000 },
+  })
+
   const fundingContracts = useMemo(() => {
     const contracts: BatchedReadContract[] = [
       { address: treasury, abi: TREASURY_ABI, functionName: 'reserveBps', args: [] },
@@ -1394,6 +1402,7 @@ function TreasuryFundingSection({
           </div>
 
           <div className="text-sm space-y-1">
+            <div><span className="font-medium">Minted cartones:</span> {mintedTournamentCount?.toString() ?? '—'}</div>
             <div><span className="font-medium">Wallet USDC:</span> {formatUsdc(walletBalance)}</div>
             <div><span className="font-medium">Allowance to Treasury:</span> {formatUsdc(allowance)}</div>
             <div><span className="font-medium">Prizeable Pool:</span> {formatUsdc(prizePool)}</div>
@@ -1491,6 +1500,14 @@ function CloseTournamentSection({
   const [distributionInput, setDistributionInput] = useState(FIXED_PRIZE_DISTRIBUTION_INPUT)
   const tokenAddress = CONTRACT_ADDRESSES.USDC
   const parsedTournamentId = /^\d+$/.test(tournamentId) ? BigInt(tournamentId) : 0n
+
+  const { data: mintedTournamentCount } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'mintedByTournament',
+    args: parsedTournamentId > 0n ? [parsedTournamentId] : undefined,
+    query: { enabled: parsedTournamentId > 0n, refetchInterval: 10_000 },
+  })
 
   const lifecycleContracts = useMemo(
     () => {
@@ -1804,6 +1821,7 @@ function CloseTournamentSection({
 
           <div className="text-sm space-y-1">
             <div><span className="font-medium">Asset:</span> USDC</div>
+            <div><span className="font-medium">Minted cartones:</span> {mintedTournamentCount?.toString() ?? '—'}</div>
             <div><span className="font-medium">Prizeable Pool:</span> {poolDisplay}</div>
             <div><span className="font-medium">Global Reserve:</span> {reserveDisplay}</div>
             <div><span className="font-medium">Final Prize Total:</span> {finalTotalDisplay}</div>

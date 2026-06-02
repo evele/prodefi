@@ -28,6 +28,7 @@ export function PredictionGroupCarousel({
   onSelectGroupIndex,
 }: PredictionGroupCarouselProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const transitionTimeoutRef = useRef<number | null>(null)
   const gestureRef = useRef<{
     pointerId: number | null
     startX: number
@@ -53,10 +54,15 @@ export function PredictionGroupCarousel({
   const canGoNext = nextGroup !== null
 
   useEffect(() => {
+    clearTransitionTimeout()
     setDragOffset(0)
     setTransitionEnabled(false)
     setPendingGroupIndex(null)
   }, [currentGroupIndex])
+
+  useEffect(() => {
+    return () => clearTransitionTimeout()
+  }, [])
 
   const trackStyle = useMemo(
     () => ({
@@ -67,6 +73,23 @@ export function PredictionGroupCarousel({
   )
 
   const getViewportWidth = () => viewportRef.current?.getBoundingClientRect().width ?? 0
+
+  const clearTransitionTimeout = () => {
+    if (transitionTimeoutRef.current === null) return
+    window.clearTimeout(transitionTimeoutRef.current)
+    transitionTimeoutRef.current = null
+  }
+
+  const completeTransition = (nextIndex: number | null) => {
+    clearTransitionTimeout()
+    setTransitionEnabled(false)
+    setPendingGroupIndex(null)
+    setDragOffset(0)
+
+    if (nextIndex !== null) {
+      onSelectGroupIndex(nextIndex)
+    }
+  }
 
   const resetGesture = () => {
     gestureRef.current.pointerId = null
@@ -82,9 +105,15 @@ export function PredictionGroupCarousel({
       return
     }
 
+    clearTransitionTimeout()
     setPendingGroupIndex(targetIndex)
     setTransitionEnabled(true)
     setDragOffset(targetIndex > currentGroupIndex ? -width : width)
+
+    // Fallback in case the browser misses transitionend on the track element.
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      completeTransition(targetIndex)
+    }, 260)
   }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -148,6 +177,10 @@ export function PredictionGroupCarousel({
     setPendingGroupIndex(null)
     setTransitionEnabled(true)
     setDragOffset(0)
+    clearTransitionTimeout()
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      completeTransition(null)
+    }, 260)
   }
 
   if (!currentGroup) return null
@@ -168,15 +201,7 @@ export function PredictionGroupCarousel({
           style={trackStyle}
           onTransitionEnd={(event) => {
             if (event.target !== event.currentTarget || !transitionEnabled) return
-
-            const nextIndex = pendingGroupIndex
-            setTransitionEnabled(false)
-            setPendingGroupIndex(null)
-            setDragOffset(0)
-
-            if (nextIndex !== null) {
-              onSelectGroupIndex(nextIndex)
-            }
+            completeTransition(pendingGroupIndex)
           }}
         >
           <div className="min-w-full">
