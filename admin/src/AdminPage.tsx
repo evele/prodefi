@@ -709,6 +709,14 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
   const tournamentId = getBatchedResult<bigint>(positionsBaseData, 0) ?? 0n
   const nextTokenId = getBatchedResult<bigint>(positionsBaseData, 1)
 
+  const { data: mintedTournamentCount } = useReadContract({
+    address: carton,
+    abi: CARTON_ABI,
+    functionName: 'mintedByTournament',
+    args: tournamentId > 0n ? [tournamentId] : undefined,
+    query: { enabled: tournamentId > 0n, refetchInterval: 10_000 },
+  })
+
   const candidateTokenIds = useMemo(() => {
     const upperBound = Number(nextTokenId ?? 1n)
     return Array.from({ length: Math.max(upperBound - 1, 0) }, (_, i) => BigInt(i + 1))
@@ -1074,7 +1082,7 @@ function SetPositionsSection({ canManagePredictions }: { canManagePredictions: b
       <CardContent>
         <div className="mb-3 text-sm space-y-1">
           <div><span className="font-medium">Active tournament:</span> {tournamentId > 0n ? tournamentId.toString() : '—'}</div>
-          <div><span className="font-medium">Tournament cartones:</span> {tournamentScopedTokenIds.length}</div>
+          <div><span className="font-medium">Tournament cartones:</span> {mintedTournamentCount?.toString() ?? '—'}</div>
           <div><span className="font-medium">Submitted cartones:</span> {submittedCount?.toString() ?? '—'}</div>
           <div><span className="font-medium">Batch size:</span> {POSITION_BATCH_SIZE}</div>
           <div><span className="font-medium">Position source:</span> {manualOverrideEnabled ? 'Manual override' : 'On-chain totals'}</div>

@@ -616,7 +616,7 @@ contract Predictions is Ownable {
     }
 
     // Funciones de cálculo de puntos
-    function calculatePoints(uint256 tokenId, uint8 index) public view returns (uint8) {
+    function calculatePoints(uint256 tokenId, uint8 index) internal view returns (uint8) {
         Prediction memory pred = predictions[tokenId][index];
         Game storage game = games[pred.gameId];
         if (!game.set) revert ResultNotSet();
@@ -636,11 +636,11 @@ contract Predictions is Ownable {
         return points;
     }
 
-    function calculateDifferencePoints(uint8 goalsP, uint8 goalsR) public pure returns (uint8) {
+    function calculateDifferencePoints(uint8 goalsP, uint8 goalsR) internal pure returns (uint8) {
         return goalsR >= goalsP ? goalsR - goalsP : goalsP - goalsR;
     }
 
-    function getLocalEmpateVisitante(uint8 goalsL, uint8 goalsV) public pure returns (uint8) {
+    function getLocalEmpateVisitante(uint8 goalsL, uint8 goalsV) internal pure returns (uint8) {
         return (goalsL > goalsV) ? LOCAL : (goalsL == goalsV) ? EMPATE : VISITANTE;
     }
 
@@ -669,7 +669,7 @@ contract Predictions is Ownable {
         emit WinnersPredicted(sender, tokenId, teams);
     }
 
-    function allDifferent(uint8[4] calldata teams) public pure returns (bool) {
+    function allDifferent(uint8[4] calldata teams) internal pure returns (bool) {
         for (uint256 i; i < MAX_WINNERS;) {
             for (uint256 j = i + 1; j < MAX_WINNERS;) {
                 if (teams[i] == teams[j]) {

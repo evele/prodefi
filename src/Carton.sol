@@ -45,6 +45,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ReentrancyGuard {
     uint256 private _nextTokenId = 1;
     uint16 public metadataVariantCount;
 
+    mapping(uint256 => uint256) public mintedByTournament;
     mapping(uint256 => uint256) public tokenTournamentId;
     mapping(uint256 => uint16) public variantByTokenId;
 
@@ -118,6 +119,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ReentrancyGuard {
         if (amount != 1) revert CartonAmountMustBeOne();
 
         uint256 tokenId = _nextTokenId++;
+        mintedByTournament[tournamentId] += 1;
         tokenTournamentId[tokenId] = tournamentId;
         _assignVariant(tokenId, account, tournamentId);
         _mint(account, tokenId, amount, data);
@@ -140,6 +142,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ReentrancyGuard {
         _validateTournamentSelection(tournamentId);
 
         uint256 amountsLength = amounts.length;
+        mintedByTournament[tournamentId] += amountsLength;
         uint256[] memory ids = new uint256[](amountsLength);
         for (uint256 i; i < amountsLength;) {
             if (amounts[i] != 1) revert CartonAmountMustBeOne();
@@ -168,6 +171,7 @@ contract Carton is ERC1155, AccessControl, ERC1155Pausable, ReentrancyGuard {
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 tokenId = _nextTokenId++;
+        mintedByTournament[tournamentId] += 1;
         tokenTournamentId[tokenId] = tournamentId;
         _assignVariant(tokenId, msg.sender, tournamentId);
         _mint(msg.sender, tokenId, 1, "");

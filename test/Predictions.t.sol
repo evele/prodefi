@@ -6,6 +6,14 @@ import { Carton } from "../src/Carton.sol";
 import { Predictions } from "../src/Predictions.sol";
 import { Treasury } from "../src/Treasury.sol";
 
+contract PredictionsHarness is Predictions {
+    constructor(address _cartones, uint256 _tournamentId) Predictions(_cartones, _tournamentId) { }
+
+    function exposedCalculateDifferencePoints(uint8 goalsP, uint8 goalsR) external pure returns (uint8) {
+        return calculateDifferencePoints(goalsP, goalsR);
+    }
+}
+
 contract PredictionsTest is Test {
     event SubmissionDeadlineUpdated(uint256 oldDeadline, uint256 newDeadline);
 
@@ -277,12 +285,14 @@ contract PredictionsTest is Test {
         preds.submitPrediction(tokenId, arr);
     }
 
-    function testCalculateDifferencePoints_HandlesSubtractionOverflowBoundary() public view {
-        assertEq(preds.calculateDifferencePoints(128, 0), 128);
+    function testCalculateDifferencePoints_HandlesSubtractionOverflowBoundary() public {
+        PredictionsHarness harness = new PredictionsHarness(address(cart), 1);
+        assertEq(harness.exposedCalculateDifferencePoints(128, 0), 128);
     }
 
-    function testCalculateDifferencePoints_HandlesAbsInt8MinBoundary() public view {
-        assertEq(preds.calculateDifferencePoints(72, 200), 128);
+    function testCalculateDifferencePoints_HandlesAbsInt8MinBoundary() public {
+        PredictionsHarness harness = new PredictionsHarness(address(cart), 1);
+        assertEq(harness.exposedCalculateDifferencePoints(72, 200), 128);
     }
 
     function testSubmitPredictionRevertsOnUnreasonableGoalValue() public {
@@ -404,12 +414,6 @@ contract PredictionsTest is Test {
         preds.setResults(3, 0, 3); // Acertar visitante: 6 + 3 = 9 puntos
         preds.setResults(4, 2, 2); // Empate: 7 + 3 = 10 puntos
 
-        // Verificar puntos de cada partido
-        assertEq(preds.calculatePoints(tokenId, 0), 10);
-        assertEq(preds.calculatePoints(tokenId, 1), 10);
-        assertEq(preds.calculatePoints(tokenId, 2), 9);
-        assertEq(preds.calculatePoints(tokenId, 3), 10);
-
         // Verificar puntos totales (solo partidos)
         assertEq(preds.calculateTotalPoints(tokenId), 39);
 
@@ -449,10 +453,6 @@ contract PredictionsTest is Test {
         preds.setResults(3, 5, 5); // diffTotal 9 -> base 0, sin bonus -> 0
         preds.setResults(4, 6, 5); // diffTotal 10 -> base 0, +3 por acertar local -> 3
 
-        assertEq(preds.calculatePoints(tokenId, 0), 10);
-        assertEq(preds.calculatePoints(tokenId, 1), 6);
-        assertEq(preds.calculatePoints(tokenId, 2), 0);
-        assertEq(preds.calculatePoints(tokenId, 3), 3);
         assertEq(preds.calculateTotalPoints(tokenId), 19);
     }
 
@@ -513,9 +513,6 @@ contract PredictionsTest is Test {
         preds.setResults(2, 1, 1); // 10 puntos
 
         assertEq(preds.calculateTotalPoints(tokenId), 20);
-
-        vm.expectRevert(Predictions.ResultNotSet.selector);
-        preds.calculatePoints(tokenId, 2);
 
         preds.setResults(3, 0, 3); // 9 puntos
         preds.setResults(4, 2, 2); // 10 puntos

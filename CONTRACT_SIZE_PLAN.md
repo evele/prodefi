@@ -3,10 +3,15 @@
 ## Goal
 Reduce bytecode size in the 3 largest contracts using the highest-impact techniques from the Ethereum.org downsizing guide.
 
-## Current Sizes
+## Current Sizes (baseline before this plan)
 - `Carton`: `24,490 B`, margin `+86 B`
 - `Predictions`: `22,667 B`, margin `+1,909 B`
 - `Treasury`: `20,522 B`, margin `+4,054 B`
+
+## Sizes After Phase 2+3 (DONE)
+- `Carton`: `22,004 B`, margin `+2,572 B` ✅ (-2,486 B)
+- `Predictions`: `22,307 B`, margin `+2,269 B` ✅ (-360 B)
+- `Treasury`: `20,522 B`, margin `+4,054 B` (unchanged)
 
 ## Principles
 - Measure before changing.
@@ -16,7 +21,7 @@ Reduce bytecode size in the 3 largest contracts using the highest-impact techniq
 - Re-run `forge build --force --sizes` after each isolated measurement.
 - Re-run `forge test` after the final chosen set of changes.
 
-## Phase 1: Baseline
+## Phase 1: Baseline ✅ DONE
 Measure current sizes for:
 - `Carton`
 - `Predictions`
@@ -28,43 +33,17 @@ Measure current sizes for:
 Deliverable:
 - table with contract, runtime size, margin, and notes
 
-## Phase 2: Carton
-`Carton` has the smallest remaining headroom, so it gets priority.
+## Phase 2: Carton ✅ DONE
+Applied A+B+C: -2,486 B, margin 86 → 2,572 B. 222/222 tests. ABI regenerado por deploy.
 
-Measure these isolated palancas:
+1. ✅ Remove legacy ETH code (`buyCarton`, `EthPurchaseDisabled`, `cartonPrice`, `setCartonPrice`, `PriceUpdated`)
+2. ✅ Remove `ERC1155Burnable`
+3. ✅ Remove `ERC1155Supply`
+4. ⏭ Move secondary admin logic — not needed, margen suficiente
+5. ✅ Keep `getUserTokens` — frontend depende de él
 
-1. Remove legacy ETH code
-- `buyCarton()`
-- `EthPurchaseDisabled`
-- `cartonPrice`
-- `setCartonPrice`
-- `PriceUpdated` (the legacy event emitted by `setCartonPrice`, not `TokenPriceUpdated`)
-- related tests
-- related ABI entries
-
-2. Remove `ERC1155Burnable`
-- remove the inheritance and import
-- update/remove burn tests
-
-3. Remove `ERC1155Supply`
-- remove the inheritance and import
-- update/remove `totalSupply` tests
-
-4. Move secondary admin logic out
-- consider moving `withdraw`, `withdrawToken`, or other low-value admin helpers to a separate contract if needed
-
-5. Keep `getUserTokens` for now
-- frontend depends on it in:
-  - `frontend/src/routes/predictions.tsx`
-  - `frontend/src/routes/index.tsx`
-  - `frontend/src/routes/leaderboard.tsx`
-
-Target:
-- recover at least `1.5 KB`
-- ideally recover `2 KB+`
-
-## Phase 3: Predictions
-Secondary target after Carton.
+## Phase 3: Predictions ✅ DONE
+Applied P1+P2 partial: -360 B, margin 1,909 → 2,269 B. 220/220 tests.
 
 Measure these isolated palancas:
 
@@ -93,8 +72,8 @@ Measure these isolated palancas:
 Target:
 - recover `1-2 KB`
 
-## Phase 4: Treasury
-Lower priority because it already has healthy margin.
+## Phase 4: Treasury ⏭ SKIPPED
+Margin already 4,054 B — no urgency. Measured: removing 9 PRIZE_BOOK facades saves 2,261 B but requires frontend + test changes. Deferred.
 
 Measure these isolated palancas:
 
@@ -112,14 +91,12 @@ Measure these isolated palancas:
 Target:
 - keep healthy margin, avoid unnecessary churn
 
-## Phase 5: Combined Measurements
-Measure:
-- `Carton A+B+C`
-- `Carton A+B`
-- `Carton A+C`
-- `Carton B+C`
-
-Pick the smallest set that gives comfortable headroom.
+## Phase 5: Combined Measurements ✅ DONE
+- A solo: -904 B → margen 990
+- B solo: -1,000 B → margen 1,086
+- C solo: -690 B → margen 776
+- A+B: -1,880 B → margen 1,966
+- A+B+C: -2,486 B → margen 2,572 ← elegido
 
 ## Decision Rule
 - If `Carton` gets to `> 1.5 KB` margin after safe removals, stop there.

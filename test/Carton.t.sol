@@ -179,6 +179,7 @@ contract CartonTest is BaseTest {
         uint256 variantId = carton.variantByTokenId(tokenId);
         assertGe(variantId, 1);
         assertLe(variantId, 48);
+        assertEq(carton.mintedByTournament(1), 1);
     }
 
     function testMintBatch_AssignsVariantsWhenConfigured() public {
@@ -198,6 +199,15 @@ contract CartonTest is BaseTest {
         assertLe(firstVariant, 96);
         assertGe(secondVariant, 1);
         assertLe(secondVariant, 96);
+        assertEq(carton.mintedByTournament(1), 2);
+    }
+
+    function testMintForTournament_IncrementsMintedByTournamentForExplicitTournament() public {
+        vm.prank(minter);
+        carton.mintForTournament(user, 7, 1, "");
+
+        assertEq(carton.mintedByTournament(7), 1);
+        assertEq(carton.mintedByTournament(1), 0);
     }
 
     function testAdminCanGrantRoles() public {
@@ -256,6 +266,7 @@ contract CartonTest is BaseTest {
         assertEq(carton.balanceOf(user, 1), 1);
         assertGe(carton.variantByTokenId(1), 1);
         assertLe(carton.variantByTokenId(1), 48);
+        assertEq(carton.mintedByTournament(1), 1);
         assertEq(USDC.balanceOf(address(carton)), treasuryBalanceBefore + 1000000);
     }
 
