@@ -168,7 +168,8 @@ function LeaderboardPage() {
       })
   }, [candidateTokenIds, positionData, positionVersionData, positionsSnapshotReady, positionsVersion])
 
-  const positionsArray = useStableValue(livePositionsArray, livePositionsArray !== undefined) ?? []
+  const stablePositionsArray = useStableValue(livePositionsArray, livePositionsArray !== undefined)
+  const positionsArray = useMemo(() => stablePositionsArray ?? [], [stablePositionsArray])
 
   const { data: usedData, refetch: refetchUsedData } = useAppReadContracts({
     contracts: candidateTokenIds.map((tokenId) => ({
@@ -201,7 +202,8 @@ function LeaderboardPage() {
     return candidateTokenIds.filter((_, i) => Boolean(usedData?.[i]?.result))
   }, [candidateTokenIds, usedData, usedSnapshotReady])
 
-  const usedTokenIds = useStableValue(liveUsedTokenIds, liveUsedTokenIds !== undefined) ?? []
+  const stableUsedTokenIds = useStableValue(liveUsedTokenIds, liveUsedTokenIds !== undefined)
+  const usedTokenIds = useMemo(() => stableUsedTokenIds ?? [], [stableUsedTokenIds])
 
   const pointsContracts = useMemo(
     () =>
@@ -248,7 +250,8 @@ function LeaderboardPage() {
     return map
   }, [pointsData, pointsSnapshotReady, usedTokenIds])
 
-  const pointsByTokenId = useStableValue(livePointsByTokenId, livePointsByTokenId !== undefined) ?? new Map<string, bigint>()
+  const stablePointsByTokenId = useStableValue(livePointsByTokenId, livePointsByTokenId !== undefined)
+  const pointsByTokenId = useMemo(() => stablePointsByTokenId ?? new Map<string, bigint>(), [stablePointsByTokenId])
 
   const userTokenSet = useMemo<Set<string>>(
     () => new Set((userTokensRaw ?? []).map((id) => id.toString())),
@@ -304,7 +307,8 @@ function LeaderboardPage() {
     return map
   }, [positionsArray, tournamentFinalized, usdcPrizesData, usdcPrizesSnapshotReady])
 
-  const usdcPrizesByTokenId = useStableValue(liveUsdcPrizesByTokenId, liveUsdcPrizesByTokenId !== undefined) ?? new Map<string, bigint>()
+  const stableUsdcPrizesByTokenId = useStableValue(liveUsdcPrizesByTokenId, liveUsdcPrizesByTokenId !== undefined)
+  const usdcPrizesByTokenId = useMemo(() => stableUsdcPrizesByTokenId ?? new Map<string, bigint>(), [stableUsdcPrizesByTokenId])
 
   const finalRowsReady = useMemo(
     () =>
@@ -327,7 +331,8 @@ function LeaderboardPage() {
     [finalRowsReady, pointsByTokenId, positionsArray, tournamentFinalized, usdcPrizesByTokenId, userTokenSet],
   )
 
-  const finalLeaderboardRows = useStableValue(liveFinalLeaderboardRows, liveFinalLeaderboardRows !== undefined) ?? []
+  const stableFinalLeaderboardRows = useStableValue(liveFinalLeaderboardRows, liveFinalLeaderboardRows !== undefined)
+  const finalLeaderboardRows = useMemo(() => stableFinalLeaderboardRows ?? [], [stableFinalLeaderboardRows])
 
   const provisionalRowsReady = useMemo(
     () => usedTokenIds.every((tokenId) => pointsByTokenId.has(tokenId.toString())),
@@ -354,10 +359,11 @@ function LeaderboardPage() {
       }))
   }, [pointsByTokenId, provisionalRowsReady, usedTokenIds, userTokenSet])
 
-  const provisionalLeaderboardRows = useStableValue(
+  const stableProvisionalLeaderboardRows = useStableValue(
     liveProvisionalLeaderboardRows,
     liveProvisionalLeaderboardRows !== undefined,
-  ) ?? []
+  )
+  const provisionalLeaderboardRows = useMemo(() => stableProvisionalLeaderboardRows ?? [], [stableProvisionalLeaderboardRows])
 
   const isFinalLeaderboard = positionsArray.length > 0 && !positionsUpdateInProgress
 

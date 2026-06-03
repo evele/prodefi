@@ -28,6 +28,9 @@ export function PredictionGroupCarousel({
   onSelectGroupIndex,
 }: PredictionGroupCarouselProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const prevSlotRef = useRef<HTMLDivElement>(null)
+  const currentSlotRef = useRef<HTMLDivElement>(null)
+  const nextSlotRef = useRef<HTMLDivElement>(null)
   const transitionTimeoutRef = useRef<number | null>(null)
   const gestureRef = useRef<{
     pointerId: number | null
@@ -52,6 +55,11 @@ export function PredictionGroupCarousel({
   const nextGroup = currentGroupIndex < groups.length - 1 ? groups[currentGroupIndex + 1] : null
   const canGoPrevious = previousGroup !== null
   const canGoNext = nextGroup !== null
+
+  useEffect(() => {
+    if (prevSlotRef.current) prevSlotRef.current.inert = true
+    if (nextSlotRef.current) nextSlotRef.current.inert = true
+  }, [])
 
   useEffect(() => {
     clearTransitionTimeout()
@@ -183,6 +191,21 @@ export function PredictionGroupCarousel({
     }, 260)
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab' || e.shiftKey || !currentSlotRef.current) return
+    const inputs = Array.from(
+      currentSlotRef.current.querySelectorAll<HTMLInputElement>('input:not([disabled])'),
+    )
+    if (!inputs.length || document.activeElement !== inputs[inputs.length - 1]) return
+    if (currentGroupIndex >= groups.length - 1) return
+    e.preventDefault()
+    animateToGroup(currentGroupIndex + 1)
+    setTimeout(() => {
+      const next = currentSlotRef.current?.querySelectorAll<HTMLInputElement>('input:not([disabled])')
+      next?.[0]?.focus()
+    }, 300)
+  }
+
   if (!currentGroup) return null
 
   return (
@@ -195,6 +218,7 @@ export function PredictionGroupCarousel({
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointerGesture}
         onPointerCancel={finishPointerGesture}
+        onKeyDown={handleKeyDown}
       >
         <div
           className="flex"
@@ -204,7 +228,7 @@ export function PredictionGroupCarousel({
             completeTransition(pendingGroupIndex)
           }}
         >
-          <div className="min-w-full">
+          <div className="min-w-full" ref={prevSlotRef}>
             {previousGroup ? (
               <GroupMatches
                 groupLabel={previousGroup.groupLabel}
@@ -220,7 +244,7 @@ export function PredictionGroupCarousel({
             )}
           </div>
 
-          <div className="min-w-full">
+          <div className="min-w-full" ref={currentSlotRef}>
             <GroupMatches
               groupLabel={currentGroup.groupLabel}
               games={currentGroup.games}
@@ -232,7 +256,7 @@ export function PredictionGroupCarousel({
             />
           </div>
 
-          <div className="min-w-full">
+          <div className="min-w-full" ref={nextSlotRef}>
             {nextGroup ? (
               <GroupMatches
                 groupLabel={nextGroup.groupLabel}

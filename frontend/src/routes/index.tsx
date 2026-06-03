@@ -344,7 +344,8 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
       })
   }, [candidateTokenIds, finalPrizePositionData, finalPrizePositionVersionData, finalPrizePositionsReady, positionsVersion])
 
-  const finalPrizeEntries = useStableValue(liveFinalPrizeEntries, liveFinalPrizeEntries !== undefined) ?? []
+  const stableFinalPrizeEntries = useStableValue(liveFinalPrizeEntries, liveFinalPrizeEntries !== undefined)
+  const finalPrizeEntries = useMemo(() => stableFinalPrizeEntries ?? [], [stableFinalPrizeEntries])
 
   const finalPrizeContracts = useMemo(
     () =>
@@ -547,7 +548,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     return 'Comprar cartón'
   }
 
-  const { data: deadline } = useAppReadContract({
+  const { data: deadline } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'submissionDeadline',

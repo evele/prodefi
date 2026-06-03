@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-test
+dist-prod
 dist-ssr
 .env.openfort
 .env.legacy

@@ -56,7 +56,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     theme: 'midnight',
     termsOfServiceUrl: 'https://prodefi.online/reglas/',
     privacyPolicyUrl: 'https://prodefi.online/',
-  } as any
+  } as React.ComponentProps<typeof OpenfortProvider>['uiConfig']
 
   return (
     <QueryClientProvider client={queryClient}>
