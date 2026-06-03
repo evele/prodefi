@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:openfort": "vite --mode openfort",
+    "dev:production": "vite --mode production",
     "build": "tsc -b && vite build",
     "build:openfort": "tsc -b && vite build --mode openfort",
     "preview": "vite preview"

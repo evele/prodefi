@@ -51,7 +51,39 @@
         {
           "source": "/api/createOrder",
           "function": {
-            "functionId": "createOrder",
+            "functionId": "createOrderTest",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "/api/getOrderStatus",
+          "function": {
+            "functionId": "getOrderStatus",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "frontend-prod",
+      "public": "frontend/dist-prod",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "predeploy": [
+        "npm --prefix frontend run build:hosting:prod"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/createOrder",
+          "function": {
+            "functionId": "createOrderProduction",
             "region": "southamerica-east1"
           }
         },

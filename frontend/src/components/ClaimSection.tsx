@@ -16,7 +16,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     query: { refetchInterval: 10_000 },
   })
 
-  const { data: tokenTournamentId } = useAppReadContract({
+  const { data: tokenTournamentId } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.CARTON,
     abi: CARTON_ABI,
     functionName: 'tokenTournamentId',
@@ -65,7 +65,7 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     return Number(rawRank)
   }, [positionsVersion, rankVersion, rawRank, usesActivePredictionsEngine])
 
-  const { data: usdcPrize } = useAppReadContract({
+  const { data: usdcPrize } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.TREASURY,
     abi: TREASURY_ABI,
     functionName: 'getClaimablePrizeAmount',

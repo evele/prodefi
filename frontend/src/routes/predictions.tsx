@@ -101,7 +101,7 @@ function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired
     case 'draft':
       return {
         label: 'Borrador',
-        detail: 'Hay selecciones locales, pero todavía falta enviarlas onchain.',
+        detail: 'Hay selecciones locales, pero todavía falta enviarlas.',
         bg: 'rgba(96,165,250,0.12)',
         color: 'rgb(125, 211, 252)',
       }
@@ -467,18 +467,15 @@ function PredictionsPage() {
       refetchOnWindowFocus: false,
     },
   })
-  const submittedScoredGameEntries: SubmittedScoredGameEntry[] = []
-
-  normalizedSubmittedGames.forEach((entry, index) => {
-    const officialGame = normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result)
-    if (!officialGame?.set) return
-
-    submittedScoredGameEntries.push({
-      gameId: entry.gameId,
-      predictionIndex: index,
-      officialGame,
+  const submittedScoredGameEntries = useMemo(() => {
+    const entries: SubmittedScoredGameEntry[] = []
+    normalizedSubmittedGames.forEach((entry, index) => {
+      const officialGame = normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result)
+      if (!officialGame?.set) return
+      entries.push({ gameId: entry.gameId, predictionIndex: index, officialGame })
     })
-  })
+    return entries
+  }, [normalizedSubmittedGames, submittedOfficialGamesData])
 
   const submittedGamePointsContracts: PredictionReadContract[] = []
 
@@ -499,7 +496,7 @@ function PredictionsPage() {
       refetchOnWindowFocus: false,
     },
   })
-  const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useAppReadContract({
+  const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'calculateTotalPoints',
@@ -700,7 +697,7 @@ function PredictionsPage() {
         : !tournamentReadyForSubmission
           ? 'Esperando configuracion completa del torneo'
           : selectedCartonGamesSubmitted
-            ? 'Partidos ya enviados onchain'
+            ? 'Partidos ya enviados'
             : `${completedGamesCount}/${games.length} resultados completos`,
     },
     {

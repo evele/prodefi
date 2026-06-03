@@ -38,11 +38,11 @@ export function PurchaseCartonModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       <div
-        className="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl border"
+        className="relative z-10 w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-2xl border"
         style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
       >
         <button
@@ -84,7 +84,7 @@ export function PurchaseCartonModal({
               </span>
             </div>
             <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Pagas fuera de cadena y, cuando el pago queda aprobado, Firebase emite el cartón automáticamente a tu wallet.
+              Cuando se aprueba el pago se emite un cartón automáticamente a tu wallet.
             </p>
             <div className="mt-5 space-y-3 flex flex-col flex-grow items-end mb-7">
               <Button
@@ -119,7 +119,7 @@ export function PurchaseCartonModal({
               </span>
             </div>
             <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Camino crypto nativo: apruebas USDC si hace falta y compras el cartón directamente en cadena.
+              apruebas USDC si hace falta y compras el cartón directamente onchain.
             </p>
             {gasNotice && (
               <div

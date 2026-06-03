@@ -39,25 +39,41 @@ forge test
 
 Los 119 tests deben pasar. Si alguno falla, no avances.
 
-### 1.2. Configurar `.env` de mainnet en `contracts/`
+### 1.2. Configurar entorno de mainnet
 
 ```env
 BASE_MAINNET_RPC_URL=https://mainnet.base.org
-DEPLOYER_PRIVATE_KEY=0x...     # wallet que paga el deploy
 MINTER_ADDRESS=0x...           # address de la wallet minter productiva (NO la del deployer)
-BASESCAN_API_KEY=...           # para verificar contratos
+USDC_ADDRESS=0x833589fCD6EDb6E08f4c7C32D4f71b54bdA02913   # USDC real en Base Mainnet
 ```
+
+Elegí exactamente un modo de firma para el deployer:
+
+- `PRIVATE_KEY=0x...`
+- `FOUNDRY_ACCOUNT=<keystore-account-name>`
+- `LEDGER=1` (opcional `MNEMONIC_INDEX=0`)
+- `TREZOR=1` (opcional `MNEMONIC_INDEX=0`)
 
 ### 1.3. Deploy a Base Mainnet
 
-Adaptá el script existente de deploy de Sepolia a mainnet (chain id `8453`). Algo del estilo:
+El repo ya incluye un wrapper dedicado a producción que deploya `Carton`, `Predictions`, `Treasury` y configura USDC real sin `MockUSDC`:
 
 ```bash
-forge script script/Deploy.s.sol \
-  --rpc-url $BASE_MAINNET_RPC_URL \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --broadcast \
-  --verify
+# Hardware wallet (recomendado para admin/deployer)
+export BASE_MAINNET_RPC_URL=https://mainnet.base.org
+export LEDGER=1
+export MINTER_ADDRESS=0x...
+./deploy-base-mainnet.sh
+```
+
+O con keystore de Foundry:
+
+```bash
+export BASE_MAINNET_RPC_URL=https://mainnet.base.org
+export FOUNDRY_ACCOUNT=deployer
+export ETH_PASSWORD=/absolute/path/to/password.txt
+export MINTER_ADDRESS=0x...
+./deploy-base-mainnet.sh
 ```
 
 Guardá las **addresses resultantes** (Carton, Predictions, etc.) y el `txHash` de deploy.
@@ -145,7 +161,7 @@ firebase functions:secrets:set PROD_MINTER_ENDPOINT_TOKEN --project prodefi-f223
 ### 3.2. Actualizar params (`functions/.env.prodefi-f2237`)
 
 Reemplazá el contenido por el productivo:
-
+/* ERIC */
 ```env
 PROD_CARTON_ADDRESS=0x...                    # del paso 1.3
 PROD_CHAIN_ID=8453                            # Base Mainnet
@@ -230,7 +246,7 @@ La guía asume Firebase Hosting porque ya estás en el mismo proyecto. Cambiá l
 
 ### 5.2. Configurar env productivo
 
-Creá `frontend/.env.production` (o `.env.openfort.production` si seguís usando el modo openfort):
+Copiá `frontend/.env.production.example` a `frontend/.env.production.local` y completá los valores reales:
 
 ```env
 VITE_CHAIN_ID=8453
@@ -257,26 +273,23 @@ VITE_OPENFORT_ETHEREUM_FEE_SPONSORSHIP_ID=pol_...   # si usás sponsorship
 
 ```bash
 cd frontend
-pnpm build:openfort     # o el script que uses para prod
+pnpm build:hosting:prod
 ```
 
-Verificá que `dist/` tenga `index.html` y los chunks de Vite.
+Verificá que `dist-prod/` tenga `index.html` y los chunks de Vite.
 
 ### 5.5. Deploy a Firebase Hosting
 
-Si todavía no inicializaste hosting:
+Primero, aplicá el target de Firebase al site productivo que vayas a usar:
 
 ```bash
-firebase init hosting
-# - public directory: frontend/dist
-# - single-page app: yes
-# - GitHub Action: opcional
+firebase target:apply hosting frontend-prod <your-production-site-id> --project prodefi
 ```
 
 Después:
 
 ```bash
-firebase deploy --only hosting --project prodefi-f2237
+./deploy-frontend-prod.sh
 ```
 
 Vinculá tu dominio custom desde la consola de Firebase Hosting → "Agregar dominio personalizado". Configurá los registros DNS que te indica (A o CNAME). Esperá a que el SSL se aprovisione (~15-60 min).

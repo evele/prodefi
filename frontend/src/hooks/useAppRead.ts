@@ -1,8 +1,33 @@
 import { useQuery } from '@tanstack/react-query'
+import type { RefetchOptions } from '@tanstack/react-query'
 import { useReadContract as useWagmiReadContract, useReadContracts as useWagmiReadContracts } from 'wagmi'
 import type { Abi, Address } from 'viem'
 import { isLocalAppChain } from '../lib/chains'
 import { appPublicClient } from '../lib/publicClient'
+
+type ContractCallResult = {
+  result: unknown
+  status: 'success' | 'failure'
+  error?: unknown
+}
+
+type UseAppReadContractReturn<TData> = Omit<
+  ReturnType<typeof useWagmiReadContract>,
+  'data' | 'error' | 'refetch'
+> & {
+  data: TData | undefined
+  error: Error | null
+  refetch: (options?: RefetchOptions) => Promise<unknown>
+}
+
+type UseAppReadContractsReturn = Omit<
+  ReturnType<typeof useWagmiReadContracts>,
+  'data' | 'error' | 'refetch'
+> & {
+  data: ContractCallResult[] | undefined
+  error: Error | null
+  refetch: (options?: RefetchOptions) => Promise<unknown>
+}
 
 type QueryOptions = {
   enabled?: boolean
@@ -41,7 +66,7 @@ function normalizeForKey(value: unknown): unknown {
   return value
 }
 
-export function useAppReadContract(parameters: ReadContractParameters): any {
+export function useAppReadContract<TData = unknown>(parameters: ReadContractParameters): UseAppReadContractReturn<TData> {
   const enabled = parameters.query?.enabled ?? true
 
   const wagmiResult = useWagmiReadContract({
@@ -66,7 +91,7 @@ export function useAppReadContract(parameters: ReadContractParameters): any {
       } as never),
   })
 
-  return isLocalAppChain
+  return (isLocalAppChain
     ? {
         ...wagmiResult,
         data: rpcResult.data,
@@ -75,10 +100,10 @@ export function useAppReadContract(parameters: ReadContractParameters): any {
         isFetching: rpcResult.isFetching,
         refetch: rpcResult.refetch,
       }
-    : wagmiResult
+    : wagmiResult) as UseAppReadContractReturn<TData>
 }
 
-export function useAppReadContracts(parameters: ReadContractsParameters): any {
+export function useAppReadContracts(parameters: ReadContractsParameters): UseAppReadContractsReturn {
   const enabled = parameters.query?.enabled ?? true
 
   const wagmiResult = useWagmiReadContracts({
@@ -120,7 +145,7 @@ export function useAppReadContracts(parameters: ReadContractsParameters): any {
       ),
   })
 
-  return isLocalAppChain
+  return (isLocalAppChain
     ? {
         ...wagmiResult,
         data: rpcResult.data,
@@ -129,5 +154,5 @@ export function useAppReadContracts(parameters: ReadContractsParameters): any {
         isFetching: rpcResult.isFetching,
         refetch: rpcResult.refetch,
       }
-    : wagmiResult
+    : wagmiResult) as UseAppReadContractsReturn
 }

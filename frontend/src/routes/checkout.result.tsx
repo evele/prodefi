@@ -35,7 +35,7 @@ function buildStatusCopy(status: string, paymentStatus?: string | null, lastErro
     case 'minting':
       return {
         title: 'Emitiendo cartón',
-        description: 'El pago fue aprobado y ahora estamos mintiendo tu cartón en la wallet conectada.',
+        description: 'El pago fue aprobado y ahora estamos enviando el cartón a tu wallet.',
       }
     case 'fulfilled':
       return {
@@ -104,7 +104,7 @@ function CheckoutResultPage() {
               Consultando estado de la compra
             </h1>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Estamos consultando tu orden en Firebase.
+              Estamos consultando el estado de tu órden.
             </p>
           </div>
         )}

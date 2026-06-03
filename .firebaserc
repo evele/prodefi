@@ -10,6 +10,9 @@
         ],
         "frontend-test": [
           "test-prodefi-front"
+        ],
+        "frontend-prod": [
+          "app-prodefi"
         ]
       }
     }

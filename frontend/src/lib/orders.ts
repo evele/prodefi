@@ -101,7 +101,7 @@ export async function getCheckoutOrderStatus(orderId: string): Promise<CheckoutO
 }
 
 export function getCheckoutOrderStatusUrl(orderId: string) {
-  const url = new URL(buildFunctionUrl('getOrderStatus'))
+  const url = new URL(buildFunctionUrl('getOrderStatus'), window.location.origin)
   url.searchParams.set('orderId', orderId)
   return url.toString()
 }

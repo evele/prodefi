@@ -32,12 +32,16 @@ const TEST_CARTON_ADDRESS = defineString('TEST_CARTON_ADDRESS')
 const TEST_CHAIN_ID = defineString('TEST_CHAIN_ID')
 
 const MERCADO_PAGO_ACCESS_TOKEN = defineSecret('MERCADO_PAGO_ACCESS_TOKEN')
-const MERCADO_PAGO_SUCCESS_URL = defineString('MERCADO_PAGO_SUCCESS_URL')
-const MERCADO_PAGO_PENDING_URL = defineString('MERCADO_PAGO_PENDING_URL')
-const MERCADO_PAGO_FAILURE_URL = defineString('MERCADO_PAGO_FAILURE_URL')
-const MERCADO_PAGO_NOTIFICATION_URL = defineString('MERCADO_PAGO_NOTIFICATION_URL')
+const MERCADO_PAGO_SANDBOX_ACCESS_TOKEN = defineSecret('MERCADO_PAGO_SANDBOX_ACCESS_TOKEN')
+const MERCADO_PAGO_SUCCESS_URL_TEST = defineString('MERCADO_PAGO_SUCCESS_URL_TEST')
+const MERCADO_PAGO_PENDING_URL_TEST = defineString('MERCADO_PAGO_PENDING_URL_TEST')
+const MERCADO_PAGO_FAILURE_URL_TEST = defineString('MERCADO_PAGO_FAILURE_URL_TEST')
+const MERCADO_PAGO_SUCCESS_URL_PRODUCTION = defineString('MERCADO_PAGO_SUCCESS_URL_PRODUCTION')
+const MERCADO_PAGO_PENDING_URL_PRODUCTION = defineString('MERCADO_PAGO_PENDING_URL_PRODUCTION')
+const MERCADO_PAGO_FAILURE_URL_PRODUCTION = defineString('MERCADO_PAGO_FAILURE_URL_PRODUCTION')
+const MERCADO_PAGO_NOTIFICATION_URL_TEST = defineString('MERCADO_PAGO_NOTIFICATION_URL_TEST')
+const MERCADO_PAGO_NOTIFICATION_URL_PRODUCTION = defineString('MERCADO_PAGO_NOTIFICATION_URL_PRODUCTION')
 const MERCADO_PAGO_WEBHOOK_SECRET = defineSecret('MERCADO_PAGO_WEBHOOK_SECRET')
-const MERCADO_PAGO_MINT_ENVIRONMENT = defineString('MERCADO_PAGO_MINT_ENVIRONMENT')
 
 const PROD_MINTER_WALLET_PRIVATE_KEY = defineSecret('PROD_MINTER_WALLET_PRIVATE_KEY')
 const PROD_MINTER_RPC_URL = defineSecret('PROD_MINTER_RPC_URL')
@@ -60,7 +64,7 @@ const CARTON_MINTER_ABI = [
   },
 ]
 
-const CANONICAL_TESTNET_CARTON_ADDRESS = getAddress('0x9D9e264fca8725A8259E332FBfe2776f48541FD8')
+const CANONICAL_TESTNET_CARTON_ADDRESS = getAddress('0x56Bf0280Fa304fa9bF8dBb3Dc9D7Cdc8c68045d4')
 
 const TESTNET_MINT_CONFIG = {
   environment: 'testnet',
@@ -289,32 +293,6 @@ function parseCreateOrderPayload(body) {
   }
 }
 
-function getMercadoPagoPreferenceRuntime() {
-  return {
-    accessToken: getRequiredString(MERCADO_PAGO_ACCESS_TOKEN.value(), 'mercado pago access token'),
-    successUrl: getRequiredString(MERCADO_PAGO_SUCCESS_URL.value(), 'mercado pago success url'),
-    pendingUrl: getRequiredString(MERCADO_PAGO_PENDING_URL.value(), 'mercado pago pending url'),
-    failureUrl: getRequiredString(MERCADO_PAGO_FAILURE_URL.value(), 'mercado pago failure url'),
-    notificationUrl: getRequiredString(MERCADO_PAGO_NOTIFICATION_URL.value(), 'mercado pago notification url'),
-  }
-}
-
-function getMercadoPagoMintConfig() {
-  const environment = parseOptionalString(MERCADO_PAGO_MINT_ENVIRONMENT.value()).toLowerCase()
-
-  if (environment === 'testnet') return TESTNET_MINT_CONFIG
-  if (environment === 'mainnet') return MAINNET_MINT_CONFIG
-
-  throw new Error('mercado pago mint environment must be testnet or mainnet')
-}
-
-function getMercadoPagoWebhookRuntime() {
-  return {
-    accessToken: getRequiredString(MERCADO_PAGO_ACCESS_TOKEN.value(), 'mercado pago access token'),
-    webhookSecret: getRequiredString(MERCADO_PAGO_WEBHOOK_SECRET.value(), 'mercado pago webhook secret'),
-    mintConfig: getMercadoPagoMintConfig(),
-  }
-}
 
 function buildCheckoutStatusUrl(baseUrl, orderId) {
   const url = new URL(baseUrl)
@@ -641,7 +619,8 @@ async function failOrderAfterApprovedPayment(orderRef, paymentPatch, mintRequest
   )
 }
 
-async function createOrder(req, res) {
+function createOrderHandler(config) {
+  return async (req, res) => {
   res.set('Cache-Control', 'no-store')
 
   if (req.method === 'OPTIONS') {
@@ -655,10 +634,14 @@ async function createOrder(req, res) {
   }
 
   let runtime
-  let mintEnvironment
   try {
-    runtime = getMercadoPagoPreferenceRuntime()
-    mintEnvironment = getMercadoPagoMintConfig().environment
+    runtime = {
+      accessToken: getRequiredString(config.getAccessToken(), 'mercado pago access token'),
+      successUrl: getRequiredString(config.getSuccessUrl(), 'mercado pago success url'),
+      pendingUrl: getRequiredString(config.getPendingUrl(), 'mercado pago pending url'),
+      failureUrl: getRequiredString(config.getFailureUrl(), 'mercado pago failure url'),
+      notificationUrl: getRequiredString(config.getNotificationUrl(), 'mercado pago notification url'),
+    }
   } catch (error) {
     logger.error('mercado pago config failed', { error: serializeError(error) })
     res.status(500).json({ ok: false, error: 'mercado-pago-config-invalid' })
@@ -676,7 +659,7 @@ async function createOrder(req, res) {
   const order = {
     orderId,
     status: 'pending_payment',
-    environment: mintEnvironment,
+    environment: config.environment,
     paymentRail: payload.paymentRail,
     provider: SUPPORTED_PAYMENT_PROVIDER,
     tournamentId: payload.tournamentId,
@@ -737,6 +720,7 @@ async function createOrder(req, res) {
     )
 
     res.status(500).json({ ok: false, error: 'create-order-failed' })
+  }
   }
 }
 
@@ -972,7 +956,8 @@ function createMintHandler(config) {
   )
 }
 
-async function mercadoPagoWebhook(req, res) {
+function createWebhookHandler(config) {
+  return async (req, res) => {
   res.set('Cache-Control', 'no-store')
 
   if (req.method === 'OPTIONS') {
@@ -987,7 +972,11 @@ async function mercadoPagoWebhook(req, res) {
 
   let runtime
   try {
-    runtime = getMercadoPagoWebhookRuntime()
+    runtime = {
+      accessToken: getRequiredString(config.getAccessToken(), 'mercado pago access token'),
+      webhookSecret: getRequiredString(config.getWebhookSecret(), 'mercado pago webhook secret'),
+      mintConfig: config.mintConfig,
+    }
   } catch (error) {
     logger.error('mercado pago webhook config failed', { error: serializeError(error) })
     res.status(500).json({ ok: false, error: 'mercado-pago-webhook-config-invalid' })
@@ -1097,6 +1086,7 @@ async function mercadoPagoWebhook(req, res) {
     }
 
     res.status(500).json({ ok: false, error: 'mercado-pago-webhook-failed' })
+  }
   }
 }
 
@@ -1222,30 +1212,74 @@ exports.waitlist = onRequest({ cors: true, invoker: 'public' }, async (req, res)
   }
 })
 
-exports.createOrder = onRequest(
+exports.createOrderTest = onRequest(
+  {
+    cors: true,
+    invoker: 'public',
+    secrets: [MERCADO_PAGO_SANDBOX_ACCESS_TOKEN],
+  },
+  createOrderHandler({
+    environment: 'testnet',
+    getAccessToken: () => MERCADO_PAGO_SANDBOX_ACCESS_TOKEN.value(),
+    getSuccessUrl: () => MERCADO_PAGO_SUCCESS_URL_TEST.value(),
+    getPendingUrl: () => MERCADO_PAGO_PENDING_URL_TEST.value(),
+    getFailureUrl: () => MERCADO_PAGO_FAILURE_URL_TEST.value(),
+    getNotificationUrl: () => MERCADO_PAGO_NOTIFICATION_URL_TEST.value(),
+  })
+)
+
+exports.createOrderProduction = onRequest(
   {
     cors: true,
     invoker: 'public',
     secrets: [MERCADO_PAGO_ACCESS_TOKEN],
   },
-  createOrder
+  createOrderHandler({
+    environment: 'mainnet',
+    getAccessToken: () => MERCADO_PAGO_ACCESS_TOKEN.value(),
+    getSuccessUrl: () => MERCADO_PAGO_SUCCESS_URL_PRODUCTION.value(),
+    getPendingUrl: () => MERCADO_PAGO_PENDING_URL_PRODUCTION.value(),
+    getFailureUrl: () => MERCADO_PAGO_FAILURE_URL_PRODUCTION.value(),
+    getNotificationUrl: () => MERCADO_PAGO_NOTIFICATION_URL_PRODUCTION.value(),
+  })
 )
 
 exports.getOrderStatus = onRequest({ cors: true, invoker: 'public' }, getOrderStatus)
 
-exports.mercadoPagoWebhook = onRequest(
+exports.mercadoPagoWebhookTest = onRequest(
+  {
+    invoker: 'public',
+    secrets: [
+      MERCADO_PAGO_SANDBOX_ACCESS_TOKEN,
+      MERCADO_PAGO_WEBHOOK_SECRET,
+      TEST_MINTER_WALLET_PRIVATE_KEY,
+      TEST_MINTER_RPC_URL,
+      TEST_MINTER_ENDPOINT_TOKEN,
+    ],
+  },
+  createWebhookHandler({
+    mintConfig: TESTNET_MINT_CONFIG,
+    getAccessToken: () => MERCADO_PAGO_SANDBOX_ACCESS_TOKEN.value(),
+    getWebhookSecret: () => MERCADO_PAGO_WEBHOOK_SECRET.value(),
+  })
+)
+
+exports.mercadoPagoWebhookProduction = onRequest(
   {
     invoker: 'public',
     secrets: [
       MERCADO_PAGO_ACCESS_TOKEN,
       MERCADO_PAGO_WEBHOOK_SECRET,
-      TEST_MINTER_WALLET_PRIVATE_KEY,
-      TEST_MINTER_RPC_URL,
       PROD_MINTER_WALLET_PRIVATE_KEY,
       PROD_MINTER_RPC_URL,
+      PROD_MINTER_ENDPOINT_TOKEN,
     ],
   },
-  mercadoPagoWebhook
+  createWebhookHandler({
+    mintConfig: MAINNET_MINT_CONFIG,
+    getAccessToken: () => MERCADO_PAGO_ACCESS_TOKEN.value(),
+    getWebhookSecret: () => MERCADO_PAGO_WEBHOOK_SECRET.value(),
+  })
 )
 
 exports.mintCartonTestnet = createMintHandler(TESTNET_MINT_CONFIG)

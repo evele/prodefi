@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useReadContract, useReadContracts } from './lib/wallet'
-import { formatUnits, parseUnits, type Abi, type Address } from 'viem'
+import { formatUnits, keccak256, parseUnits, toBytes, type Abi, type Address } from 'viem'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Input } from './components/ui/input'
 import { Button } from './components/ui/button'
@@ -60,7 +60,7 @@ type AdminCapability = {
   allowed: boolean
 }
 
-type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'tokens' | 'funding' | 'lifecycle'
+type AdminSectionId = 'overview' | 'results' | 'winners' | 'positions' | 'roles' | 'tokens' | 'funding' | 'lifecycle' | 'metadata'
 
 type BatchedReadResult = {
   result: unknown
@@ -82,6 +82,7 @@ const ADMIN_SECTION_OPTIONS: Array<{ id: AdminSectionId; label: string }> = [
   { id: 'tokens', label: 'Tokens' },
   { id: 'funding', label: 'Funding' },
   { id: 'lifecycle', label: 'Lifecycle' },
+  { id: 'metadata', label: 'Metadata' },
 ]
 
 function getBatchedResult<T>(results: BatchedReadResult[] | undefined, index: number) {
@@ -1975,6 +1976,172 @@ function isAddressLike(value: string): value is Address {
   return /^0x[a-fA-F0-9]{40}$/.test(value)
 }
 
+const URI_SETTER_ROLE = keccak256(toBytes('URI_SETTER_ROLE')) as `0x${string}`
+
+function MetadataSection({
+  permissions,
+}: {
+  permissions: Pick<AdminPermissions, 'hasCartonAdminRole'>
+}) {
+  const carton = CONTRACT_ADDRESSES.CARTON
+  const { execute, isBusy } = useAdminWrite()
+  const { address } = useAccount()
+
+  const [variantCount, setVariantCount] = useState('')
+  const [grantAddress, setGrantAddress] = useState('')
+  const [newUri, setNewUri] = useState('')
+
+  const normalizedGrantAddress = useMemo(() => {
+    const trimmed = grantAddress.trim()
+    return isAddressLike(trimmed) ? (trimmed as Address) : undefined
+  }, [grantAddress])
+
+  const { data: metadataData, refetch: refetchMetadata } = useReadContracts({
+    contracts: [
+      { address: carton, abi: CARTON_ABI, functionName: 'metadataVariantCount' as const },
+      { address: carton, abi: CARTON_ABI, functionName: 'uri' as const, args: [0n] as const },
+      ...(address ? [{ address: carton, abi: CARTON_ABI, functionName: 'hasRole' as const, args: [URI_SETTER_ROLE, address] as const }] : []),
+    ],
+    query: { refetchInterval: 10_000 },
+  })
+
+  const currentVariantCount = getBatchedResult<number>(metadataData, 0)
+  const currentUri = getBatchedResult<string>(metadataData, 1)
+  const hasUriSetterRole = Boolean(getBatchedResult<boolean>(metadataData, 2))
+
+  const handleSetVariantCount = () => {
+    const count = parseInt(variantCount, 10)
+    if (!Number.isFinite(count) || count < 0 || count > 65535) {
+      toast.error('Ingresa un número entre 0 y 65535.')
+      return
+    }
+    void execute(
+      { address: carton, abi: CARTON_ABI, functionName: 'setMetadataVariantCount', args: [count] },
+      {
+        toastId: 'admin-set-variant-count',
+        pendingMessage: 'Seteando cantidad de variantes...',
+        successMessage: 'Cantidad de variantes actualizada.',
+        revertedMessage: 'Rechazado en cadena.',
+        logLabel: 'Admin set metadata variant count',
+        onSuccess: () => { void refetchMetadata() },
+      },
+    )
+  }
+
+  const handleGrantUriSetterRole = () => {
+    if (!normalizedGrantAddress) {
+      toast.error('Dirección inválida.')
+      return
+    }
+    void execute(
+      { address: carton, abi: CARTON_ABI, functionName: 'grantRole', args: [URI_SETTER_ROLE, normalizedGrantAddress] },
+      {
+        toastId: `admin-grant-uri-setter-${normalizedGrantAddress}`,
+        pendingMessage: 'Otorgando URI_SETTER_ROLE...',
+        successMessage: 'URI_SETTER_ROLE otorgado.',
+        revertedMessage: 'Rechazado en cadena.',
+        logLabel: 'Admin grant carton URI setter role',
+        onSuccess: () => { void refetchMetadata() },
+      },
+    )
+  }
+
+  const handleSetUri = () => {
+    if (!newUri.trim()) {
+      toast.error('Ingresa una URI.')
+      return
+    }
+    void execute(
+      { address: carton, abi: CARTON_ABI, functionName: 'setURI', args: [newUri.trim()] },
+      {
+        toastId: 'admin-set-uri',
+        pendingMessage: 'Actualizando URI...',
+        successMessage: 'URI actualizada.',
+        revertedMessage: 'Rechazado en cadena.',
+        logLabel: 'Admin set carton URI',
+        onSuccess: () => { void refetchMetadata() },
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Metadata del Cartón</CardTitle>
+        <CardDescription>Configurá la cantidad de variantes y la URI base de los tokens.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-2 text-sm md:grid-cols-2">
+          <div>
+            <span className="font-medium">metadataVariantCount:</span>{' '}
+            <span className="font-mono">{currentVariantCount !== undefined ? String(currentVariantCount) : '—'}</span>
+          </div>
+          <div>
+            <span className="font-medium">URI actual:</span>{' '}
+            <span className="font-mono break-all">{currentUri || '(vacía)'}</span>
+          </div>
+          <div>
+            <span className="font-medium">Wallet tiene URI_SETTER_ROLE:</span>{' '}
+            <span className={hasUriSetterRole ? 'text-green-600' : 'text-red-600'}>{String(hasUriSetterRole)}</span>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Setear cantidad de variantes (DEFAULT_ADMIN_ROLE)</div>
+          <div className="flex gap-2 items-center">
+            <Input
+              type="number"
+              min={0}
+              max={65535}
+              value={variantCount}
+              onChange={(e) => setVariantCount(e.target.value)}
+              placeholder="ej: 48"
+              className="max-w-40"
+            />
+            <Button onClick={handleSetVariantCount} disabled={!permissions.hasCartonAdminRole || !variantCount || isBusy}>
+              {isBusy ? 'Enviando...' : 'Setear variantes'}
+            </Button>
+          </div>
+          {!permissions.hasCartonAdminRole && (
+            <div className="text-sm text-red-600">Requiere `Carton.DEFAULT_ADMIN_ROLE`.</div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Otorgar URI_SETTER_ROLE (DEFAULT_ADMIN_ROLE)</div>
+          <div className="flex gap-2 items-center">
+            <Input
+              value={grantAddress}
+              onChange={(e) => setGrantAddress(e.target.value)}
+              placeholder="0x... (wallet que podrá setear la URI)"
+            />
+            <Button onClick={handleGrantUriSetterRole} disabled={!permissions.hasCartonAdminRole || !normalizedGrantAddress || isBusy}>
+              {isBusy ? 'Enviando...' : 'Otorgar rol'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Setear URI base (URI_SETTER_ROLE)</div>
+          <div className="flex gap-2 items-center">
+            <Input
+              value={newUri}
+              onChange={(e) => setNewUri(e.target.value)}
+              placeholder="https://metadata.example.com/{id}.json"
+            />
+            <Button onClick={handleSetUri} disabled={!hasUriSetterRole || !newUri.trim() || isBusy}>
+              {isBusy ? 'Enviando...' : 'Setear URI'}
+            </Button>
+          </div>
+          {!hasUriSetterRole && (
+            <div className="text-sm text-yellow-600">Otorgá URI_SETTER_ROLE a tu wallet antes de setear la URI.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function MinterRoleSection({
   permissions,
 }: {
@@ -2837,6 +3004,7 @@ export function AdminPage() {
       {activeSection === 'tokens' && <TokenSupportSection permissions={permissions} />}
       {activeSection === 'funding' && <TreasuryFundingSection permissions={permissions} />}
       {activeSection === 'lifecycle' && <CloseTournamentSection permissions={permissions} />}
+      {activeSection === 'metadata' && <MetadataSection permissions={permissions} />}
     </div>
   )
 }
