@@ -24,6 +24,7 @@ import { useUserBalance } from '../hooks/useBalance'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
 import { mapCombinedPredictionErrorToMessage } from '../lib/transaction-errors'
 import { appPublicClient } from '../lib/publicClient'
+import { DeadlineBanner } from '../components/DeadlineBanner'
 
 const SHOW_GROUP_STRIP = true
 
@@ -890,15 +891,6 @@ function PredictionsPage() {
     && selectedCartonWinnersSubmitted
   )
 
-  const formatCountdown = (secs?: number) => {
-    if (secs === undefined) return '—'
-    const s = Math.max(0, secs)
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const ss = s % 60
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
-  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -930,31 +922,7 @@ function PredictionsPage() {
       )}
 
       {/* ─── Deadline banner ─── */}
-      <div
-        className="flex flex-col gap-1.5 rounded-lg px-4 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"
-        role="status"
-        aria-live="polite"
-        style={{
-          background: !hasDeadlineConfigured ? 'rgba(255,214,0,0.08)' : isExpired ? 'rgba(255,77,109,0.1)' : 'rgba(255,214,0,0.08)',
-          border: `1px solid ${!hasDeadlineConfigured ? 'rgba(255,214,0,0.2)' : isExpired ? 'rgba(255,77,109,0.25)' : 'rgba(255,214,0,0.2)'}`,
-          color: isExpired ? 'var(--accent-red)' : 'var(--accent-gold)',
-        }}
-      >
-        <span>
-          {hasDeadlineConfigured && deadlineValue !== undefined ? (
-            isExpired
-              ? `🔒 Cerrado · ${new Date(deadlineValue * 1000).toLocaleDateString()}`
-              : `⏱ Cierra el ${new Date(deadlineValue * 1000).toLocaleDateString()}`
-          ) : (
-            '⚠ Deadline no configurado'
-          )}
-        </span>
-        {!isExpired && remaining !== undefined && (
-          <span className="text-xs sm:text-sm" style={{ fontFamily: 'var(--font-mono-custom)', fontWeight: 600 }}>
-            {formatCountdown(remaining)}
-          </span>
-        )}
-      </div>
+      <DeadlineBanner deadline={deadline} />
 
       {gasReadinessNotice && (
         <div

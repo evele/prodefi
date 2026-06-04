@@ -1284,3 +1284,66 @@ exports.mercadoPagoWebhookProduction = onRequest(
 
 exports.mintCartonTestnet = createMintHandler(TESTNET_MINT_CONFIG)
 exports.mintCartonMainnet = createMintHandler(MAINNET_MINT_CONFIG)
+
+const CARTON_METADATA_ABI = [
+  {
+    type: 'function',
+    name: 'variantByTokenId',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint16' }],
+  },
+]
+
+const CARTON_METADATA_IMAGE_BASE =
+  'https://storage.googleapis.com/prodefi-f2237.appspot.com/carton-metadata/images'
+
+async function cartonMetadataHandler(req, res) {
+  res.set('Cache-Control', 'public, max-age=300')
+
+  const rawId = req.path.replace(/^\//, '') || parseOptionalString(req.query?.id)
+  if (!rawId) {
+    res.status(400).json({ error: 'missing-token-id' })
+    return
+  }
+
+  let tokenId
+  try {
+    tokenId = BigInt(rawId.startsWith('0x') || rawId.startsWith('0X') ? rawId : `0x${rawId}`)
+    if (tokenId < 0n) throw new Error('negative')
+  } catch {
+    res.status(400).json({ error: 'invalid-token-id' })
+    return
+  }
+
+  let variant = 0
+  try {
+    const client = createPublicClient({
+      chain: base,
+      transport: http('https://mainnet.base.org'),
+    })
+    const result = await client.readContract({
+      address: MAINNET_MINT_CONFIG.cartonAddressParam.value(),
+      abi: CARTON_METADATA_ABI,
+      functionName: 'variantByTokenId',
+      args: [tokenId],
+    })
+    variant = Number(result)
+  } catch (error) {
+    logger.warn('carton metadata variant lookup failed', { tokenId: tokenId.toString(), error: serializeError(error) })
+  }
+
+  res.status(200).json({
+    name: `Cartón Prodefi #${tokenId.toString()}`,
+    description: 'Cartón del Prodefi Mundial 2026.',
+    image: `${CARTON_METADATA_IMAGE_BASE}/variant-${variant}.png`,
+    attributes: [
+      { trait_type: 'Variant', value: String(variant) },
+    ],
+  })
+}
+
+exports.cartonMetadata = onRequest(
+  { cors: true, invoker: 'public' },
+  cartonMetadataHandler
+)

@@ -19,6 +19,7 @@ import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction 
 import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
 import { PRIZE_BANDS, getBandAmount } from '../lib/prize-payout'
 import { Ticket } from 'lucide-react'
+import { DeadlineBanner } from '../components/DeadlineBanner'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -564,10 +565,12 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   const formatCountdown = (secs?: number) => {
     if (secs === undefined) return '—'
     const s = Math.max(0, secs)
-    const h = Math.floor(s / 3600)
+    const d = Math.floor(s / 86400)
+    const h = Math.floor((s % 86400) / 3600)
     const m = Math.floor((s % 3600) / 60)
     const ss = s % 60
     const pad = (n: number) => n.toString().padStart(2, '0')
+    if (d > 0) return `${d}d ${pad(h)}h ${pad(m)}m ${pad(ss)}s`
     return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
   }
 
@@ -718,23 +721,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     <div className="mx-auto max-w-2xl space-y-6">
 
       {/* ─── Deadline banner ─── */}
-      {deadline !== undefined && deadline > 0n && (
-        <div
-          className="rounded-lg px-4 py-2.5 flex items-center gap-2 text-sm"
-          style={{
-            background: isExpired ? 'rgba(255,77,109,0.1)' : 'rgba(255,214,0,0.08)',
-            border: `1px solid ${isExpired ? 'rgba(255,77,109,0.25)' : 'rgba(255,214,0,0.2)'}`,
-            color: isExpired ? 'var(--accent-red)' : 'var(--accent-gold)',
-          }}
-        >
-          <span>{isExpired ? '🔒' : '⏱'}</span>
-          <span>
-            {isExpired
-              ? `Predicciones cerradas · ${new Date(Number(deadline) * 1000).toLocaleDateString()}`
-              : `Cierra en ${formatCountdown(remaining)}`}
-          </span>
-        </div>
-      )}
+      <DeadlineBanner deadline={deadline} />
 
       {/* ─── Prize Pool Hero ─── */}
       {tournamentId > 0n && (
@@ -831,7 +818,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
         }}
         arsPriceLabel={ARS_CARTON_PRICE_LABEL}
         usdcPriceLabel={priceDisplay}
-        walletAddressLabel={normalizedAddress ?? 'Wallet no conectada'}
+        walletAddressLabel={normalizedAddress ? `${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}` : 'Wallet no conectada'}
         arsActionLabel="Comprar con Mercado Pago"
         onArsCheckout={() => { void handleArsCheckout() }}
         isCreatingArsOrder={isCreatingArsOrder}

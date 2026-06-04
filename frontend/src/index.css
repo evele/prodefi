@@ -165,3 +165,8 @@
 .glow-gold {
   box-shadow: var(--glow-gold);
 }
+
+@keyframes marquee-bounce {
+  from { margin-left: 0; transform: translateX(0); }
+  to   { margin-left: 100%; transform: translateX(-100%); }
+}
