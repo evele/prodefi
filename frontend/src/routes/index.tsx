@@ -555,24 +555,6 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     functionName: 'submissionDeadline',
     query: { refetchInterval: 10000, refetchOnWindowFocus: false },
   })
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
-  useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
-    return () => clearInterval(id)
-  }, [])
-  const remaining = useMemo(() => (deadline ? Number(deadline) - now : undefined), [deadline, now])
-  const isExpired = remaining !== undefined && remaining <= 0
-  const formatCountdown = (secs?: number) => {
-    if (secs === undefined) return '—'
-    const s = Math.max(0, secs)
-    const d = Math.floor(s / 86400)
-    const h = Math.floor((s % 86400) / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const ss = s % 60
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    if (d > 0) return `${d}d ${pad(h)}h ${pad(m)}m ${pad(ss)}s`
-    return `${pad(h)}h ${pad(m)}m ${pad(ss)}s`
-  }
 
   const usdcPoolDisplay = usdcPrizePool !== undefined
     ? `${Number(formatUnits(usdcPrizePool, 6)).toFixed(2)} USDC`
