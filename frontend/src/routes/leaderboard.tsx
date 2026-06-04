@@ -413,7 +413,7 @@ function LeaderboardPage() {
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
           {isFinalLeaderboard
             ? 'Tabla final basada en los puestos publicados onchain'
-            : 'Tabla provisional calculada en frontend con los resultados cargados hasta ahora'}
+            : 'Tabla provisoria'}
         </p>
       </div>
 

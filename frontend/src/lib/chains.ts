@@ -14,6 +14,7 @@ export const appMulticall3Address = '0xcA11bde05977b3631167028862bE2a173976CA11'
 export const appChainId = readNumberEnv('VITE_CHAIN_ID', 31337)
 export const appRpcUrl = import.meta.env.VITE_RPC_URL || defaultRpcUrl
 export const isLocalAppChain = appChainId === 31337
+export const isDevOrTestChain = appChainId === 31337 || appChainId === 84532
 
 function readRpcHost(rpcUrl: string): string {
   try {

@@ -12,7 +12,7 @@ import { useAccount } from 'wagmi'
 import { toast } from 'sonner'
 import type { Abi, Address } from 'viem'
 import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
-import { hasOpenfortGasSponsorship } from '../lib/chains'
+import { hasOpenfortGasSponsorship, isDevOrTestChain } from '../lib/chains'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
 import { computeTeamsHash, teams2026, teamsById } from '../lib/teams'
 import { teams2026Config } from '../lib/teams2026.config'
@@ -760,7 +760,7 @@ function PredictionsPage() {
         eyebrow: hasAnyOwnedCartons ? 'Otro torneo activo' : 'Sin cartones',
         title: hasAnyOwnedCartons ? 'Esta wallet no tiene cartones del torneo activo.' : 'Esta wallet todavia no tiene cartones.',
         detail: hasAnyOwnedCartons
-          ? 'Tus cartones existentes pertenecen a otro torneo. Esta pantalla solo edita el torneo activo expuesto por el frontend.'
+          ? 'Tus cartones existentes pertenecen a otro torneo. Esta pantalla solo edita el torneo activo.'
           : 'Compra uno primero y luego vuelve aquí para completar partidos y top 4.',
         tone: 'neutral',
         actionLabel: 'Ir al inicio',
@@ -1166,7 +1166,7 @@ function PredictionsPage() {
                 {completedGamesCount}/{games.length} completos
               </span>
             )}
-            {import.meta.env.DEV && (
+            {isDevOrTestChain && (
               <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={selectedCartonGamesSubmitted || isExpired}>
                 Aleatorio
               </Button>

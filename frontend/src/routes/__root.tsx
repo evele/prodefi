@@ -37,7 +37,7 @@ function RootLayout() {
 
           {/* Desktop: nav + balances + connect */}
           <div className="hidden md:flex items-center gap-5">
-            {isConnected && (
+            {import.meta.env.DEV && isConnected && (
               <div
                 className="flex items-center gap-3 text-xs font-mono"
                 style={{ color: 'var(--text-secondary)' }}

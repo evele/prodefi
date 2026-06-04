@@ -15,6 +15,8 @@ export function useUserBalance() {
   const hasLoadedBalancesRef = useRef(false)
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return
+
     if (!isConnected || !userAddress) {
       setEthBalance(undefined)
       setUsdcRawBalance(undefined)
