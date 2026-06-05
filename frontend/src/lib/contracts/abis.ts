@@ -2831,7 +2831,7 @@ export const PREDICTIONS_ABI = [
   },
   {
     "type": "error",
-    "name": "BatchResultsOnlyOnAnvil",
+    "name": "BatchResultsNotAllowedOnChain",
     "inputs": []
   },
   {
