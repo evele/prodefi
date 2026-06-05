@@ -65,6 +65,30 @@ export function formatFixtureKickoffTime(kickoffEt?: string, language = getFixtu
   }).format(new Date(kickoffEt))
 }
 
+export function buildGoogleCalendarUrl(
+  team1Name: string,
+  team2Name: string,
+  kickoffEt?: string,
+  venue?: string,
+): string | null {
+  if (!kickoffEt) return null
+
+  const startDate = new Date(kickoffEt)
+  const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000)
+
+  function toGoogleFormat(d: Date): string {
+    return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  }
+
+  const text = encodeURIComponent(`${team1Name} vs ${team2Name} — Prodefi Mundial 2026`)
+  const details = encodeURIComponent(`Partido de la Copa del Mundo 2026: ${team1Name} vs ${team2Name}`)
+  const dates = `${toGoogleFormat(startDate)}/${toGoogleFormat(endDate)}`
+  const ctz = encodeURIComponent('America/Argentina/Buenos_Aires')
+  const location = venue ? `&location=${encodeURIComponent(venue)}` : ''
+
+  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}&ctz=${ctz}${location}`
+}
+
 export function getFixtureKickoffDayKey(kickoffEt?: string, language = getFixtureLanguage()) {
   if (!kickoffEt) return null
 
