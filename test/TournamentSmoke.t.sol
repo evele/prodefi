@@ -145,7 +145,7 @@ contract TournamentSmokeTest is BaseTest {
 
         vm.chainId(1);
         vm.prank(admin);
-        vm.expectRevert(Predictions.BatchResultsOnlyOnAnvil.selector);
+        vm.expectRevert(Predictions.BatchResultsNotAllowedOnChain.selector);
         predictions.setResultsBatch(gameIds, team1Goals, team2Goals);
     }
 

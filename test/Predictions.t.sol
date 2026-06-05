@@ -1133,7 +1133,7 @@ contract PredictionsTest is Test {
         uint8[] memory team2Goals = new uint8[](1);
         team2Goals[0] = 1;
 
-        vm.expectRevert(Predictions.BatchResultsOnlyOnAnvil.selector);
+        vm.expectRevert(Predictions.BatchResultsNotAllowedOnChain.selector);
         preds.setResultsBatch(gameIds, team1Goals, team2Goals);
     }
 

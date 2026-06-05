@@ -50,7 +50,7 @@ contract Predictions is Ownable {
     error TournamentClosedForCorrections();
     error TournamentSalesStillOpen();
     error SubmissionWindowStillOpen();
-    error BatchResultsOnlyOnAnvil();
+    error BatchResultsNotAllowedOnChain();
     error InvalidTournamentId();
     error InvalidExpectedEntries();
     error ExpectedEntriesMismatch();
@@ -473,7 +473,7 @@ contract Predictions is Ownable {
         external
         onlyOwner
     {
-        if (block.chainid != 31337) revert BatchResultsOnlyOnAnvil();
+        if (block.chainid != 31337 && block.chainid != 84532) revert BatchResultsNotAllowedOnChain();
         if (gameIds.length != team1Goals.length || gameIds.length != team2Goals.length) revert ArrayLengthMismatch();
 
         _revertIfTournamentSalesOpen();
