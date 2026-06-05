@@ -1,0 +1,21 @@
+{
+  "projects": {
+    "prodefi": "prodefi-f2237"
+  },
+  "targets": {
+    "prodefi-f2237": {
+      "hosting": {
+        "landing": [
+          "prodefi-f2237"
+        ],
+        "frontend-test": [
+          "test-prodefi-front"
+        ],
+        "frontend-prod": [
+          "app-prodefi"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

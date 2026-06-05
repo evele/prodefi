@@ -1,16 +1,19 @@
 # Compiler files
 cache/
 out/
-lib/
+/lib/
 node_modules/
+landing/site/dist/
+landing/site/.astro/
 
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
-
-# Docs
-docs/
+# Foundry broadcast artifacts
+broadcast/
 
 # Dotenv file
 .env
+
+# Firebase local state and logs
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+landing/site/firebase-debug.log

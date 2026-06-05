@@ -1,0 +1,43 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import RulesPage from '../components/RulesPage.astro'
+import { rulesContent } from '../data/rules-content'
+
+const content = rulesContent.es
+
+const breadcrumbStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Inicio',
+      item: 'https://prodefi.online/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: content.hero.eyebrow,
+      item: 'https://prodefi.online/reglas/',
+    },
+  ],
+}
+
+const alternates = [
+  { href: '/reglas/', hrefLang: 'es' },
+  { href: '/en/rules/', hrefLang: 'en' },
+  { href: '/reglas/', hrefLang: 'x-default' },
+]
+---
+
+<BaseLayout
+  title={content.page.title}
+  description={content.page.description}
+  structuredData={breadcrumbStructuredData}
+  lang="es"
+  ogLocale="es_AR"
+  alternates={alternates}
+>
+  <RulesPage content={content} />
+</BaseLayout>

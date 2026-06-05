@@ -1,0 +1,104 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "hosting": [
+    {
+      "target": "landing",
+      "public": "landing/site/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "predeploy": [
+        "npm --prefix landing/site run build"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/waitlist",
+          "function": {
+            "functionId": "waitlist",
+            "region": "southamerica-east1"
+          }
+        }
+      ]
+    },
+    {
+      "target": "frontend-test",
+      "public": "frontend/dist-test",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "predeploy": [
+        "npm --prefix frontend run build:hosting:test"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/createOrder",
+          "function": {
+            "functionId": "createOrderTest",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "/api/getOrderStatus",
+          "function": {
+            "functionId": "getOrderStatus",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "frontend-prod",
+      "public": "frontend/dist-prod",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "predeploy": [
+        "npm --prefix frontend run build:hosting:prod"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/createOrder",
+          "function": {
+            "functionId": "createOrderProduction",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "/api/getOrderStatus",
+          "function": {
+            "functionId": "getOrderStatus",
+            "region": "southamerica-east1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
+}

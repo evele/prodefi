@@ -1,66 +1,78 @@
-## Foundry
+# ProDefi
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Prediction tournament platform built with Solidity, Foundry, and React.
 
-Foundry consists of:
+## Overview
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+ProDefi sells tournament prediction cards as ERC-1155 tokens. Users buy a carton, submit match and winner predictions, admins load official results, and `Treasury` manages prize distribution and claims.
 
-## Documentation
+Current product constraints:
 
-https://book.getfoundry.sh/
+- Carton purchases are product-facing `USDC` only.
+- `Predictions` is tournament-scoped.
+- `Treasury` supports multi-asset internals, but the product flow is currently USDC-first.
+- Admin-only result loading and leaderboard publication live in the dev admin app.
 
-## Usage
+## Main Components
 
-### Build
+- `src/Carton.sol` - ERC-1155 carton contract, mint/purchase flows, treasury integration.
+- `src/Predictions.sol` - game predictions, winner predictions, scoring, final positions.
+- `src/Treasury.sol` - tournament sales closure, prize pools, finalization, and claims.
+- `frontend/` - user-facing React app.
+- `admin/` - dev admin React app for lifecycle and scoring operations.
+- `landing/site/` - production landing site source.
 
-```shell
-$ forge build
+## Common Commands
+
+### Contracts
+
+```bash
+forge build
+forge test
+forge test -vvv
+forge fmt
+anvil
+forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
-### Test
+### Frontend
 
-```shell
-$ forge test
+```bash
+cd frontend
+pnpm dev
+pnpm build
 ```
 
-### Format
+### Admin
 
-```shell
-$ forge fmt
+```bash
+cd admin
+pnpm dev
+pnpm dev:openfort
+pnpm build
+pnpm build:openfort
 ```
 
-### Gas Snapshots
+## Project Layout
 
-```shell
-$ forge snapshot
-```
+- `src/` - Solidity contracts.
+- `test/` - Foundry tests.
+- `script/` - deploy and helper scripts.
+- `frontend/` - user app.
+- `admin/` - dev admin app.
+- `docs/plans/` - active focused plans that should not live in root.
+- `docs/research/` - research/reference notes.
+- `docs/archive/` - historical docs kept only for reference.
 
-### Anvil
+## Canonical Root Docs
 
-```shell
-$ anvil
-```
+- `AGENTS.md` - repo workflow, conventions, and contributor instructions.
+- `DEVELOPMENT_PLAN.md` - active roadmap, pending work, and implementation notes.
+- `SMOKE_TEST_CHECKLIST.md` - QA template for environment-specific validation runs.
+- `TOURNAMENT_OPERATIONS_CHECKLIST.md` - manual tournament operations checklist.
 
-### Deploy
+## Important Notes
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+- Admin operations live in the separate `admin/` app and are not part of the public frontend build.
+- Team lookups in the frontend should use `teamsById` or a memoized ID index, not repeated linear `find()` calls.
+- Review `knowledge/openfort.md` before changing Openfort integration.

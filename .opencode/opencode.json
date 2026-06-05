@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "firebase": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "firebase-tools@latest",
+        "mcp",
+        "--dir",
+        "/home/compu/Proyectos/prodefi"
+      ],
+      "enabled": false
+    },
+    "mercadopago": {
+      "type": "remote",
+      "url": "https://mcp.mercadopago.com/mcp",
+      "oauth": {
+        "scope": "read write offline_access"
+      },
+      "enabled": true
+    },
+    "openfort-docs": {
+      "type": "remote",
+      "url": "https://www.openfort.io/api/mcp",
+      "enabled": true
+    }
+  }
+}
