@@ -21,6 +21,7 @@ export function TeamWinnerSelector({
   disabled,
   readOnlyAppearance = false,
   onChange,
+  pointsEarned,
 }: {
   label: string
   teams: Team[]
@@ -29,6 +30,7 @@ export function TeamWinnerSelector({
   disabled: boolean
   readOnlyAppearance?: boolean
   onChange: (teamId: number) => void
+  pointsEarned?: number
 }) {
   const availableTeams = useMemo(
     () => teams
@@ -171,13 +173,26 @@ export function TeamWinnerSelector({
           </div>
         </div>
         {selectedTeam ? (
-          <div
-            className="flex items-center gap-4 rounded-full px-2.5 py-1 sm:ml-auto"
-            style={{ background: 'rgba(0,230,118,0.08)', color: 'var(--accent-green)' }}
-          >
-            <span className={`fi fi-${teamsFlagById[selectedTeam.id]}`} />
-            <span className="text-xs font-medium uppercase tracking-wide">Confirmado</span>
-          </div>
+          pointsEarned !== undefined ? (
+            <div
+              className="flex items-center gap-4 rounded-full px-2.5 py-1 sm:ml-auto text-xs font-semibold"
+              style={{
+                background: pointsEarned > 0 ? 'rgba(0,230,118,0.08)' : 'rgba(255,255,255,0.04)',
+                color: pointsEarned > 0 ? 'var(--accent-green)' : 'var(--text-secondary)',
+                border: `1px solid ${pointsEarned > 0 ? 'rgba(0,230,118,0.18)' : 'rgba(255,255,255,0.08)'}`,
+              }}
+            >
+              {pointsEarned} pts
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-4 rounded-full px-2.5 py-1 sm:ml-auto"
+              style={{ background: 'rgba(0,230,118,0.08)', color: 'var(--accent-green)' }}
+            >
+              <span className={`fi fi-${teamsFlagById[selectedTeam.id]}`} />
+              <span className="text-xs font-medium uppercase tracking-wide">Confirmado</span>
+            </div>
+          )
         ) : (
           <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>
             Sin equipo

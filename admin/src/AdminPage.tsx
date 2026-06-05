@@ -1228,7 +1228,7 @@ function TreasuryFundingSection({
 
   const fundingContracts = useMemo(() => {
     const contracts: BatchedReadContract[] = [
-      { address: treasury, abi: TREASURY_ABI, functionName: 'reserveBps', args: [] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'RESERVE_BPS', args: [] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'salesClosed', args: [parsedTournamentId] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'tournamentFinalized', args: [parsedTournamentId] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'getPrizePool', args: [parsedTournamentId, tokenAddress] },

@@ -54,6 +54,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   const [usdcPrizePool, setUsdcPrizePool] = useState<bigint>()
   const [cartonsUser, setCartonsUser] = useState<bigint[]>([])
   const [cartonTournamentIds, setCartonTournamentIds] = useState<bigint[]>([])
+  const [isSalesClosed, setIsSalesClosed] = useState<boolean>()
   const [usdcPriceLoading, setUsdcPriceLoading] = useState(true)
 
   const refetchPurchaseReads = useCallback(async () => {
@@ -84,19 +85,30 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
         : Promise.resolve(0n),
     ])
 
-    const nextPrizePool = nextTournamentId > 0n
-      ? await appPublicClient.readContract({
-          address: CONTRACT_ADDRESSES.TREASURY,
-          abi: TREASURY_ABI,
-          functionName: 'getPrizePool',
-          args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
-        })
-      : 0n
+    const [nextPrizePool, nextSalesClosed] = await Promise.all([
+      nextTournamentId > 0n
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'getPrizePool',
+            args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
+          })
+        : Promise.resolve(0n),
+      nextTournamentId > 0n
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'salesClosed',
+            args: [nextTournamentId],
+          })
+        : Promise.resolve(false),
+    ])
 
     setActiveTournamentId(nextTournamentId)
     setUsdcPrice(nextPrice)
     setUsdcAllowance(nextAllowance)
     setUsdcPrizePool(nextPrizePool)
+    setIsSalesClosed(nextSalesClosed)
     setUsdcPriceLoading(false)
   }, [isConnected, normalizedAddress])
 
@@ -131,8 +143,6 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   }, [isConnected, normalizedAddress])
 
   useEffect(() => {
-    let cancelled = false
-
     const fetchPurchaseReads = async () => {
       try {
         await refetchPurchaseReads()
@@ -145,17 +155,15 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
             error,
           })
         }
-
-        if (!cancelled) setUsdcPriceLoading(false)
       }
     }
 
     void fetchPurchaseReads()
-
-    return () => {
-      cancelled = true
-    }
   }, [refetchPurchaseReads])
+
+  if (import.meta.env.DEV && isSalesClosed !== undefined) {
+    console.log('[HomePage] salesClosed:', isSalesClosed)
+  }
 
   useEffect(() => {
     void refetchCartonsUser()
@@ -743,6 +751,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
       )}
 
       {/* ─── Buy Carton ─── */}
+      {isSalesClosed !== true && (
       <div
         className="rounded-xl p-5 space-y-4"
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
@@ -791,6 +800,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
           </p>
         )}
       </div>
+      )}
 
       <PurchaseCartonModal
         isOpen={isPurchaseModalOpen}
@@ -798,6 +808,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
           if (isCreatingArsOrder) return
           setIsPurchaseModalOpen(false)
         }}
+        salesClosed={isSalesClosed === true}
         arsPriceLabel={ARS_CARTON_PRICE_LABEL}
         usdcPriceLabel={priceDisplay}
         walletAddressLabel={normalizedAddress ? `${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}` : 'Wallet no conectada'}
