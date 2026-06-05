@@ -51,6 +51,7 @@ contract DeployMainnetScript is Script {
             console.log("Teams hash set:", uint256(teamsHash));
         }
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         Treasury treasury = new Treasury(deployer, address(carton), uint16(reserveBps), emergencyDelay);
         console.log("Treasury deployed at:", address(treasury));
 
