@@ -94,17 +94,17 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       nav: [
         { href: '/', label: 'Inicio' },
         { href: '/#premios', label: 'Premios' },
-        { href: '/#waitlist', label: 'Lista de espera' },
+        { href: 'https://app.prodefi.online', label: 'Ir a la app' },
       ],
-      ctaLabel: 'Sumarme',
+      ctaLabel: 'Ir a la app',
     },
     hero: {
       eyebrow: 'Reglas del Prode Mundial 2026',
       titlePrimary: 'Reglas del Prode',
       titleEditorial: 'Mundial 2026',
       lead:
-        'Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking, empates, premios y condiciones con las que se publica el ranking final de ProDefi. Cuando una edición esté abierta, esta misma página mostrará además su fecha límite, pozo final y distribución de premios en USDC.',
-      primaryCtaLabel: 'Sumarme a la lista de espera',
+        'Esta página concentra las reglas del Prode Mundial 2026: puntaje por partido, ranking, empates, premios y condiciones con las que se publica el ranking final de ProDefi.',
+      primaryCtaLabel: 'Ir a la app',
     },
     sections: {
       participation: {
@@ -217,13 +217,13 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
           label: 'Navegación',
           links: [
             { href: '/', label: 'Inicio' },
-            { href: '/#waitlist', label: 'Lista de espera' },
+            { href: 'https://app.prodefi.online', label: 'Ir a la app' },
             { href: '/reglas', label: 'Reglas' },
           ],
         },
         status: {
           label: 'Estado',
-          lines: ['Waitlist abierta. Reglas y estructura de premios ya publicadas','Hecho en Argentina, con la pelota en los pies.'],
+          lines: ['Ya disponible. Reglas y estructura de premios ya publicadas','Hecho en Argentina, con la pelota en los pies.'],
         },
       },
     },
@@ -239,17 +239,17 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
       nav: [
         { href: '/en/', label: 'Home' },
         { href: '/en/#premios', label: 'Prizes' },
-        { href: '/en/#waitlist', label: 'Waitlist' },
+        { href: 'https://app.prodefi.online', label: 'Go to app' },
       ],
-      ctaLabel: 'Join Waitlist',
+      ctaLabel: 'Go to app',
     },
     hero: {
       eyebrow: 'World Cup 2026 Rules',
       titlePrimary: 'Rules for the',
       titleEditorial: '2026 World Cup',
       lead:
-        'This page gathers the rules for World Cup Predictions 2026: match scoring, leaderboard, ties, prizes and the conditions used to publish ProDefi\'s final standings. Once an edition is open, this page will also show its submission deadline, final pool and USDC prize amounts.',
-      primaryCtaLabel: 'Join the waitlist',
+        'This page gathers the rules for World Cup Predictions 2026: match scoring, leaderboard, ties, prizes and the conditions used to publish ProDefi\'s final standings.',
+      primaryCtaLabel: 'Go to app',
     },
     sections: {
       participation: {
@@ -362,13 +362,13 @@ export const rulesContent: Record<'es' | 'en', RulesContent> = {
           label: 'Navigation',
           links: [
             { href: '/en/', label: 'Home' },
-            { href: '/en/#waitlist', label: 'Waitlist' },
+            { href: 'https://app.prodefi.online', label: 'Go to app' },
             { href: '/en/rules', label: 'Rules' },
           ],
         },
         status: {
           label: 'Status',
-          lines: ['Waitlist is open. Rules and prize structure are already published.', 'Built in Argentina, with the ball at our feet.'],
+          lines: ['Live now. Rules and prize structure are already published.', 'Built in Argentina, with the ball at our feet.'],
         },
       },
     },
