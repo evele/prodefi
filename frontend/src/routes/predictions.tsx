@@ -28,6 +28,7 @@ import { DeadlineBanner } from '../components/DeadlineBanner'
 import { computeGamePoints, computeWinnerPointsPerPosition } from '../lib/scoring'
 
 const SHOW_GROUP_STRIP = true
+const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
 function normalizeCartonParam(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -311,7 +312,11 @@ function PredictionsPage() {
   const hasAnyOwnedCartons = ownedCartons.length > 0
   const hasOwnedCartons = activeTournamentOwnedCartons.length > 0
 
-  const { data: cartonGroupsState, refetch: refetchCartonUsedState } = useAppReadContract({
+  const {
+    data: cartonGroupsState,
+    isLoading: isCartonUsedStateLoading,
+    refetch: refetchCartonUsedState,
+  } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'used',
@@ -319,7 +324,11 @@ function PredictionsPage() {
     query: { enabled: tokenId !== undefined, refetchInterval: 10000, refetchOnWindowFocus: true },
   })
 
-  const { data: cartonWinnersState, refetch: refetchCartonWinnersState } = useAppReadContract({
+  const {
+    data: cartonWinnersState,
+    isLoading: isCartonWinnersStateLoading,
+    refetch: refetchCartonWinnersState,
+  } = useAppReadContract({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
     functionName: 'winnersPredictions',
@@ -417,6 +426,8 @@ function PredictionsPage() {
             refetchSubmittedGames(),
             refetchCartonWinnersState(),
             refetchSubmittedWinners(),
+            refetchOwnedCartonStatusResults(),
+            refetchSelectedCartonTotalPoints(),
           ])
         },
         logLabel: 'Submit full prediction',
@@ -457,6 +468,10 @@ function PredictionsPage() {
     [deadlineValue, hasDeadlineConfigured, now],
   )
   const isExpired = remaining !== undefined && remaining <= 0
+  const selectedCartonSubmissionStateLoading = tokenId !== undefined && (
+    (cartonGroupsState === undefined && isCartonUsedStateLoading)
+    || (cartonWinnersState === undefined && isCartonWinnersStateLoading)
+  )
   const selectedCartonGamesSubmitted = Boolean(cartonGroupsState)
   const selectedCartonWinnersSubmitted = hasWinnersPrediction(cartonWinnersState)
   const normalizedSubmittedGames = useMemo(() => normalizeSubmittedGames(submittedGames), [submittedGames])
@@ -598,7 +613,14 @@ function PredictionsPage() {
     deadline: deadlineValue,
     now,
   })
-  const canEditSelectedCarton = Boolean(isConnected && selectedCartonIsOwned && !isExpired && !hasPartialSubmission)
+  const canEditSelectedCarton = Boolean(
+    isConnected
+    && selectedCartonIsOwned
+    && !isExpired
+    && !hasPartialSubmission
+    && !selectedCartonSubmissionStateLoading
+    && !combinedWrite.isBusy
+  )
   const completedGamesCount = useMemo(
     () => games.filter((game) => game.result[0] !== null && game.result[1] !== null).length,
     [games],
@@ -647,6 +669,7 @@ function PredictionsPage() {
     contracts: ownedCartonStatusContracts,
     query: {
       enabled: ownedCartonStatusContracts.length > 0,
+      refetchInterval: 10000,
       refetchOnWindowFocus: false,
     },
   })
@@ -695,6 +718,10 @@ function PredictionsPage() {
     const run = async () => {
       try {
         if (!onchainTeamsHash) { setTeamsHashStatus('unset'); return }
+        if (onchainTeamsHash === ZERO_BYTES32) {
+          setTeamsHashStatus(isDevOrTestChain ? 'match' : 'unset')
+          return
+        }
         if (!teams2026Config.length) { setTeamsHashStatus('unknown'); return }
         const local = await computeTeamsHash(teams2026Config)
         setTeamsHashStatus(local.toLowerCase() === (onchainTeamsHash as string).toLowerCase() ? 'match' : 'mismatch')
@@ -756,6 +783,7 @@ function PredictionsPage() {
     if (!tokenId) return 'Selecciona un cartón para enviar predicciones.'
     if (!selectedCartonIsWalletOwned) return 'El cartón seleccionado no pertenece a esta wallet.'
     if (!selectedCartonIsOwned) return 'El cartón seleccionado pertenece a otro torneo y no puede editarse desde este motor activo.'
+    if (selectedCartonSubmissionStateLoading) return 'Cargando el estado onchain de este cartón…'
     if (!hasDeadlineConfigured) return DEADLINE_NOT_SET_MESSAGE
     if (isExpired) return 'Las predicciones ya están cerradas para este torneo.'
     if (teamsHashStatus === 'unset') return 'Los equipos no están configurados en cadena aún.'
@@ -882,6 +910,10 @@ function PredictionsPage() {
   })()
 
   const handleCartonChange = (value: string) => {
+    if (combinedWrite.isBusy) {
+      toast.error('Espera a que termine la transacción actual antes de cambiar de cartón.')
+      return
+    }
     navigate({ to: '/predictions', search: { carton: value } })
   }
 
@@ -1011,8 +1043,8 @@ function PredictionsPage() {
           </div>
         ) : (
           <>
-            <Select value={tokenId?.toString()} onValueChange={handleCartonChange}>
-              <SelectTrigger className="w-full sm:max-w-xs">
+            <Select value={tokenId?.toString()} onValueChange={handleCartonChange} disabled={combinedWrite.isBusy}>
+              <SelectTrigger className="w-full sm:max-w-xs" disabled={combinedWrite.isBusy}>
                 <SelectValue placeholder="Selecciona un cartón" />
               </SelectTrigger>
               <SelectContent>
@@ -1023,6 +1055,11 @@ function PredictionsPage() {
                 ))}
               </SelectContent>
             </Select>
+            {combinedWrite.isBusy && (
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Espera a que termine la transacción actual antes de cambiar de cartón.
+              </p>
+            )}
             {tokenId !== undefined && !selectedCartonIsWalletOwned && (
               <p className="text-sm" style={{ color: 'var(--accent-red)' }}>
                 Este cartón no pertenece a la wallet conectada.
@@ -1196,7 +1233,7 @@ function PredictionsPage() {
               </span>
             )}
             {isDevOrTestChain && (
-              <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={selectedCartonGamesSubmitted || isExpired}>
+              <Button variant="ghost" size="sm" onClick={fillRandomScores} disabled={!canEditSelectedCarton || selectedCartonGamesSubmitted}>
                 Aleatorio
               </Button>
             )}

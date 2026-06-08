@@ -10,6 +10,7 @@ import { appChainId, canUseOpenfort, enableOpenfortWalletAuth, openfortEthereumF
 import { OpenfortAuthCallbackHandler } from './OpenfortAuthCallbackHandler'
 import { OpenfortChainSync } from './OpenfortChainSync'
 import { OpenfortDebugPanel } from './OpenfortDebugPanel'
+import { OpenfortProfileSync } from './OpenfortProfileSync'
 import { config } from '../lib/wagmi';
 import '@rainbow-me/rainbowkit/styles.css';
 
@@ -75,6 +76,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             >
               <OpenfortAuthCallbackHandler />
               <OpenfortChainSync />
+              <OpenfortProfileSync />
               <OpenfortDebugPanel />
               <Toaster />
               {children}

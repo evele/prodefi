@@ -3,10 +3,11 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useUser } from '@openfort/react'
 import { useAccount } from 'wagmi'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI, USDC_ABI } from '../lib/contracts'
-import { formatUnits } from 'viem'
+import { formatUnits, getAddress, isAddress, type Address } from 'viem'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
+import { GiftCartonModal, type GiftRecipientVerificationState } from '../components/GiftCartonModal'
 import { PurchaseCartonModal } from '../components/PurchaseCartonModal'
 import { useUserBalance } from '../hooks/useBalance'
 import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
@@ -16,7 +17,8 @@ import { appChainId, canUseOpenfort, hasOpenfortGasSponsorship } from '../lib/ch
 import { createCheckoutOrder, getMercadoPagoCheckoutUrl } from '../lib/orders'
 import { appPublicClient } from '../lib/publicClient'
 import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction } from '../lib/prediction-status'
-import { mapApproveUsdcError, mapBuyCartonError } from '../lib/transaction-errors'
+import { resolveGiftRecipientByWallet } from '../lib/user-profiles'
+import { mapApproveUsdcError, mapBuyCartonError, mapGiftCartonError } from '../lib/transaction-errors'
 import { PRIZE_BANDS, getBandAmount } from '../lib/prize-payout'
 import { Ticket } from 'lucide-react'
 import { DeadlineBanner } from '../components/DeadlineBanner'
@@ -26,6 +28,17 @@ export const Route = createFileRoute('/')({
 })
 
 const ARS_CARTON_PRICE_LABEL = '$2.000'
+const GIFT_INELIGIBLE_MESSAGE = 'Esa wallet todavía no pertenece a un usuario activo de ProDefi.'
+
+function normalizeWalletAddress(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed || !isAddress(trimmed)) return null
+  return getAddress(trimmed)
+}
+
+function createIdleGiftVerificationState(): GiftRecipientVerificationState {
+  return { status: 'idle' }
+}
 
 function HomePage() {
   if (canUseOpenfort) return <OpenfortHomePage />
@@ -34,20 +47,30 @@ function HomePage() {
 }
 
 function OpenfortHomePage() {
-  const { user } = useUser()
+  const { user, getAccessToken } = useUser()
 
-  return <HomePageContent openfortUserId={user?.id} />
+  return <HomePageContent openfortUserId={user?.id} getOpenfortAccessToken={getAccessToken} />
 }
 
-function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
+function HomePageContent({
+  openfortUserId,
+  getOpenfortAccessToken,
+}: {
+  openfortUserId?: string
+  getOpenfortAccessToken?: () => Promise<string | null>
+}) {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const { eth: nativeBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
   const approveWrite = useSimulatedContractWrite()
+  const giftWrite = useSimulatedContractWrite()
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false)
   const [isCreatingArsOrder, setIsCreatingArsOrder] = useState(false)
+  const [giftTokenId, setGiftTokenId] = useState<bigint | null>(null)
+  const [giftRecipientWallet, setGiftRecipientWallet] = useState('')
+  const [giftVerificationState, setGiftVerificationState] = useState<GiftRecipientVerificationState>(createIdleGiftVerificationState)
   const [activeTournamentId, setActiveTournamentId] = useState<bigint>()
   const [usdcPrice, setUsdcPrice] = useState<bigint>()
   const [usdcAllowance, setUsdcAllowance] = useState<bigint>()
@@ -142,6 +165,33 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     return { data: Array.from(nextCartons) }
   }, [isConnected, normalizedAddress])
 
+  const resetGiftFlow = useCallback(() => {
+    setGiftTokenId(null)
+    setGiftRecipientWallet('')
+    setGiftVerificationState(createIdleGiftVerificationState())
+  }, [])
+
+  const closeGiftModal = useCallback(() => {
+    if (giftWrite.isBusy) return
+    resetGiftFlow()
+  }, [giftWrite.isBusy, resetGiftFlow])
+
+  const openGiftModal = useCallback((tokenId: bigint) => {
+    if (!getOpenfortAccessToken) {
+      toast.error('Necesitas una sesión activa de ProDefi para regalar cartones.')
+      return
+    }
+
+    if (giftWrite.isBusy) {
+      toast.error('Espera a que termine la transferencia actual antes de abrir otro regalo.')
+      return
+    }
+
+    setGiftTokenId(tokenId)
+    setGiftRecipientWallet('')
+    setGiftVerificationState(createIdleGiftVerificationState())
+  }, [getOpenfortAccessToken, giftWrite.isBusy])
+
   useEffect(() => {
     const fetchPurchaseReads = async () => {
       try {
@@ -207,6 +257,24 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   })()
 
   const canBuy = buyBlockedMessage === null
+
+  const normalizedGiftRecipient = useMemo(
+    () => normalizeWalletAddress(giftRecipientWallet),
+    [giftRecipientWallet],
+  )
+
+  const giftRecipientIsSelf = Boolean(
+    normalizedAddress
+    && normalizedGiftRecipient
+    && normalizedAddress.toLowerCase() === normalizedGiftRecipient.toLowerCase(),
+  )
+
+  const giftWalletValidationMessage = (() => {
+    if (!giftRecipientWallet.trim()) return null
+    if (!normalizedGiftRecipient) return 'Ingresa una wallet válida para continuar.'
+    if (giftRecipientIsSelf) return 'No puedes regalar un cartón a tu propia wallet.'
+    return null
+  })()
 
   const arsBlockedMessage = (() => {
     if (!isConnected) return 'Debes conectarte primero.'
@@ -543,6 +611,84 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     }
   }
 
+  const verifyGiftRecipient = async () => {
+    if (!getOpenfortAccessToken) {
+      setGiftVerificationState({
+        status: 'error',
+        message: 'Necesitas una sesión activa de ProDefi para verificar wallets.',
+      })
+      return
+    }
+
+    if (!normalizedGiftRecipient) {
+      setGiftVerificationState({
+        status: 'ineligible',
+        message: giftWalletValidationMessage ?? 'Ingresa una wallet válida para continuar.',
+      })
+      return
+    }
+
+    if (giftRecipientIsSelf) {
+      setGiftVerificationState({
+        status: 'ineligible',
+        message: 'No puedes regalar un cartón a tu propia wallet.',
+      })
+      return
+    }
+
+    setGiftVerificationState({ status: 'verifying' })
+
+    try {
+      const accessToken = await getOpenfortAccessToken()
+      if (!accessToken) {
+        throw new Error('missing-access-token')
+      }
+
+      const result = await resolveGiftRecipientByWallet({ walletAddress: normalizedGiftRecipient }, accessToken)
+      if (result.eligible) {
+        setGiftVerificationState({ status: 'eligible', walletAddress: normalizedGiftRecipient })
+        return
+      }
+
+      setGiftVerificationState({
+        status: 'ineligible',
+        message: GIFT_INELIGIBLE_MESSAGE,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'gift-recipient-lookup-failed'
+      const feedback = message === 'invalid-session' || message === 'missing-access-token'
+        ? 'Tu sesión de ProDefi venció. Vuelve a entrar para seguir.'
+        : 'No pudimos verificar la wallet de destino. Intenta de nuevo.'
+
+      setGiftVerificationState({ status: 'error', message: feedback })
+    }
+  }
+
+  const giftCarton = () => {
+    if (!giftTokenId || !normalizedAddress || giftVerificationState.status !== 'eligible') return
+
+    void giftWrite.simulateAndSend(
+      {
+        address: CONTRACT_ADDRESSES.CARTON,
+        abi: CARTON_ABI,
+        functionName: 'safeTransferFrom',
+        args: [normalizedAddress, giftVerificationState.walletAddress as Address, giftTokenId, 1n, '0x'],
+      },
+      {
+        toastId: `gift-carton-${giftTokenId.toString()}`,
+        pendingMessage: `Esperando confirmación del regalo del cartón #${giftTokenId.toString()}…`,
+        successMessage: `Cartón #${giftTokenId.toString()} regalado con éxito.`,
+        revertedMessage: 'La transferencia del cartón fue rechazada en cadena.',
+        mapError: mapGiftCartonError,
+        onSuccess: async () => {
+          await refetchCartonsUser()
+          closeGiftModal()
+        },
+        logLabel: 'Gift carton',
+      },
+    )
+  }
+
   const activeTournamentCartons = useMemo(() => {
     if (!cartonsUser.length || tournamentId === 0n) return []
 
@@ -707,6 +853,11 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     navigate({ to: '/predictions', search: { carton: targetTokenId.toString() } })
   }
 
+  const handleGiftRecipientWalletChange = (value: string) => {
+    setGiftRecipientWallet(value)
+    setGiftVerificationState(createIdleGiftVerificationState())
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
 
@@ -855,6 +1006,19 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
         }
       />
 
+      <GiftCartonModal
+        isOpen={giftTokenId !== null}
+        tokenId={giftTokenId}
+        recipientWallet={giftRecipientWallet}
+        verificationState={giftVerificationState}
+        isSubmitting={giftWrite.isBusy}
+        walletValidationMessage={giftWalletValidationMessage}
+        onRecipientWalletChange={handleGiftRecipientWalletChange}
+        onVerify={() => { void verifyGiftRecipient() }}
+        onConfirm={giftCarton}
+        onClose={closeGiftModal}
+      />
+
       {/* ─── Mis Cartones ─── */}
       {isConnected && (
         <div className="space-y-3">
@@ -929,6 +1093,8 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
                   status={status}
                   prizeStatus={prizeStatus}
                   highlighted={nextActionableCarton?.tokenId === tokenId}
+                  onGift={getOpenfortAccessToken ? () => openGiftModal(tokenId) : undefined}
+                  giftDisabled={giftWrite.isBusy}
                 />
               ))}
             </div>

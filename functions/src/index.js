@@ -1,5 +1,6 @@
 const crypto = require('node:crypto')
 
+const Openfort = require('@openfort/openfort-node').default
 const admin = require('firebase-admin')
 const logger = require('firebase-functions/logger')
 const { defineSecret, defineString } = require('firebase-functions/params')
@@ -30,6 +31,8 @@ const TEST_MINTER_RPC_URL = defineSecret('TEST_MINTER_RPC_URL')
 const TEST_MINTER_ENDPOINT_TOKEN = defineSecret('TEST_MINTER_ENDPOINT_TOKEN')
 const TEST_CARTON_ADDRESS = defineString('TEST_CARTON_ADDRESS')
 const TEST_CHAIN_ID = defineString('TEST_CHAIN_ID')
+const OPENFORT_API_KEY = defineSecret('OPENFORT_API_KEY')
+const OPENFORT_PUBLISHABLE_KEY = defineString('OPENFORT_PUBLISHABLE_KEY')
 
 const MERCADO_PAGO_ACCESS_TOKEN = defineSecret('MERCADO_PAGO_ACCESS_TOKEN')
 const MERCADO_PAGO_SANDBOX_ACCESS_TOKEN = defineSecret('MERCADO_PAGO_SANDBOX_ACCESS_TOKEN')
@@ -93,6 +96,7 @@ const MAINNET_MINT_CONFIG = {
 }
 
 const ORDERS_COLLECTION = 'orders'
+const USER_PROFILES_COLLECTION = 'userProfiles'
 const MERCADO_PAGO_ITEM_TITLE = 'Cartón Prodefi'
 const MERCADO_PAGO_CURRENCY_ID = 'ARS'
 const MERCADO_PAGO_UNIT_PRICE_ARS = 2000
@@ -255,6 +259,232 @@ function parseMintPayload(body) {
 function parseOptionalString(value) {
   if (typeof value !== 'string') return ''
   return value.trim()
+}
+
+function normalizeWalletAddress(value) {
+  if (typeof value !== 'string') return null
+
+  const trimmed = value.trim()
+  if (!trimmed || !isAddress(trimmed)) return null
+  return getAddress(trimmed)
+}
+
+function getWalletLookupKey(address) {
+  return address.toLowerCase()
+}
+
+function parseWalletAddressPayload(body) {
+  const walletAddress = normalizeWalletAddress(body?.walletAddress)
+  if (!walletAddress) {
+    return { error: 'invalid-wallet-address' }
+  }
+
+  return { walletAddress }
+}
+
+function getOpenfortRuntime() {
+  const apiKey = getRequiredString(OPENFORT_API_KEY.value(), 'openfort api key')
+  const publishableKey = getRequiredString(OPENFORT_PUBLISHABLE_KEY.value(), 'openfort publishable key')
+
+  return {
+    openfort: new Openfort(apiKey, { publishableKey }),
+  }
+}
+
+async function verifyOpenfortSession(req, runtime) {
+  const accessToken = getBearerToken(req)
+  if (!accessToken) {
+    return { error: 'missing-access-token' }
+  }
+
+  try {
+    const session = await runtime.openfort.iam.getSession({ accessToken })
+    if (!session) {
+      return { error: 'invalid-session' }
+    }
+
+    return { session }
+  } catch (error) {
+    logger.warn('openfort session verification failed', { error: serializeError(error) })
+    return { error: 'invalid-session' }
+  }
+}
+
+async function walletBelongsToSessionUser(runtime, sessionUserId, walletAddress) {
+  const normalizedWalletLookupKey = getWalletLookupKey(walletAddress)
+
+  try {
+    const accounts = await runtime.openfort.accounts.list({
+      user: sessionUserId,
+      chainType: 'EVM',
+      custody: 'User',
+      address: walletAddress,
+    })
+
+    if (Array.isArray(accounts?.data)) {
+      const hasExactUserAccount = accounts.data.some((account) =>
+        typeof account?.address === 'string' && getWalletLookupKey(account.address) === normalizedWalletLookupKey
+      )
+
+      if (hasExactUserAccount) return true
+    }
+  } catch (error) {
+    logger.warn('openfort account lookup fallback triggered', {
+      error: serializeError(error),
+      openfortUserId: sessionUserId,
+      walletAddress,
+    })
+  }
+
+  const user = await runtime.openfort.iam.users.get(sessionUserId)
+  if (!Array.isArray(user?.linkedAccounts)) return false
+
+  return user.linkedAccounts.some((linkedAccount) =>
+    typeof linkedAccount?.accountId === 'string'
+    && linkedAccount.accountId.trim().toLowerCase() === normalizedWalletLookupKey
+  )
+}
+
+async function upsertOpenfortProfile(req, res) {
+  res.set('Cache-Control', 'no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ ok: false, error: 'method-not-allowed' })
+    return
+  }
+
+  let runtime
+  try {
+    runtime = getOpenfortRuntime()
+  } catch (error) {
+    logger.error('openfort runtime config failed', { error: serializeError(error) })
+    res.status(500).json({ ok: false, error: 'openfort-config-invalid' })
+    return
+  }
+
+  const verifiedSession = await verifyOpenfortSession(req, runtime)
+  if (verifiedSession.error) {
+    res.status(401).json({ ok: false, error: verifiedSession.error })
+    return
+  }
+
+  const parsed = parseWalletAddressPayload(req.body)
+  if (parsed.error) {
+    res.status(400).json({ ok: false, error: parsed.error })
+    return
+  }
+
+  const { walletAddress } = parsed
+  const { session } = verifiedSession
+
+  try {
+    const belongsToUser = await walletBelongsToSessionUser(runtime, session.user.id, walletAddress)
+    if (!belongsToUser) {
+      res.status(403).json({ ok: false, error: 'wallet-not-linked-to-user' })
+      return
+    }
+
+    const walletAddressLower = getWalletLookupKey(walletAddress)
+    const email = normalizeEmail(session.user.email)
+    const profileRef = db.collection(USER_PROFILES_COLLECTION).doc(walletAddressLower)
+
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(profileRef)
+      const profilePatch = {
+        walletAddress,
+        walletAddressLower,
+        openfortUserId: session.user.id,
+        email: email || null,
+        emailNormalized: email || null,
+        isActive: true,
+        updatedAt: FieldValue.serverTimestamp(),
+        lastSeenAt: FieldValue.serverTimestamp(),
+      }
+
+      if (!snapshot.exists) {
+        transaction.create(profileRef, {
+          ...profilePatch,
+          createdAt: FieldValue.serverTimestamp(),
+        })
+        return
+      }
+
+      transaction.set(profileRef, profilePatch, { merge: true })
+    })
+
+    res.status(200).json({ ok: true })
+  } catch (error) {
+    logger.error('openfort profile upsert failed', {
+      error: serializeError(error),
+      walletAddress,
+      openfortUserId: session.user.id,
+    })
+    res.status(500).json({ ok: false, error: 'profile-upsert-failed' })
+  }
+}
+
+async function resolveGiftRecipientByWallet(req, res) {
+  res.set('Cache-Control', 'no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ ok: false, error: 'method-not-allowed' })
+    return
+  }
+
+  let runtime
+  try {
+    runtime = getOpenfortRuntime()
+  } catch (error) {
+    logger.error('openfort runtime config failed', { error: serializeError(error) })
+    res.status(500).json({ ok: false, error: 'openfort-config-invalid' })
+    return
+  }
+
+  const verifiedSession = await verifyOpenfortSession(req, runtime)
+  if (verifiedSession.error) {
+    res.status(401).json({ ok: false, error: verifiedSession.error })
+    return
+  }
+
+  const parsed = parseWalletAddressPayload(req.body)
+  if (parsed.error) {
+    res.status(400).json({ ok: false, error: parsed.error })
+    return
+  }
+
+  try {
+    const walletAddressLower = getWalletLookupKey(parsed.walletAddress)
+    const snapshot = await db.collection(USER_PROFILES_COLLECTION).doc(walletAddressLower).get()
+
+    if (!snapshot.exists) {
+      res.status(200).json({ ok: true, eligible: false, reason: 'not-active-user' })
+      return
+    }
+
+    const data = snapshot.data() || {}
+    if (data.isActive !== true) {
+      res.status(200).json({ ok: true, eligible: false, reason: 'not-active-user' })
+      return
+    }
+
+    res.status(200).json({ ok: true, eligible: true })
+  } catch (error) {
+    logger.error('gift recipient resolution failed', {
+      error: serializeError(error),
+      walletAddress: parsed.walletAddress,
+    })
+    res.status(500).json({ ok: false, error: 'gift-recipient-lookup-failed' })
+  }
 }
 
 function parseCreateOrderPayload(body) {
@@ -473,11 +703,7 @@ function verifyMercadoPagoWebhookSignature(req, secret) {
     .update(manifest)
     .digest('hex')
 
-  const matches = timingSafeEqualHex(expectedSignature, v1)
-  if (!matches) {
-    logger.warn('mp sig debug', { manifest, expectedSignature, v1, ts, requestId })
-  }
-  return matches
+  return timingSafeEqualHex(expectedSignature, v1)
 }
 
 async function fetchMercadoPagoPayment(runtime, paymentId) {
@@ -1000,18 +1226,15 @@ function createWebhookHandler(config) {
   }
 
   if (!verifyMercadoPagoWebhookSignature(req, runtime.webhookSecret)) {
-    // La firma x-signature de MP es inconsistente entre entornos (sandbox /
-    // notification_url por preferencia), asi que no rechazamos por firma:
-    // la autorizacion real es el fetch del pago contra la API de MP (requiere
-    // access token) + el match contra la orden en la DB. Logueamos las piezas
-    // del manifiesto para poder diagnosticar el mismatch real mas adelante.
-    logger.warn('mercado pago webhook signature mismatch (continuing, validating via API)', {
-      paymentId,
-      queryDataId: req.query?.['data.id'] ?? null,
-      bodyDataId: req.body?.data?.id ?? null,
-      hasXRequestId: Boolean(req.get('x-request-id')),
-      hasXSignature: Boolean(req.get('x-signature')),
-    })
+    if (config.requireSignature) {
+      logger.warn('mercado pago webhook signature mismatch', { paymentId })
+      res.status(401).json({ ok: false, error: 'invalid-signature' })
+      return
+    }
+    // En sandbox, MP firma con el secreto de la credencial de test (distinto al
+    // configurado), asi que no rechazamos: la autorizacion real es el fetch del
+    // pago contra la API de MP + el match contra la orden en la DB.
+    logger.warn('mercado pago webhook signature mismatch (test, validating via API)', { paymentId })
   }
 
   let orderRef = null
@@ -1257,6 +1480,24 @@ exports.createOrderProduction = onRequest(
   })
 )
 
+exports.upsertOpenfortProfile = onRequest(
+  {
+    cors: true,
+    invoker: 'public',
+    secrets: [OPENFORT_API_KEY],
+  },
+  upsertOpenfortProfile
+)
+
+exports.resolveGiftRecipientByWallet = onRequest(
+  {
+    cors: true,
+    invoker: 'public',
+    secrets: [OPENFORT_API_KEY],
+  },
+  resolveGiftRecipientByWallet
+)
+
 exports.getOrderStatus = onRequest({ cors: true, invoker: 'public' }, getOrderStatus)
 
 exports.mercadoPagoWebhookTest = onRequest(
@@ -1272,6 +1513,7 @@ exports.mercadoPagoWebhookTest = onRequest(
   },
   createWebhookHandler({
     mintConfig: TESTNET_MINT_CONFIG,
+    requireSignature: false,
     getAccessToken: () => MERCADO_PAGO_SANDBOX_ACCESS_TOKEN.value(),
     getWebhookSecret: () => MERCADO_PAGO_WEBHOOK_SECRET.value(),
   })
@@ -1290,6 +1532,7 @@ exports.mercadoPagoWebhookProduction = onRequest(
   },
   createWebhookHandler({
     mintConfig: MAINNET_MINT_CONFIG,
+    requireSignature: true,
     getAccessToken: () => MERCADO_PAGO_ACCESS_TOKEN.value(),
     getWebhookSecret: () => MERCADO_PAGO_WEBHOOK_SECRET.value(),
   })

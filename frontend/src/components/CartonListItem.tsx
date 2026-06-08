@@ -1,10 +1,11 @@
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Gift } from 'lucide-react'
 import type { PredictionStatus } from '../lib/types'
 import { TokenStatusBadge } from './TokenStatusBadge'
 import { useAppReadContract } from '../hooks/useAppRead'
 import { CARTON_ABI, CONTRACT_ADDRESSES } from '../lib/contracts'
 import { getCartonImageUrl } from '../lib/carton-metadata'
+import { Button } from './ui/button'
 
 const STATUS_COPY: Record<PredictionStatus, string> = {
   none: 'Todavia no enviaste ninguna prediccion.',
@@ -18,11 +19,15 @@ export function CartonListItem({
   status,
   prizeStatus = 'none',
   highlighted = false,
+  onGift,
+  giftDisabled = false,
 }: {
   tokenId: bigint
   status: PredictionStatus
   prizeStatus?: 'none' | 'claimable' | 'claimed'
   highlighted?: boolean
+  onGift?: () => void
+  giftDisabled?: boolean
 }) {
   const navigate = useNavigate()
 
@@ -36,8 +41,7 @@ export function CartonListItem({
   const flagUrl = variant !== undefined ? getCartonImageUrl(variant, tokenId) : ''
 
   return (
-    <button
-      onClick={() => navigate({ to: '/predictions', search: { carton: tokenId.toString() } })}
+    <div
       className="relative w-full overflow-hidden rounded-xl text-left transition-all hover:scale-[1.01] active:scale-[0.99] flex min-h-[80px]"
       style={{
         background: highlighted ? 'rgba(0, 230, 118, 0.08)' : 'var(--bg-card)',
@@ -45,6 +49,27 @@ export function CartonListItem({
         boxShadow: highlighted ? 'var(--glow-green)' : undefined,
       }}
     >
+      {onGift && (
+        <div className="absolute right-3 top-3 z-10">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={giftDisabled}
+            onClick={onGift}
+            className="gap-1.5"
+          >
+            <Gift className="h-3.5 w-3.5" />
+            Regalar
+          </Button>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => navigate({ to: '/predictions', search: { carton: tokenId.toString() } })}
+        className="flex min-h-[80px] w-full text-left"
+      >
       {/* Left 40%: texto y badges */}
       <div className="w-[60%] px-4 py-8 flex flex-col justify-between gap-2 shrink-0">
         <div className="space-y-1">
@@ -107,6 +132,7 @@ export function CartonListItem({
           <ArrowRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.9)' }} />
         </span>
       </div>
-    </button>
+      </button>
+    </div>
   )
 }

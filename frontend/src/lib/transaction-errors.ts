@@ -265,6 +265,27 @@ export function mapClaimError(error: unknown): string {
   return 'Could not claim the USDC prize. Please try again.'
 }
 
+export function mapGiftCartonError(error: unknown): string {
+  const message = normalizeErrorMessage(error)
+  const shared = mapSharedErrorMessage(message)
+  if (shared) return shared
+
+  if (includesAny(message, ['erc1155insufficientbalance', 'not owner nor approved', 'caller is not token owner or approved'])) {
+    return 'La wallet conectada ya no puede transferir este cartón.'
+  }
+  if (includesAny(message, ['paused', 'enforcedpause'])) {
+    return 'Los cartones están pausados y no pueden transferirse ahora.'
+  }
+  if (includesAny(message, ['transfer to non-erc1155receiver implementer', 'invalid receiver'])) {
+    return 'La wallet destino no puede recibir este tipo de cartón.'
+  }
+  if (includesAny(message, ['wallet-not-linked-to-user', 'invalid-wallet-address'])) {
+    return 'La wallet de destino no es válida para regalar este cartón.'
+  }
+
+  return 'No pudimos regalar el cartón. Intenta de nuevo.'
+}
+
 export function mapAdminError(error: unknown): string {
   const message = normalizeErrorMessage(error)
   const shared = mapSharedErrorMessage(message)
