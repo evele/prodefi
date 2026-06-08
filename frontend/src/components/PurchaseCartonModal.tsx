@@ -9,6 +9,7 @@ type PurchaseCartonModalProps = {
   salesClosed: boolean
   arsPriceLabel: string
   usdcPriceLabel: string
+  networkLabel: string
   walletAddressLabel: string
   arsActionLabel: string
   onArsCheckout: () => void
@@ -28,6 +29,7 @@ export function PurchaseCartonModal({
   salesClosed,
   arsPriceLabel,
   usdcPriceLabel,
+  networkLabel,
   walletAddressLabel,
   arsActionLabel,
   onArsCheckout,
@@ -129,7 +131,7 @@ export function PurchaseCartonModal({
                 {usdcPriceLabel}
               </span>
               <span className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>
-                Base
+                {networkLabel}
               </span>
             </div>
             <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
