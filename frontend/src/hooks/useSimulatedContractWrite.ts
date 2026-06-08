@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Abi, Address } from 'viem'
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { toast } from 'sonner'
+import { appChainId } from '../lib/chains'
 import { extractErrorMessage } from '../lib/transaction-errors'
 
 type ConnectorWithWriteMethods = {
@@ -88,7 +89,7 @@ export function useSimulatedContractWrite() {
     const activeConnector = connector as typeof connector & ConnectorWithWriteMethods
     const fallbackProvider = async (): Promise<ConnectorProvider | undefined> => {
       if (!activeConnector.getProvider) return undefined
-      return (await activeConnector.getProvider(chainId !== undefined ? { chainId } : undefined)) as ConnectorProvider | undefined
+      return (await activeConnector.getProvider({ chainId: appChainId })) as ConnectorProvider | undefined
     }
 
     if (typeof activeConnector.getAccounts === 'function' && typeof activeConnector.getChainId === 'function') {
@@ -132,12 +133,19 @@ export function useSimulatedContractWrite() {
   const sendPreparedRequest = (request: PreparedWriteRequest, options: WriteFeedbackOptions) => {
     prepareExecution(options)
 
+    if (chainId === undefined || chainId !== appChainId) {
+      const error = new Error(`Wrong network: switch wallet to chain ${appChainId}`)
+      logError('write error', error)
+      showErrorToast(error)
+      return
+    }
+
     void getWriteConnector()
       .then((writeConnector) => {
         return writeContract({
           ...request,
           ...(address ? { account: address } : {}),
-          ...(chainId !== undefined ? { chainId } : {}),
+          chainId: appChainId,
           ...(writeConnector ? { connector: writeConnector } : {}),
         } as never)
       })
@@ -159,6 +167,13 @@ export function useSimulatedContractWrite() {
 
     if (!address) {
       const error = new Error('Wallet not connected')
+      logError('simulation error', error)
+      showErrorToast(error)
+      return
+    }
+
+    if (chainId === undefined || chainId !== appChainId) {
+      const error = new Error(`Wrong network: switch wallet to chain ${appChainId}`)
       logError('simulation error', error)
       showErrorToast(error)
       return

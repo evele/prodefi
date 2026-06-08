@@ -8,7 +8,6 @@ import { Toaster } from 'sonner'
 
 import { appChainId, canUseOpenfort, enableOpenfortWalletAuth, openfortEthereumFeeSponsorshipId, openfortPublishableKey, openfortShieldPublishableKey } from '../lib/chains'
 import { OpenfortAuthCallbackHandler } from './OpenfortAuthCallbackHandler'
-import { OpenfortChainSync } from './OpenfortChainSync'
 import { OpenfortDebugPanel } from './OpenfortDebugPanel'
 import { config } from '../lib/wagmi';
 import '@rainbow-me/rainbowkit/styles.css';
@@ -74,7 +73,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
               } : undefined}
             >
               <OpenfortAuthCallbackHandler />
-              <OpenfortChainSync />
               <OpenfortDebugPanel />
               <Toaster />
               {children}

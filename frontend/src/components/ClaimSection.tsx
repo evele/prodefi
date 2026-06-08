@@ -1,13 +1,16 @@
 import { useMemo } from 'react'
 import { formatUnits } from 'viem'
+import { toast } from 'sonner'
 import { Button } from './ui/button'
 import { CONTRACT_ADDRESSES, CARTON_ABI, PREDICTIONS_ABI, TREASURY_ABI } from '../lib/contracts'
+import { useAppChainGuard } from '../hooks/useAppChain'
 import { useAppReadContract } from '../hooks/useAppRead'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
 import { mapClaimError } from '../lib/transaction-errors'
 
 export function ClaimSection({ tokenId }: { tokenId: bigint }) {
   const usdcClaimWrite = useSimulatedContractWrite()
+  const { appChainName, isConnected, isWrongNetwork, isSwitching, switchToAppChain } = useAppChainGuard()
 
   const { data: activeTournamentId } = useAppReadContract({
     address: CONTRACT_ADDRESSES.CARTON,
@@ -101,9 +104,28 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
     )
   }
 
+  const handleSwitchNetwork = () => {
+    void switchToAppChain().catch((error) => {
+      const message = error instanceof Error ? error.message : 'No pudimos cambiar de red.'
+      toast.error(`No pudimos cambiar a ${appChainName}: ${message}`)
+    })
+  }
+
   if (!tournamentFinalized) return null
 
   const usdcPrizeValue = usdcPrize ?? 0n
+  const hasClaimedUsdc = Boolean(usdcClaimed)
+  const canClaimUsdc = usdcPrizeValue > 0n && !hasClaimedUsdc
+  const shouldSwitchNetworkBeforeClaim = canClaimUsdc && isConnected && isWrongNetwork
+  const claimButtonLabel = shouldSwitchNetworkBeforeClaim
+    ? (isSwitching ? `Cambiando a ${appChainName}…` : `Cambiar a ${appChainName}`)
+    : hasClaimedUsdc
+      ? '✓ Reclamado'
+      : usdcClaimWrite.isBusy
+        ? 'Reclamando…'
+        : usdcPrizeValue === 0n
+          ? 'Sin premio'
+          : 'Reclamar USDC'
 
   return (
     <div
@@ -153,18 +175,17 @@ export function ClaimSection({ tokenId }: { tokenId: bigint }) {
           <Button
             size="sm"
             className="w-full"
-            disabled={usdcPrizeValue === 0n || Boolean(usdcClaimed) || usdcClaimWrite.isBusy}
-            onClick={handleClaimUsdc}
-            variant={usdcClaimed ? 'secondary' : 'default'}
+            disabled={shouldSwitchNetworkBeforeClaim ? isSwitching : usdcPrizeValue === 0n || hasClaimedUsdc || usdcClaimWrite.isBusy}
+            onClick={shouldSwitchNetworkBeforeClaim ? handleSwitchNetwork : handleClaimUsdc}
+            variant={hasClaimedUsdc ? 'secondary' : 'default'}
           >
-            {usdcClaimed
-              ? '✓ Reclamado'
-              : usdcClaimWrite.isBusy
-                ? 'Reclamando…'
-                : usdcPrizeValue === 0n
-                  ? 'Sin premio'
-                  : 'Reclamar USDC'}
+            {claimButtonLabel}
           </Button>
+          {shouldSwitchNetworkBeforeClaim && (
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Cambia tu wallet a {appChainName} antes de reclamar este premio.
+            </p>
+          )}
         </div>
       )}
     </div>

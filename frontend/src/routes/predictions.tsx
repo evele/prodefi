@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAccount } from 'wagmi'
 import { toast } from 'sonner'
 import type { Abi, Address } from 'viem'
+import { useAppChainGuard } from '../hooks/useAppChain'
 import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
 import { hasOpenfortGasSponsorship, isDevOrTestChain } from '../lib/chains'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
@@ -186,6 +187,7 @@ const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 function PredictionsPage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
+  const { appChainName, isWrongNetwork, isSwitching, switchToAppChain } = useAppChainGuard()
   const { eth: nativeBalance } = useUserBalance()
   const { carton } = useSearch({ from: '/predictions' })
   const normalizedAddress = userAddress as `0x${string}` | undefined
@@ -746,8 +748,18 @@ function PredictionsPage() {
     },
   ] as const
 
+  const switchNetworkActionLabel = isSwitching ? `Cambiando a ${appChainName}…` : `Cambiar a ${appChainName}`
+
+  const handleSwitchNetwork = () => {
+    void switchToAppChain().catch((error) => {
+      const message = error instanceof Error ? error.message : 'No pudimos cambiar de red.'
+      toast.error(`No pudimos cambiar a ${appChainName}: ${message}`)
+    })
+  }
+
   const combinedSubmitBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para enviar la predicción completa.'
+    if (isWrongNetwork) return `Cambia a ${appChainName} para enviar la predicción.`
     if (!hasOwnedCartons) {
       return hasAnyOwnedCartons
         ? 'Esta wallet no tiene cartones del torneo activo.'
@@ -781,6 +793,15 @@ function PredictionsPage() {
         title: 'Necesitas conectar tu wallet para comenzar.',
         detail: 'Cuando la conectes, esta pantalla cargara tus cartones y habilitara el flujo de envio.',
         tone: 'neutral',
+      }
+    }
+
+    if (isWrongNetwork) {
+      return {
+        eyebrow: 'Red incorrecta',
+        title: `Cambia tu wallet a ${appChainName}.`,
+        detail: 'La app deja preparar el cartón, pero bloquea cualquier envío onchain hasta volver a la red correcta.',
+        tone: 'warning',
       }
     }
 
@@ -1346,17 +1367,19 @@ function PredictionsPage() {
             <>
               <Button
                 className="w-full h-11 text-base font-semibold"
-                disabled={!canSubmitCombined}
-                onClick={handleSubmitCombinedClick}
-                style={canSubmitCombined ? { boxShadow: 'var(--glow-green)' } : undefined}
+                disabled={isWrongNetwork ? isSwitching : !canSubmitCombined}
+                onClick={isWrongNetwork ? handleSwitchNetwork : handleSubmitCombinedClick}
+                style={isWrongNetwork || canSubmitCombined ? { boxShadow: 'var(--glow-green)' } : undefined}
               >
-                {combinedWrite.isSimulating
-                  ? 'Verificando…'
-                  : combinedWrite.isPending
-                    ? 'Confirmando…'
-                  : combinedWrite.isConfirming
-                    ? 'Procesando…'
-                      : 'Enviar predicción'}
+                {isWrongNetwork
+                  ? switchNetworkActionLabel
+                  : combinedWrite.isSimulating
+                    ? 'Verificando…'
+                    : combinedWrite.isPending
+                      ? 'Confirmando…'
+                      : combinedWrite.isConfirming
+                        ? 'Procesando…'
+                        : 'Enviar predicción'}
               </Button>
               <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
                 {combinedSubmitBlockedMessage ?? 'Este es el único camino del producto: partidos + top 4 en una sola transacción.'}
