@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '../components/ui/button'
 import { CartonListItem } from '../components/CartonListItem'
 import { PurchaseCartonModal } from '../components/PurchaseCartonModal'
+import { useAppChainGuard } from '../hooks/useAppChain'
 import { useUserBalance } from '../hooks/useBalance'
 import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
 import { useSimulatedContractWrite } from '../hooks/useSimulatedContractWrite'
@@ -42,6 +43,7 @@ function OpenfortHomePage() {
 function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
+  const { appChainName, isWrongNetwork, isSwitching, switchToAppChain } = useAppChainGuard()
   const normalizedAddress = userAddress as `0x${string}` | undefined
   const { eth: nativeBalance } = useUserBalance()
   const purchaseWrite = useSimulatedContractWrite()
@@ -54,6 +56,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   const [usdcPrizePool, setUsdcPrizePool] = useState<bigint>()
   const [cartonsUser, setCartonsUser] = useState<bigint[]>([])
   const [cartonTournamentIds, setCartonTournamentIds] = useState<bigint[]>([])
+  const [isSalesClosed, setIsSalesClosed] = useState<boolean>()
   const [usdcPriceLoading, setUsdcPriceLoading] = useState(true)
 
   const refetchPurchaseReads = useCallback(async () => {
@@ -84,19 +87,30 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
         : Promise.resolve(0n),
     ])
 
-    const nextPrizePool = nextTournamentId > 0n
-      ? await appPublicClient.readContract({
-          address: CONTRACT_ADDRESSES.TREASURY,
-          abi: TREASURY_ABI,
-          functionName: 'getPrizePool',
-          args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
-        })
-      : 0n
+    const [nextPrizePool, nextSalesClosed] = await Promise.all([
+      nextTournamentId > 0n
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'getPrizePool',
+            args: [nextTournamentId, CONTRACT_ADDRESSES.USDC],
+          })
+        : Promise.resolve(0n),
+      nextTournamentId > 0n
+        ? appPublicClient.readContract({
+            address: CONTRACT_ADDRESSES.TREASURY,
+            abi: TREASURY_ABI,
+            functionName: 'salesClosed',
+            args: [nextTournamentId],
+          })
+        : Promise.resolve(false),
+    ])
 
     setActiveTournamentId(nextTournamentId)
     setUsdcPrice(nextPrice)
     setUsdcAllowance(nextAllowance)
     setUsdcPrizePool(nextPrizePool)
+    setIsSalesClosed(nextSalesClosed)
     setUsdcPriceLoading(false)
   }, [isConnected, normalizedAddress])
 
@@ -131,8 +145,6 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
   }, [isConnected, normalizedAddress])
 
   useEffect(() => {
-    let cancelled = false
-
     const fetchPurchaseReads = async () => {
       try {
         await refetchPurchaseReads()
@@ -145,17 +157,15 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
             error,
           })
         }
-
-        if (!cancelled) setUsdcPriceLoading(false)
       }
     }
 
     void fetchPurchaseReads()
-
-    return () => {
-      cancelled = true
-    }
   }, [refetchPurchaseReads])
+
+  if (import.meta.env.DEV && isSalesClosed !== undefined) {
+    console.log('[HomePage] salesClosed:', isSalesClosed)
+  }
 
   useEffect(() => {
     void refetchCartonsUser()
@@ -176,9 +186,19 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
         ? `${formatUnits(usdcPriceValue, 6)} USDC`
         : '—'
 
+  const switchNetworkActionLabel = isSwitching ? `Cambiando a ${appChainName}…` : `Cambiar a ${appChainName}`
+
+  const handleSwitchNetwork = () => {
+    void switchToAppChain().catch((error) => {
+      const message = error instanceof Error ? error.message : 'No pudimos cambiar de red.'
+      toast.error(`No pudimos cambiar a ${appChainName}: ${message}`)
+    })
+  }
+
   const approvalBlockedMessage = (() => {
     if (!needsApproval) return null
     if (!isConnected) return 'Conecta tu wallet para aprobar USDC.'
+    if (isWrongNetwork) return `Cambia a ${appChainName} para aprobar USDC.`
     if (usdcPriceLoading) return 'Cargando precio USDC…'
     if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
     if (approveWrite.isSimulating) return 'Verificando la transacción de aprobación…'
@@ -189,6 +209,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
 
   const buyBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para comprar un cartón.'
+    if (isWrongNetwork) return `Cambia a ${appChainName} para comprar un cartón.`
     if (usdcPriceLoading) return 'Cargando precio USDC…'
     if (usdcPriceValue === 0n) return 'El precio USDC no está configurado aún.'
     if (needsApproval) return 'Aprueba USDC antes de comprar.'
@@ -543,11 +564,15 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
     )
   }, [cartonTournamentIds, cartonsUser, tournamentId])
 
-  const buyButtonText = () => {
+  function buyButtonText() {
     if (!isConnected) return 'Conecta tu wallet para comprar'
     if (activeTournamentCartons.length > 0) return 'Comprar cartón extra'
     return 'Comprar cartón'
   }
+
+  const canSwitchPurchaseNetwork = isConnected && isWrongNetwork && tournamentId > 0n
+  const buyButtonLabel = canSwitchPurchaseNetwork ? switchNetworkActionLabel : buyButtonText()
+  const isBuyButtonDisabled = canSwitchPurchaseNetwork ? isSwitching : !isConnected || tournamentId === 0n
 
   const { data: deadline } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
@@ -743,6 +768,7 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
       )}
 
       {/* ─── Buy Carton ─── */}
+      {isSalesClosed !== true && (
       <div
         className="rounded-xl p-5 space-y-4"
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
@@ -777,20 +803,26 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
 
         <Button
           className="w-full h-12 text-base font-semibold"
-          disabled={!isConnected || tournamentId === 0n}
-          onClick={handleBuyClick}
-          style={isConnected && tournamentId > 0n ? { boxShadow: 'var(--glow-green)' } : undefined}
+          disabled={isBuyButtonDisabled}
+          onClick={canSwitchPurchaseNetwork ? handleSwitchNetwork : handleBuyClick}
+          style={!isBuyButtonDisabled ? { boxShadow: 'var(--glow-green)' } : undefined}
         >
-          {buyButtonText()}
+          {buyButtonLabel}
         </Button>
-        {(!isConnected || tournamentId === 0n) && (
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+        {(!isConnected || tournamentId === 0n || canSwitchPurchaseNetwork) && (
+          <p
+            className="text-xs"
+            style={{ color: canSwitchPurchaseNetwork ? 'var(--accent-gold)' : 'var(--text-secondary)' }}
+          >
             {!isConnected
               ? 'Conéctate para elegir cómo pagar y fijar la dirección que recibirá el cartón.'
-              : 'No hay un torneo activo configurado para vender cartones ahora mismo.'}
+              : canSwitchPurchaseNetwork
+                ? `Tu wallet está conectada a otra red. Cámbiala a ${appChainName} antes de seguir.`
+                : 'No hay un torneo activo configurado para vender cartones ahora mismo.'}
           </p>
         )}
       </div>
+      )}
 
       <PurchaseCartonModal
         isOpen={isPurchaseModalOpen}
@@ -798,16 +830,18 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
           if (isCreatingArsOrder) return
           setIsPurchaseModalOpen(false)
         }}
+        salesClosed={isSalesClosed === true}
         arsPriceLabel={ARS_CARTON_PRICE_LABEL}
         usdcPriceLabel={priceDisplay}
+        networkLabel={appChainName}
         walletAddressLabel={normalizedAddress ? `${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}` : 'Wallet no conectada'}
-        arsActionLabel="Comprar con Mercado Pago"
-        onArsCheckout={() => { void handleArsCheckout() }}
+        arsActionLabel={isWrongNetwork ? switchNetworkActionLabel : 'Comprar con Mercado Pago'}
+        onArsCheckout={isWrongNetwork ? handleSwitchNetwork : () => { void handleArsCheckout() }}
         isCreatingArsOrder={isCreatingArsOrder}
         arsBlockedMessage={arsBlockedMessage}
         gasNotice={gasReadinessNotice}
         approvalAction={
-          needsApproval ? (
+          needsApproval && !isWrongNetwork ? (
             <>
               <Button
                 variant="outline"
@@ -826,21 +860,37 @@ function HomePageContent({ openfortUserId }: { openfortUserId?: string }) {
           ) : null
         }
         usdcAction={
-          <>
-            <Button
-              className="h-11 w-full text-base font-semibold"
-              disabled={!canBuy}
-              onClick={buyCartonWithUsdc}
-              style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
-            >
-              {isBuying ? 'Comprando…' : 'Comprar con USDC'}
-            </Button>
-            {buyBlockedMessage && (
+          isWrongNetwork ? (
+            <>
+              <Button
+                className="h-11 w-full text-base font-semibold"
+                disabled={isSwitching}
+                onClick={handleSwitchNetwork}
+                style={!isSwitching ? { boxShadow: 'var(--glow-green)' } : undefined}
+              >
+                {switchNetworkActionLabel}
+              </Button>
               <p className="text-xs mb-[-28px]" style={{ color: 'var(--text-secondary)' }}>
                 {buyBlockedMessage}
               </p>
-            )}
-          </>
+            </>
+          ) : (
+            <>
+              <Button
+                className="h-11 w-full text-base font-semibold"
+                disabled={!canBuy}
+                onClick={buyCartonWithUsdc}
+                style={canBuy ? { boxShadow: 'var(--glow-green)' } : undefined}
+              >
+                {isBuying ? 'Comprando…' : 'Comprar con USDC'}
+              </Button>
+              {buyBlockedMessage && (
+                <p className="text-xs mb-[-28px]" style={{ color: 'var(--text-secondary)' }}>
+                  {buyBlockedMessage}
+                </p>
+              )}
+            </>
+          )
         }
       />
 

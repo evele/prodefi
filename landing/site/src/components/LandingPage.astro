@@ -27,7 +27,7 @@ const languageLinks = [
   brandHref="#top"
   brandAriaLabel={content.header.brandAriaLabel}
   nav={content.header.nav}
-  ctaHref="#waitlist"
+  ctaHref="https://app.prodefi.online"
   ctaLabel={content.header.ctaLabel}
   languageLinks={languageLinks}
 />
@@ -50,8 +50,7 @@ const languageLinks = [
         <p class="hero-lead" set:html={content.hero.lead}></p>
 
         <div class="cta-row">
-          <a class="button button--accent" href="#waitlist">{content.waitlist.buttonLabel}</a>
-          <!-- TODO: recover CTA to the public app when it exists. -->
+          <a class="button button--accent" href="https://app.prodefi.online" target="_blank" rel="noopener noreferrer">{content.header.ctaLabel}</a>
         </div>
 
         <p class="trust-row">
@@ -182,6 +181,7 @@ const languageLinks = [
     <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
   </section>
 
+  {false && (
   <section class="waitlist-section" id="waitlist" data-waitlist-action={waitlistAction}>
     <div class="waitlist-lines" aria-hidden="true"></div>
     <div class="shell waitlist-inner">
@@ -221,6 +221,7 @@ const languageLinks = [
     </div>
   </section>
   <div class="afa-stripe afa-stripe--thin" aria-hidden="true"></div>
+  )}
 
   <section class="faq-section" id="faq">
     <div class="shell section-inner">
@@ -284,6 +285,7 @@ const languageLinks = [
   }
 </script>
 
+{false && (
 <script is:inline define:vars={{ waitlistMessages: content.waitlist.messages }}>
   const waitlistSection = document.querySelector('[data-waitlist-action]')
   const waitlistForm = document.querySelector('[data-waitlist-form]')
@@ -355,3 +357,4 @@ const languageLinks = [
     })
   }
 </script>
+)}

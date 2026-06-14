@@ -6,8 +6,10 @@ import { Button } from './ui/button'
 type PurchaseCartonModalProps = {
   isOpen: boolean
   onClose: () => void
+  salesClosed: boolean
   arsPriceLabel: string
   usdcPriceLabel: string
+  networkLabel: string
   walletAddressLabel: string
   arsActionLabel: string
   onArsCheckout: () => void
@@ -24,8 +26,10 @@ type PurchaseCartonModalProps = {
 export function PurchaseCartonModal({
   isOpen,
   onClose,
+  salesClosed,
   arsPriceLabel,
   usdcPriceLabel,
+  networkLabel,
   walletAddressLabel,
   arsActionLabel,
   onArsCheckout,
@@ -67,7 +71,19 @@ export function PurchaseCartonModal({
           </p>
         </div>
 
-        <div className="grid gap-4 p-6 md:grid-cols-2">
+        {salesClosed ? (
+          <div className="p-6">
+            <div
+              className="rounded-xl p-5 text-center space-y-2"
+              style={{ background: 'rgba(255, 77, 109, 0.08)' }}
+            >
+              <p className="text-base font-semibold" style={{ color: 'var(--accent-red)' }}>
+                Las ventas de cartones están cerradas para este torneo.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 p-6 md:grid-cols-2">
           <section
             className="rounded-2xl border p-5 flex flex-col"
             style={{ borderColor: 'rgba(0, 230, 118, 0.18)', background: 'rgba(0, 230, 118, 0.06)' }}
@@ -115,7 +131,7 @@ export function PurchaseCartonModal({
                 {usdcPriceLabel}
               </span>
               <span className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>
-                Base
+                {networkLabel}
               </span>
             </div>
             <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -139,7 +155,8 @@ export function PurchaseCartonModal({
               {usdcAction}
             </div>
           </section>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -8,7 +8,9 @@ import {
   formatFixtureKickoffDate,
   formatFixtureKickoffTime,
   getFixtureLanguage,
+  buildGoogleCalendarUrl,
 } from '../lib/fixture-time'
+import { Calendar } from 'lucide-react'
 import { teamsSiglaById, teamsById, teamsFlagById } from '../lib/teams'
 import type { Game, GroupData } from '../lib/types'
 import { calculateStandings, type StandingRow } from '../lib/standings'
@@ -118,7 +120,15 @@ function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate
           ) : (
             <>
             {kickoffDate ? (
-              <>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = buildGoogleCalendarUrl(team1Name, team2Name, game.kickoffEt, game.venue)
+                  if (url) window.open(url, '_blank', 'noopener')
+                }}
+                className="flex flex-col items-center text-center leading-tight gap-1 cursor-pointer"
+                title="Agregar a Google Calendar"
+              >
                 {showKickoffDate && (
                   <span className="text-[11px] font-medium uppercase tracking-wider opacity-70">
                     {kickoffDate}
@@ -126,18 +136,19 @@ function FixtureMatch({ game, officialResult, isSet, groupLabel, showKickoffDate
                 )}
                 {kickoffTime && (
                   <span
-                    className={showKickoffDate ? 'text-xs font-semibold' : 'text-[11px] font-medium uppercase tracking-wider opacity-70'}
+                    className={`${showKickoffDate ? 'text-xs font-semibold' : 'text-[11px] font-medium uppercase tracking-wider opacity-70'}`}
                     style={{ color: showKickoffDate ? 'var(--accent-gold)' : undefined }}
                   >
+                    <Calendar size="1em" className="inline-block align-middle mr-0.5 -mt-0.5" />
                     {kickoffTime}
                   </span>
                 )}
                 {game.venue && (
-                  <span className="mt-1 text-[10px] opacity-50 max-w-32 sm:max-w-none">
+                  <span className="text-[10px] opacity-50 max-w-32 sm:max-w-none">
                     {game.venue}
                   </span>
                 )}
-              </>
+              </button>
             ) : (
                 <span className="text-xs font-medium uppercase tracking-widest opacity-30">
                   vs

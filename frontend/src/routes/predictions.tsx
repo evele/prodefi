@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAccount } from 'wagmi'
 import { toast } from 'sonner'
 import type { Abi, Address } from 'viem'
+import { useAppChainGuard } from '../hooks/useAppChain'
 import { useAppReadContract, useAppReadContracts } from '../hooks/useAppRead'
 import { hasOpenfortGasSponsorship, isDevOrTestChain } from '../lib/chains'
 import { CARTON_ABI, CONTRACT_ADDRESSES, PREDICTIONS_ABI } from '../lib/contracts'
@@ -25,6 +26,7 @@ import { getPredictionStatus, getPredictionStatusPriority, hasWinnersPrediction 
 import { mapCombinedPredictionErrorToMessage } from '../lib/transaction-errors'
 import { appPublicClient } from '../lib/publicClient'
 import { DeadlineBanner } from '../components/DeadlineBanner'
+import { computeGamePoints, computeWinnerPointsPerPosition } from '../lib/scoring'
 
 const SHOW_GROUP_STRIP = true
 
@@ -83,6 +85,13 @@ function normalizeOfficialGameMeta(value: unknown): { id: number; set: boolean }
   return null
 }
 
+function normalizeGameResult(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) return null
+  const g0 = Number(value[0])
+  const g1 = Number(value[1])
+  return Number.isFinite(g0) && Number.isFinite(g1) ? [g0, g1] : null
+}
+
 function getPanelStatusMeta(status: 'pending' | 'draft' | 'submitted' | 'expired') {
   switch (status) {
     case 'submitted':
@@ -129,6 +138,8 @@ type SubmittedScoredGameEntry = {
   gameId: number
   predictionIndex: number
   officialGame: { id: number; set: boolean } | null
+  predictedResult: [number, number]
+  officialResult: [number, number]
 }
 
 type PredictionReadContract = {
@@ -176,6 +187,7 @@ const EMPTY_WINNER_PREDICTION: [number, number, number, number] = [0, 0, 0, 0]
 function PredictionsPage() {
   const navigate = useNavigate()
   const { isConnected, address: userAddress } = useAccount()
+  const { appChainName, isWrongNetwork, isSwitching, switchToAppChain } = useAppChainGuard()
   const { eth: nativeBalance } = useUserBalance()
   const { carton } = useSearch({ from: '/predictions' })
   const normalizedAddress = userAddress as `0x${string}` | undefined
@@ -468,35 +480,58 @@ function PredictionsPage() {
       refetchOnWindowFocus: false,
     },
   })
+  const submittedOfficialGameResultsContracts = useMemo(
+    () =>
+      normalizedSubmittedGames.map((entry) => ({
+        address: CONTRACT_ADDRESSES.PREDICTIONS,
+        abi: PREDICTIONS_ABI,
+        functionName: 'getGameResults' as const,
+        args: [entry.gameId] as const,
+      })),
+    [normalizedSubmittedGames],
+  )
+  const { data: submittedOfficialGameResultsData } = useAppReadContracts({
+    contracts: submittedOfficialGameResultsContracts,
+    query: {
+      enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedOfficialGameResultsContracts.length > 0,
+      refetchOnWindowFocus: false,
+    },
+  })
   const submittedScoredGameEntries = useMemo(() => {
     const entries: SubmittedScoredGameEntry[] = []
     normalizedSubmittedGames.forEach((entry, index) => {
       const officialGame = normalizeOfficialGameMeta(submittedOfficialGamesData?.[index]?.result)
       if (!officialGame?.set) return
-      entries.push({ gameId: entry.gameId, predictionIndex: index, officialGame })
+      const officialResult = normalizeGameResult(submittedOfficialGameResultsData?.[index]?.result)
+      if (!officialResult) return
+      entries.push({
+        gameId: entry.gameId,
+        predictionIndex: index,
+        officialGame,
+        predictedResult: [entry.result[0], entry.result[1]],
+        officialResult,
+      })
     })
     return entries
-  }, [normalizedSubmittedGames, submittedOfficialGamesData])
-
-  const submittedGamePointsContracts: PredictionReadContract[] = []
-
-  if (tokenId && cartonGroupsState) {
-    for (const entry of submittedScoredGameEntries) {
-      submittedGamePointsContracts.push({
-        address: CONTRACT_ADDRESSES.PREDICTIONS,
-        abi: PREDICTIONS_ABI,
-        functionName: 'calculatePoints',
-        args: [tokenId, entry.predictionIndex],
-      })
-    }
-  }
-  const { data: submittedGamePointsData, refetch: refetchSubmittedGamePointsData } = useAppReadContracts({
-    contracts: submittedGamePointsContracts,
-    query: {
-      enabled: tokenId !== undefined && Boolean(cartonGroupsState) && submittedGamePointsContracts.length > 0,
-      refetchOnWindowFocus: false,
-    },
+  }, [normalizedSubmittedGames, submittedOfficialGamesData, submittedOfficialGameResultsData])
+  const { data: officialWinnersRaw } = useAppReadContract({
+    address: CONTRACT_ADDRESSES.PREDICTIONS,
+    abi: PREDICTIONS_ABI,
+    functionName: 'getOfficialWinners',
+    query: { refetchOnWindowFocus: false },
   })
+  const winnerPointsPerPosition = useMemo((): [number, number, number, number] | null => {
+    if (!selectedCartonWinnersSubmitted) return null
+    if (!Array.isArray(officialWinnersRaw)) return null
+    const teams = Array.isArray(officialWinnersRaw[0]) ? officialWinnersRaw[0].map(Number) : null
+    const isSet = Boolean(officialWinnersRaw[1])
+    if (!isSet || !teams || teams.length < 4) return null
+    return computeWinnerPointsPerPosition(
+      normalizedSubmittedWinners,
+      [teams[0], teams[1], teams[2], teams[3]],
+    )
+  }, [officialWinnersRaw, normalizedSubmittedWinners, selectedCartonWinnersSubmitted])
+
   const { data: selectedCartonTotalPoints, refetch: refetchSelectedCartonTotalPoints } = useAppReadContract<bigint>({
     address: CONTRACT_ADDRESSES.PREDICTIONS,
     abi: PREDICTIONS_ABI,
@@ -516,8 +551,8 @@ function PredictionsPage() {
   }, [cartonGroupsState, deadlineValue, refetchSubmittedOfficialGamesData, submittedOfficialGameContracts.length, submittedOfficialGamesKey, tokenId])
   const submittedPointsByGameId: Record<number, bigint> = {}
 
-  submittedScoredGameEntries.forEach((entry, index) => {
-    submittedPointsByGameId[entry.gameId] = (submittedGamePointsData?.[index]?.result as bigint | undefined) ?? 0n
+  submittedScoredGameEntries.forEach((entry) => {
+    submittedPointsByGameId[entry.gameId] = BigInt(computeGamePoints(entry.predictedResult, entry.officialResult))
   })
   const submittedGameState = useMemo(() => {
     if (!normalizedSubmittedGames.length) return null
@@ -588,12 +623,8 @@ function PredictionsPage() {
   useEffect(() => {
     if (!tokenId || !cartonGroupsState) return
 
-    if (submittedGamePointsContracts.length > 0) {
-      void refetchSubmittedGamePointsData()
-    }
-
     void refetchSelectedCartonTotalPoints()
-  }, [cartonGroupsState, deadlineValue, refetchSelectedCartonTotalPoints, refetchSubmittedGamePointsData, submittedGamePointsContracts.length, submittedScoredGamesKey, tokenId])
+  }, [cartonGroupsState, deadlineValue, refetchSelectedCartonTotalPoints, submittedScoredGamesKey, tokenId])
 
   const ownedCartonStatusContracts: PredictionReadContract[] = []
 
@@ -717,8 +748,18 @@ function PredictionsPage() {
     },
   ] as const
 
+  const switchNetworkActionLabel = isSwitching ? `Cambiando a ${appChainName}…` : `Cambiar a ${appChainName}`
+
+  const handleSwitchNetwork = () => {
+    void switchToAppChain().catch((error) => {
+      const message = error instanceof Error ? error.message : 'No pudimos cambiar de red.'
+      toast.error(`No pudimos cambiar a ${appChainName}: ${message}`)
+    })
+  }
+
   const combinedSubmitBlockedMessage = (() => {
     if (!isConnected) return 'Conecta tu wallet para enviar la predicción completa.'
+    if (isWrongNetwork) return `Cambia a ${appChainName} para enviar la predicción.`
     if (!hasOwnedCartons) {
       return hasAnyOwnedCartons
         ? 'Esta wallet no tiene cartones del torneo activo.'
@@ -752,6 +793,15 @@ function PredictionsPage() {
         title: 'Necesitas conectar tu wallet para comenzar.',
         detail: 'Cuando la conectes, esta pantalla cargara tus cartones y habilitara el flujo de envio.',
         tone: 'neutral',
+      }
+    }
+
+    if (isWrongNetwork) {
+      return {
+        eyebrow: 'Red incorrecta',
+        title: `Cambia tu wallet a ${appChainName}.`,
+        detail: 'La app deja preparar el cartón, pero bloquea cualquier envío onchain hasta volver a la red correcta.',
+        tone: 'warning',
       }
     }
 
@@ -1293,10 +1343,10 @@ function PredictionsPage() {
               {winnersPanelNotice}
             </div>
           )}
-          <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(1, teamId)} />
-          <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(2, teamId)} />
-          <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(3, teamId)} />
-          <TeamWinnerSelector label="4to Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(4, teamId)} />
+          <TeamWinnerSelector label="1er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={1} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(1, teamId)} pointsEarned={winnerPointsPerPosition?.[0]} />
+          <TeamWinnerSelector label="2do Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={2} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(2, teamId)} pointsEarned={winnerPointsPerPosition?.[1]} />
+          <TeamWinnerSelector label="3er Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={3} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(3, teamId)} pointsEarned={winnerPointsPerPosition?.[2]} />
+          <TeamWinnerSelector label="4to Lugar" teams={teams2026} selectedTeams={displayWinnerPrediction} currentPosition={4} disabled={!canEditSelectedCarton || selectedCartonWinnersSubmitted} readOnlyAppearance={selectedCartonWinnersSubmitted} onChange={(teamId) => updateWinnerPrediction(4, teamId)} pointsEarned={winnerPointsPerPosition?.[3]} />
         </div>
 
         <div
@@ -1317,17 +1367,19 @@ function PredictionsPage() {
             <>
               <Button
                 className="w-full h-11 text-base font-semibold"
-                disabled={!canSubmitCombined}
-                onClick={handleSubmitCombinedClick}
-                style={canSubmitCombined ? { boxShadow: 'var(--glow-green)' } : undefined}
+                disabled={isWrongNetwork ? isSwitching : !canSubmitCombined}
+                onClick={isWrongNetwork ? handleSwitchNetwork : handleSubmitCombinedClick}
+                style={isWrongNetwork || canSubmitCombined ? { boxShadow: 'var(--glow-green)' } : undefined}
               >
-                {combinedWrite.isSimulating
-                  ? 'Verificando…'
-                  : combinedWrite.isPending
-                    ? 'Confirmando…'
-                  : combinedWrite.isConfirming
-                    ? 'Procesando…'
-                      : 'Enviar predicción'}
+                {isWrongNetwork
+                  ? switchNetworkActionLabel
+                  : combinedWrite.isSimulating
+                    ? 'Verificando…'
+                    : combinedWrite.isPending
+                      ? 'Confirmando…'
+                      : combinedWrite.isConfirming
+                        ? 'Procesando…'
+                        : 'Enviar predicción'}
               </Button>
               <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
                 {combinedSubmitBlockedMessage ?? 'Este es el único camino del producto: partidos + top 4 en una sola transacción.'}

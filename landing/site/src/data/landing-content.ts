@@ -113,8 +113,8 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
     page: {
       title: 'Prode Mundial 2026 | Predicciones y premios | ProDefi',
       description:
-        'Jugá al Prode Mundial 2026 con predicciones, ranking verificable, reglas públicas y premios reales. Sumate a la lista de espera de ProDefi.',
-      launchMessage: 'Dejá tu mail y te avisamos apenas abramos los cartones.',
+        'Jugá al Prode Mundial 2026 con predicciones, ranking verificable, reglas públicas y premios reales.',
+      launchMessage: 'Ingresá ahora a la app y empezá a predecir.',
       targetDate: '2026-06-11T16:00:00-03:00',
       targetDateLabel: '11 de junio de 2026',
       targetTimeLabel: '16:00 Buenos Aires',
@@ -124,10 +124,10 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
       nav: [
         { href: '#countdown', label: 'Mundial' },
         { href: '#premios', label: 'Premios' },
-        { href: '#waitlist', label: 'Lista de espera' },
+        { href: 'https://app.prodefi.online', label: 'Ir a la app' },
         { href: '#faq', label: 'FAQ' },
       ],
-      ctaLabel: 'Sumarme',
+      ctaLabel: 'Ir a la app',
     },
     hero: {
       eyebrow: 'Prode Mundial 2026 · Predicciones onchain',
@@ -240,7 +240,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         },
         {
           question: '¿Cómo participo?',
-          answer: 'Sumate a la lista de espera y te avisamos cuando abramos el Prode Mundial 2026.',
+          answer: 'Ingresá a la app y empezá a predecir. Ya está disponible en app.prodefi.online.',
         },
         {
           question: '¿Cómo se define el ranking?',
@@ -254,7 +254,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         },
         {
           question: '¿Cuándo se lanza?',
-          answer: 'Antes del silbatazo inicial del Mundial 2026. La fecha exacta la anunciamos por la lista de espera.',
+          answer: 'Antes del silbatazo inicial del Mundial 2026. Ya está disponible en app.prodefi.online.',
         },
         {
           question: '¿Qué significa que sea onchain?',
@@ -268,7 +268,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         navigation: {
           label: 'Navegación',
           links: [
-            { href: '#waitlist', label: 'Lista de espera' },
+            { href: 'https://app.prodefi.online', label: 'Ir a la app' },
             { href: '#faq', label: 'FAQ' },
             { href: '/reglas', label: 'Reglas' },
           ],
@@ -276,7 +276,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         status: {
           label: 'Estado',
           lines: [
-            'Waitlist abierta. Reglas y estructura de premios ya publicadas.',
+            'Ya disponible. Reglas y estructura de premios ya publicadas.',
             'Hecho en Argentina, con la pelota en los pies.',
           ],
         },
@@ -290,7 +290,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
       title: 'World Cup Predictions 2026 | Prizes and Rules | ProDefi',
       description:
         'Join ProDefi for World Cup Predictions 2026. Submit exact scorelines and your final four, climb the leaderboard and compete for real prizes.',
-      launchMessage: 'Leave your email and we will let you know as soon as entries open.',
+      launchMessage: 'Head to the app and start predicting now.',
       targetDate: '2026-06-11T16:00:00-03:00',
       targetDateLabel: '11 Jun 2026',
       targetTimeLabel: '4:00 PM ART',
@@ -300,10 +300,10 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
       nav: [
         { href: '#countdown', label: 'Countdown' },
         { href: '#premios', label: 'Prizes' },
-        { href: '#waitlist', label: 'Waitlist' },
+        { href: 'https://app.prodefi.online', label: 'Go to app' },
         { href: '#faq', label: 'FAQ' },
       ],
-      ctaLabel: 'Join Waitlist',
+      ctaLabel: 'Go to app',
     },
     hero: {
       eyebrow: 'World Cup Predictions 2026 · Onchain',
@@ -415,7 +415,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         },
         {
           question: 'How do I join?',
-          answer: 'Join the waitlist and we will let you know when World Cup Predictions 2026 opens.',
+          answer: 'Head to the app and start predicting. It is live now at app.prodefi.online.',
         },
         {
           question: 'How is the leaderboard ranked?',
@@ -429,7 +429,7 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         },
         {
           question: 'When does it launch?',
-          answer: 'Before the opening whistle of the 2026 World Cup. We will announce the exact launch date through the waitlist.',
+          answer: 'Before the opening whistle of the 2026 World Cup. It is live now at app.prodefi.online.',
         },
         {
           question: 'What does onchain mean?',
@@ -443,14 +443,14 @@ export const landingContent: Record<'es' | 'en', LandingContent> = {
         navigation: {
           label: 'Navigation',
           links: [
-            { href: '#waitlist', label: 'Waitlist' },
+            { href: 'https://app.prodefi.online', label: 'Go to app' },
             { href: '#faq', label: 'FAQ' },
             { href: '/en/rules', label: 'Rules' },
           ],
         },
         status: {
           label: 'Status',
-          lines: ['Waitlist is open. Rules and prize structure are already published.', 'Built in Argentina, with the ball at our feet.'],
+          lines: ['Live now. Rules and prize structure are already published.', 'Built in Argentina, with the ball at our feet.'],
         },
       },
       meta: ['ProDefi · Every match counts', 'Predictions · World Cup 2026'],

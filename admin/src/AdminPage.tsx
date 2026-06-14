@@ -295,7 +295,7 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
     [games, storedGamesById],
   )
 
-  const isAnvil = chainId === 31337
+  const showBatchHelper = chainId === 31337 || chainId === 84532
 
   const getGoals = (gameId: number): [string, string] => goals[gameId] ?? ['', '']
 
@@ -395,8 +395,8 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
   }, [filteredGames, goals, storedGamesById])
 
   const submitBatchResults = () => {
-    if (!isAnvil) {
-      toast.error('Batch result loading is available only on Anvil (chain 31337).')
+    if (!showBatchHelper) {
+      toast.error('Batch result loading is available only on Anvil or Base Sepolia.')
       return
     }
 
@@ -482,12 +482,12 @@ function SetResultsSection({ canManagePredictions }: { canManagePredictions: boo
           <p className="text-xs text-gray-500">
             {filteredGames.length} de {games.length} partidos visibles · {setGamesCount} / {games.length} con resultado
           </p>
-          {isAnvil && (
+          {showBatchHelper && (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Dev helper: batch result loading is enabled only on Anvil and only sets visible games with valid loaded goals.
+              Dev helper: batch result loading is enabled only on Anvil or Base Sepolia, and only sets visible games with valid loaded goals.
             </div>
           )}
-          {isAnvil && (
+          {showBatchHelper && (
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -1228,7 +1228,7 @@ function TreasuryFundingSection({
 
   const fundingContracts = useMemo(() => {
     const contracts: BatchedReadContract[] = [
-      { address: treasury, abi: TREASURY_ABI, functionName: 'reserveBps', args: [] },
+      { address: treasury, abi: TREASURY_ABI, functionName: 'RESERVE_BPS', args: [] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'salesClosed', args: [parsedTournamentId] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'tournamentFinalized', args: [parsedTournamentId] },
       { address: treasury, abi: TREASURY_ABI, functionName: 'getPrizePool', args: [parsedTournamentId, tokenAddress] },

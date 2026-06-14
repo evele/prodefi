@@ -1325,7 +1325,7 @@
   },
   {
     "type": "error",
-    "name": "BatchResultsOnlyOnAnvil",
+    "name": "BatchResultsNotAllowedOnChain",
     "inputs": []
   },
   {
